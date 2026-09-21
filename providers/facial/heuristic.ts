@@ -1,6 +1,6 @@
-"use client";
-
-import type { SpeechViseme } from "@/types/voice";
+import type { NovaFacialFrame } from "@/types/avatar";
+import type { FacialAnimationProvider, FacialProviderHealth, NvidiaA2FAnimationPayload } from "@/types/facial";
+import { visemeToBlendshapes } from "@/features/avatar/viseme-map";
 import {
   classifyVisemeFromBands,
   clamp01,
@@ -8,13 +8,7 @@ import {
   SILENCE_RMS,
   smoothIntensity,
 } from "@/services/voice/viseme-heuristic";
-
-export type LipSyncFrame = {
-  viseme: SpeechViseme;
-  intensity: number;
-};
-
-export type LipSyncListener = (frame: LipSyncFrame) => void;
+import type { SpeechViseme } from "@/types/voice";
 
 function bandEnergy(spectrum: Uint8Array, sampleRate: number, fftSize: number, fromHz: number, toHz: number): number {
   const binHz = sampleRate / fftSize;
@@ -29,7 +23,9 @@ function bandEnergy(spectrum: Uint8Array, sampleRate: number, fftSize: number, f
   return count ? sum / count / 255 : 0;
 }
 
-export class LipSyncController {
+export class HeuristicFacialProvider implements FacialAnimationProvider {
+  id = "heuristic" as const;
+  name = "HeuristicFacialProvider";
   private analyser: AnalyserNode | null = null;
   private freq = new Uint8Array(0);
   private time = new Float32Array(0);
@@ -38,16 +34,37 @@ export class LipSyncController {
   private intensity = 0;
   private viseme: SpeechViseme = "REST";
   private visemeSince = 0;
-  private listener: LipSyncListener | null = null;
   private running = false;
+  private getAudioTimeMs: () => number = () => 0;
+  private listener: ((frame: NovaFacialFrame) => void) | null = null;
 
-  setListener(listener: LipSyncListener | null) {
+  get currentViseme(): SpeechViseme {
+    return this.viseme;
+  }
+
+  get currentIntensity(): number {
+    return this.intensity;
+  }
+
+  async initialize(): Promise<void> {}
+
+  async healthCheck(): Promise<FacialProviderHealth> {
+    return {
+      ok: true,
+      provider: this.id,
+      available: true,
+      message: "Lokaler Spektral-Provider. Kein Audio2Face. Erzeugt zeitgestempelte Blendshape-Frames.",
+    };
+  }
+
+  setListener(listener: ((frame: NovaFacialFrame) => void) | null) {
     this.listener = listener;
   }
 
-  start(analyser: AnalyserNode) {
-    this.stop();
+  startLive(analyser: AnalyserNode, getAudioTimeMs: () => number) {
+    this.stopLive();
     this.analyser = analyser;
+    this.getAudioTimeMs = getAudioTimeMs;
     this.freq = new Uint8Array(analyser.frequencyBinCount);
     this.time = new Float32Array(analyser.fftSize);
     this.peak = 0.08;
@@ -58,7 +75,7 @@ export class LipSyncController {
     this.tick();
   }
 
-  stop() {
+  stopLive() {
     this.running = false;
     if (this.raf) {
       cancelAnimationFrame(this.raf);
@@ -67,11 +84,20 @@ export class LipSyncController {
     this.analyser = null;
     this.intensity = 0;
     this.viseme = "REST";
-    this.listener?.({ viseme: "REST", intensity: 0 });
+    this.emit("REST", 0);
   }
 
-  getFrame(): LipSyncFrame {
-    return { viseme: this.viseme, intensity: this.intensity };
+  dispose() {
+    this.stopLive();
+    this.listener = null;
+  }
+
+  private emit(viseme: SpeechViseme, intensity: number) {
+    this.listener?.({
+      timestampMs: this.getAudioTimeMs(),
+      blendshapes: visemeToBlendshapes(viseme, intensity),
+      confidence: 0.45 + Math.min(0.4, intensity * 0.4),
+    });
   }
 
   private tick = () => {
@@ -113,7 +139,22 @@ export class LipSyncController {
       this.visemeSince = now;
     }
 
-    this.listener?.({ viseme: this.viseme, intensity: this.intensity });
+    this.emit(this.viseme, this.intensity);
     this.raf = requestAnimationFrame(this.tick);
   };
+}
+
+export function nvidiaAnimationToFrames(payload: NvidiaA2FAnimationPayload): NovaFacialFrame[] {
+  return payload.samples.map((sample) => {
+    const blendshapes: Record<string, number> = {};
+    payload.blendShapeNames.forEach((name, index) => {
+      const value = sample.blendShapeWeights[index];
+      if (typeof value === "number") blendshapes[name] = value;
+    });
+    return {
+      timestampMs: sample.timeCode * 1000,
+      blendshapes,
+      confidence: 1,
+    };
+  });
 }

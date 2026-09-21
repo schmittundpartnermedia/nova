@@ -2,7 +2,7 @@ import { prepareTextForSpeech } from "@/services/voice/prepare-text";
 import { nextUnspokenChunks, splitSpeechChunks } from "@/services/voice/chunk-text";
 import { inferSpeechEmotion } from "@/services/voice/emotion";
 import { classifyVisemeFromBands } from "@/services/voice/viseme-heuristic";
-import { visemeGeometry } from "@/services/voice/viseme-shapes";
+import { visemeToBlendshapes } from "@/features/avatar/viseme-map";
 import {
   getNovaVoiceConfig,
   NOVA_VOICE_DEFAULTS,
@@ -102,23 +102,23 @@ function main() {
   assert(resolveVoiceSpeed(9) <= 1.5, "Speed Clamp oben");
   assert(resolveVoiceSpeed(0.1) >= 0.85, "Speed Clamp unten");
 
-  const restGeo = visemeGeometry("REST", 0);
-  const aGeo = visemeGeometry("A", 1);
-  const eGeo = visemeGeometry("E", 1);
-  const oGeo = visemeGeometry("O", 1);
-  const uGeo = visemeGeometry("U", 1);
-  const mGeo = visemeGeometry("M_B_P", 1);
-  const fGeo = visemeGeometry("F_V", 1);
-  const sGeo = visemeGeometry("S_Z", 1);
-  assert(aGeo.height > restGeo.height * 4, "A muss deutlich offener sein als REST");
-  assert(aGeo.height > eGeo.height, "A höher als E");
-  assert(eGeo.width > oGeo.width, "E breiter als O");
-  assert(oGeo.width > uGeo.width || oGeo.height > uGeo.height, "O/U unterscheidbar");
-  assert(mGeo.height < 1, "M/B/P geschlossen");
-  assert(fGeo.height < aGeo.height * 0.55, "F/V flacher als A");
-  assert(sGeo.height < eGeo.height, "S/Z schmaler/flacher als E");
-  assert(aGeo.jaw > 8, "Kiefer bei A sichtbar");
-  assert(restGeo.jaw === 0, "REST ohne Kiefer");
+  const restShapes = visemeToBlendshapes("REST", 1);
+  const a = visemeToBlendshapes("A", 1);
+  const e = visemeToBlendshapes("E", 1);
+  const o = visemeToBlendshapes("O", 1);
+  const u = visemeToBlendshapes("U", 1);
+  const m = visemeToBlendshapes("M_B_P", 1);
+  const f = visemeToBlendshapes("F_V", 1);
+  const s = visemeToBlendshapes("S_Z", 1);
+  assert((a.jawOpen ?? 0) > 0.4, "A muss jawOpen setzen");
+  assert((a.jawOpen ?? 0) > (e.jawOpen ?? 0), "A weiter geöffnet als E");
+  assert((e.mouthStretchLeft ?? 0) > (o.mouthStretchLeft ?? 0), "E streckt, O formt Trichter");
+  assert((o.mouthFunnel ?? 0) > 0.3, "O Funnel");
+  assert((u.mouthPucker ?? 0) > (o.mouthPucker ?? 0), "U stärkerer Pucker als O");
+  assert((m.mouthClose ?? 0) > 0.7 && (m.jawOpen ?? 0) === 0, "M/B/P geschlossen");
+  assert((f.jawOpen ?? 0) < (a.jawOpen ?? 0) * 0.4, "F/V flacher als A");
+  assert((s.jawOpen ?? 0) < (e.jawOpen ?? 0), "S/Z weniger Kiefer als E");
+  assert(Object.keys(restShapes).length === 0, "REST ohne Mundformen");
 
   console.log(
     JSON.stringify(
@@ -129,7 +129,7 @@ function main() {
         model: config.model,
         chunks,
         visemes: { rest, sibilant, openA },
-        geometry: { rest: restGeo, A: aGeo, E: eGeo, O: oGeo, U: uGeo, M_B_P: mGeo },
+        blendshapes: { rest: restShapes, A: a, E: e, O: o, U: u, M_B_P: m },
       },
       null,
       2,

@@ -1,11 +1,11 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { NovaAvatarPerformance, NovaEmotion, NovaGazeTarget } from "@/components/nova/avatar-performance";
+import type { NovaAvatarPerformance, NovaAvatarEmotion } from "@/components/nova/avatar-performance";
 import { SpeechPlaybackController } from "@/features/voice/speech-playback";
 import { useVoiceEnabled } from "@/features/voice/settings";
-import { applyLipSyncStage } from "@/features/voice/apply-lipsync";
 import { inferSpeechEmotion } from "@/services/voice/emotion";
+import type { NovaFacialFrame } from "@/types/avatar";
 import type { SpeechViseme } from "@/types/voice";
 
 export type AfterSpeech = "idle" | "listen" | "done";
@@ -24,24 +24,12 @@ export function useNovaVoice() {
   const [speaking, setSpeaking] = useState(false);
   const [unavailableHint, setUnavailableHint] = useState<string | null>(null);
   const [performance, setPerformance] = useState<NovaAvatarPerformance>(REST_PERFORMANCE);
-  const emotionRef = useRef<NovaEmotion>("neutral");
+  const emotionRef = useRef<NovaAvatarEmotion>("neutral");
   const speakingRef = useRef(false);
   const afterRef = useRef<AfterSpeech>("done");
   const onAfterRef = useRef<(next: AfterSpeech) => void>(() => undefined);
-  const stageRef = useRef<HTMLElement | null>(null);
-  const lastLipLog = useRef(0);
-
-  const applyMotion = useCallback((headX: number, headY: number, headRot: number, gazeX: number, gazeY: number) => {
-    const node = stageRef.current;
-    if (!node) return;
-    node.style.setProperty("--nova-head-x", `${headX.toFixed(2)}px`);
-    node.style.setProperty("--nova-head-y", `${headY.toFixed(2)}px`);
-    node.style.setProperty("--nova-head-rot", `${headRot.toFixed(2)}deg`);
-    node.style.setProperty("--nova-gaze-x", `${gazeX.toFixed(2)}%`);
-    node.style.setProperty("--nova-gaze-y", `${gazeY.toFixed(2)}%`);
-    const gazeTarget: NovaGazeTarget = Math.abs(gazeX) + Math.abs(gazeY) > 0.35 ? "away" : "user";
-    node.dataset.gaze = gazeTarget;
-  }, []);
+  const facialSinkRef = useRef<(frame: NovaFacialFrame | null) => void>(() => undefined);
+  const lastEnergyLog = useRef(0);
 
   const stop = useCallback((after: AfterSpeech = "idle") => {
     afterRef.current = after;
@@ -49,9 +37,8 @@ export function useNovaVoice() {
     speakingRef.current = false;
     setSpeaking(false);
     setPerformance(REST_PERFORMANCE);
-    applyLipSyncStage(stageRef.current, { speaking: false, viseme: "REST", intensity: 0 });
-    applyMotion(0, 0, 0, 0, 0);
-  }, [applyMotion]);
+    facialSinkRef.current(null);
+  }, []);
 
   useEffect(() => {
     const controller = new SpeechPlaybackController();
@@ -72,50 +59,43 @@ export function useNovaVoice() {
         speakingRef.current = false;
         setSpeaking(false);
         setPerformance(REST_PERFORMANCE);
-        applyLipSyncStage(stageRef.current, { speaking: false, viseme: "REST", intensity: 0 });
-        applyMotion(0, 0, 0, 0, 0);
+        facialSinkRef.current(null);
         onAfterRef.current(afterRef.current);
       },
-      onLipSync: (frame) => {
-        applyLipSyncStage(stageRef.current, {
-          speaking: true,
-          viseme: frame.viseme,
-          intensity: frame.intensity,
-        });
+      onFacialFrame: (frame) => {
+        facialSinkRef.current(frame);
+      },
+      onEnergy: (energy) => {
         if (process.env.NODE_ENV === "development") {
           const now = globalThis.performance.now();
-          if (now - lastLipLog.current > 280) {
-            lastLipLog.current = now;
-            console.debug("[nova-lipsync]", {
+          if (now - lastEnergyLog.current > 280) {
+            lastEnergyLog.current = now;
+            console.debug("[nova-avatar]", {
               isSpeaking: true,
-              speechIntensity: Number(frame.intensity.toFixed(3)),
-              currentViseme: frame.viseme,
+              speechIntensity: Number(energy.intensity.toFixed(3)),
+              viseme: energy.viseme,
             });
           }
         }
         setPerformance((current) => {
-          if (current.viseme === frame.viseme && Math.abs(current.speechIntensity - frame.intensity) < 0.04) {
+          if (current.viseme === energy.viseme && Math.abs(current.speechIntensity - energy.intensity) < 0.04) {
             return current;
           }
           return {
             ...current,
             isSpeaking: true,
-            viseme: frame.viseme as NovaAvatarPerformance["viseme"],
-            speechIntensity: frame.intensity,
+            viseme: energy.viseme,
+            speechIntensity: energy.intensity,
             emotion: emotionRef.current,
           };
         });
-      },
-      onMotion: (frame) => {
-        applyMotion(frame.headX, frame.headY, frame.headRot, frame.gazeX, frame.gazeY);
       },
       onError: (message) => {
         speakingRef.current = false;
         setSpeaking(false);
         setPerformance(REST_PERFORMANCE);
         setUnavailableHint(message);
-        applyLipSyncStage(stageRef.current, { speaking: false, viseme: "REST", intensity: 0 });
-        applyMotion(0, 0, 0, 0, 0);
+        facialSinkRef.current(null);
         onAfterRef.current(afterRef.current);
       },
     });
@@ -123,7 +103,7 @@ export function useNovaVoice() {
       controller.dispose();
       controllerRef.current = null;
     };
-  }, [applyMotion]);
+  }, []);
 
   useEffect(() => {
     if (!enabled && speakingRef.current) {
@@ -177,8 +157,8 @@ export function useNovaVoice() {
 
   const clearHint = useCallback(() => setUnavailableHint(null), []);
 
-  const bindStage = useCallback((node: HTMLElement | null) => {
-    stageRef.current = node;
+  const bindFacialSink = useCallback((sink: ((frame: NovaFacialFrame | null) => void) | null) => {
+    facialSinkRef.current = sink ?? (() => undefined);
   }, []);
 
   const livePerformance = useMemo<NovaAvatarPerformance>(
@@ -200,6 +180,6 @@ export function useNovaVoice() {
     flush,
     stop,
     setAfterSpeech,
-    bindStage,
+    bindFacialSink,
   };
 }

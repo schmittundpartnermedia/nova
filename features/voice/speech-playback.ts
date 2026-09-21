@@ -2,15 +2,16 @@
 
 import { prepareTextForSpeech } from "@/services/voice/prepare-text";
 import { nextUnspokenChunks } from "@/services/voice/chunk-text";
-import { LipSyncController, type LipSyncFrame } from "@/features/voice/lip-sync";
-import { AvatarMotionController, type AvatarMotionFrame } from "@/features/voice/avatar-motion";
+import { HeuristicFacialProvider } from "@/providers/facial/heuristic";
+import { AvatarTimelineController } from "@/features/avatar/timeline";
+import type { NovaFacialFrame } from "@/types/avatar";
 import type { SpeechViseme } from "@/types/voice";
 
 export type SpeechPlaybackListener = {
   onStart?: () => void;
   onEnd?: () => void;
-  onLipSync?: (frame: LipSyncFrame) => void;
-  onMotion?: (frame: AvatarMotionFrame) => void;
+  onFacialFrame?: (frame: NovaFacialFrame) => void;
+  onEnergy?: (input: { viseme: SpeechViseme; intensity: number }) => void;
   onError?: (message: string) => void;
 };
 
@@ -44,13 +45,22 @@ export class SpeechPlaybackController {
   private source: AudioBufferSourceNode | null = null;
   private analyser: AnalyserNode | null = null;
   private gain: GainNode | null = null;
-  private lipSync = new LipSyncController();
-  private motion = new AvatarMotionController();
+  private facial = new HeuristicFacialProvider();
+  private timeline = new AvatarTimelineController();
   private listener: SpeechPlaybackListener = {};
+  private chunkOriginMs = 0;
+  private chunkStartedAt = 0;
 
   constructor() {
-    this.lipSync.setListener((frame) => this.listener.onLipSync?.(frame));
-    this.motion.setListener((frame) => this.listener.onMotion?.(frame));
+    this.timeline.attachClock(() => this.getAudioTimeMs());
+    this.facial.setListener((frame) => {
+      this.timeline.pushLive(frame);
+      this.listener.onFacialFrame?.(this.timeline.sample() ?? frame);
+      this.listener.onEnergy?.({
+        viseme: this.facial.currentViseme,
+        intensity: this.facial.currentIntensity,
+      });
+    });
   }
 
   setListener(listener: SpeechPlaybackListener) {
@@ -65,6 +75,20 @@ export class SpeechPlaybackController {
     return this.playing || this.queue.length > 0;
   }
 
+  getAudioTimeMs(): number {
+    if (!this.playing || !this.chunkStartedAt) return this.chunkOriginMs;
+    try {
+      const ctx = getContext();
+      return this.chunkOriginMs + Math.max(0, (ctx.currentTime - this.chunkStartedAt) * 1000);
+    } catch {
+      return this.chunkOriginMs;
+    }
+  }
+
+  loadFacialFrames(frames: NovaFacialFrame[]) {
+    this.timeline.load(frames);
+  }
+
   resetStream() {
     this.stopInternal(false);
     this.session += 1;
@@ -73,6 +97,8 @@ export class SpeechPlaybackController {
     this.stopped = false;
     this.expectingMore = true;
     this.started = false;
+    this.chunkOriginMs = 0;
+    this.timeline.clear();
     void this.unlock();
   }
 
@@ -112,8 +138,7 @@ export class SpeechPlaybackController {
 
   dispose() {
     this.stop();
-    this.lipSync.setListener(null);
-    this.motion.setListener(null);
+    this.facial.dispose();
   }
 
   private stopInternal(markStopped: boolean) {
@@ -126,8 +151,9 @@ export class SpeechPlaybackController {
     }
     this.queue = [];
     this.stopGraph();
-    this.lipSync.stop();
-    this.motion.stop();
+    this.facial.stopLive();
+    this.timeline.stop();
+    this.timeline.clear();
   }
 
   private enqueue(text: string) {
@@ -222,18 +248,20 @@ export class SpeechPlaybackController {
     this.source = source;
     this.analyser = analyser;
     this.gain = gain;
-    this.lipSync.start(analyser);
+    this.chunkStartedAt = ctx.currentTime;
+    this.timeline.start();
+    this.facial.startLive(analyser, () => this.getAudioTimeMs());
     if (!this.started) {
       this.started = true;
-      this.motion.start();
       this.listener.onStart?.();
     }
 
     source.onended = () => {
       if (item.session !== this.session) return;
+      this.chunkOriginMs += buffer.duration * 1000;
       this.cleanupGraph();
       this.playing = false;
-      this.lipSync.stop();
+      this.facial.stopLive();
       if (this.stopped) return;
       if (this.queue.some((entry) => entry.buffer) || this.queue.length > 0) {
         void this.kick();
@@ -247,8 +275,9 @@ export class SpeechPlaybackController {
 
   private notifyIfIdle() {
     if (this.stopped || this.playing || this.queue.length > 0 || this.expectingMore) return;
-    this.motion.stop();
+    this.timeline.stop();
     this.started = false;
+    this.chunkOriginMs = 0;
     this.listener.onEnd?.();
   }
 
@@ -283,4 +312,4 @@ export class SpeechPlaybackController {
   }
 }
 
-export type { SpeechViseme };
+export type { SpeechViseme, NovaFacialFrame };

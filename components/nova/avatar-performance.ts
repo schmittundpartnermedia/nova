@@ -1,27 +1,8 @@
 import type { OrbState } from "@/types";
-import type { SpeechEmotion, SpeechViseme } from "@/types/voice";
+import type { NovaAvatarEmotion, NovaAvatarMode, NovaAvatarPerformance, NovaGazeTarget } from "@/types/avatar";
+import { modeFromOrbState } from "@/features/avatar/state";
 
-export type NovaAvatarMode =
-  | "idle"
-  | "listening"
-  | "thinking"
-  | "speaking"
-  | "working"
-  | "approval"
-  | "done"
-  | "error";
-
-export type NovaViseme = SpeechViseme;
-export type NovaEmotion = SpeechEmotion;
-export type NovaGazeTarget = "user" | "ui" | "away";
-
-export type NovaAvatarPerformance = {
-  isSpeaking: boolean;
-  speechIntensity: number;
-  viseme: NovaViseme;
-  emotion: NovaEmotion;
-  gazeTarget: NovaGazeTarget;
-};
+export type { NovaAvatarMode, NovaAvatarEmotion, NovaGazeTarget, NovaAvatarPerformance };
 
 export const IDLE_PERFORMANCE: NovaAvatarPerformance = {
   isSpeaking: false,
@@ -31,16 +12,7 @@ export const IDLE_PERFORMANCE: NovaAvatarPerformance = {
   gazeTarget: "user",
 };
 
-export function modeFromOrbState(state: OrbState): NovaAvatarMode {
-  if (state === "LISTENING") return "listening";
-  if (state === "THINKING") return "thinking";
-  if (state === "SPEAKING") return "speaking";
-  if (state === "WORKING") return "working";
-  if (state === "WAITING_FOR_APPROVAL") return "approval";
-  if (state === "DONE") return "done";
-  if (state === "ERROR") return "error";
-  return "idle";
-}
+export { modeFromOrbState };
 
 export function performanceForState(state: OrbState): NovaAvatarPerformance {
   if (state === "LISTENING") {
@@ -54,6 +26,9 @@ export function performanceForState(state: OrbState): NovaAvatarPerformance {
   }
   if (state === "WAITING_FOR_APPROVAL" || state === "ERROR") {
     return { isSpeaking: false, speechIntensity: 0, viseme: "REST", emotion: "concerned", gazeTarget: "user" };
+  }
+  if (state === "DONE") {
+    return { isSpeaking: false, speechIntensity: 0, viseme: "REST", emotion: "warm", gazeTarget: "user" };
   }
   return IDLE_PERFORMANCE;
 }

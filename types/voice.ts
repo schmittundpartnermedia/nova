@@ -14,7 +14,7 @@ export type SpeechViseme =
   | "TH"
   | "W_Q";
 
-export type SpeechEmotion = "neutral" | "positive" | "focused" | "concerned";
+export type SpeechEmotion = "neutral" | "warm" | "positive" | "focused" | "concerned" | "confident";
 
 export type TimedViseme = {
   viseme: SpeechViseme;

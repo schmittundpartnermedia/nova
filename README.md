@@ -50,11 +50,15 @@ npm run lint         # ESLint
 npm run build        # Produktionsbuild
 npm run verify       # Demo- und Persistenzprüfung
 npx prisma studio    # Datenbank ansehen
+npm run verify:voice # Voice-Pipeline
+npm run verify:avatar # 3D Avatar Engine
 ```
 
 ## Dokumentation
 
 - [Architektur](docs/ARCHITECTURE.md)
+- [Avatar Engine](docs/AVATAR_ENGINE.md)
+- [NOVA 3D Asset Spec](docs/NOVA_3D_ASSET_SPEC.md)
 - [Agenten](docs/AGENTS.md)
 - [Memory](docs/MEMORY.md)
 - [AI Provider](docs/AI-PROVIDERS.md)

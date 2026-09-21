@@ -9,7 +9,7 @@ Der Benutzer spricht ausschließlich mit NOVA. Agenten, Provider, Jobs und Conne
 ## Schichten
 
 ```
-UI (Orb, Composer, Archiv)
+UI (Digital Human, Composer, Archiv)
         ↓
 API / Bridge
         ↓
@@ -17,12 +17,15 @@ Master Agent
         ↓
 Agent Registry  →  Research, Communication, Task, Project, … 
         ↓
-Services (Memory, Jobs, Approvals, Archive, Retrieval, Import)
+Services (Memory, Jobs, Approvals, Archive, Retrieval, Import, Avatar Animation)
         ↓
 Providers / Connectors
         ↓
 Prisma / SQLite
 ```
+
+Der zentrale Avatar ist ein Three.js Digital Human (glTF Morph Targets + Bones).
+Siehe [Avatar Engine](AVATAR_ENGINE.md). Das Referenzfoto ist keine Runtime-Geometrie.
 
 ## Tenant-Modell
 
