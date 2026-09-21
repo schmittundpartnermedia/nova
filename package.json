@@ -15,6 +15,7 @@
     "verify": "tsx scripts/verify-demo.ts",
     "verify:voice": "tsx scripts/verify-voice.ts",
     "verify:avatar": "tsx scripts/verify-avatar.ts",
+    "validate:avatar": "tsx scripts/validate-nova-avatar.ts",
     "verify:conversation": "tsx scripts/verify-conversation.ts",
     "generate:dev-rig": "tsx scripts/generate-dev-rig.ts"
   },

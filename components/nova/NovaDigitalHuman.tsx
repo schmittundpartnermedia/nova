@@ -25,6 +25,7 @@ export function NovaDigitalHuman({
   const [status, setStatus] = useState<DigitalHumanStatus>("loading");
   const [error, setError] = useState("");
   const [developmentRig, setDevelopmentRig] = useState(false);
+  const [readiness, setReadiness] = useState("");
 
   useEffect(() => {
     onRuntimeRef.current = onRuntime;
@@ -39,7 +40,9 @@ export function NovaDigitalHuman({
     const unsubscribe = runtime.subscribe(() => {
       setStatus(runtime.getStatus());
       setError(runtime.getError());
-      setDevelopmentRig(Boolean(runtime.getRigInfo()?.isDevelopmentRig));
+      const info = runtime.getRigInfo();
+      setDevelopmentRig(Boolean(info?.isDevelopmentRig));
+      setReadiness(info?.readiness ?? "");
     });
     onRuntimeRef.current?.(runtime);
     void (async () => {
@@ -65,12 +68,18 @@ export function NovaDigitalHuman({
   }, [state, isSpeaking, speechIntensity, emotion]);
 
   return (
-    <div className="nova-digital-human" data-status={status} data-renderer="three-webgl">
+    <div className="nova-digital-human" data-status={status} data-renderer="three-webgl" data-readiness={readiness}>
       <canvas ref={canvasRef} className="nova-digital-human-canvas" aria-hidden="true" />
       {status === "loading" ? <p className="nova-avatar-boot">NOVA wird initialisiert …</p> : null}
       {status === "error" ? (
         <p className="nova-avatar-error" role="alert">
           {error || "3D-Avatar konnte nicht geladen werden."}
+        </p>
+      ) : null}
+      {status === "missing" ? (
+        <p className="nova-avatar-missing" role="alert">
+          FINAL_AVATAR_MISSING
+          <span>Das fotorealistische NOVA-Asset ist nicht integriert.</span>
         </p>
       ) : null}
       {status === "ready" && developmentRig ? <p className="nova-dev-rig-badge">DEVELOPMENT RIG</p> : null}

@@ -25,6 +25,7 @@ export class FacialAnimationEngine {
   private isSpeaking = false;
   private speechIntensity = 0;
   private reducedMotion = false;
+  private headPoseOverride: NovaVec3 | null = null;
 
   initialize() {
     this.current = emptyBlendshapes();
@@ -67,6 +68,10 @@ export class FacialAnimationEngine {
 
   setReducedMotion(value: boolean) {
     this.reducedMotion = value;
+  }
+
+  setHeadPose(rotation: NovaVec3 | null) {
+    this.headPoseOverride = rotation;
   }
 
   applyFrame(frame: NovaFacialFrame | null) {
@@ -126,7 +131,7 @@ export class FacialAnimationEngine {
     return {
       blendshapes: weights,
       mappedBlendshapes: this.adapter.mapBlendshapes(weights),
-      headRotation: this.speechFrame?.headRotation ?? behavior.headRotation,
+      headRotation: this.headPoseOverride ?? this.speechFrame?.headRotation ?? behavior.headRotation,
       neckRotation: behavior.neckRotation,
       eyeBoneRotation: behavior.eyeBoneRotation,
       jawBoneRotation: { x: jawOpen * 0.28, y: 0, z: 0 },

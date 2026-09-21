@@ -1198,3 +1198,67 @@
 .nova-voice-lab-status {
   font-size: 13px;
 }
+
+
+.nova-avatar-missing {
+  position: absolute;
+  left: 50%;
+  top: 52%;
+  z-index: 8;
+  margin: 0;
+  transform: translate(-50%, -50%);
+  text-align: center;
+  letter-spacing: 0.16em;
+  font-size: 13px;
+  color: #efb09a;
+  display: grid;
+  gap: 8px;
+}
+
+.nova-avatar-missing span {
+  letter-spacing: 0.04em;
+  font-size: 12px;
+  color: rgba(210, 230, 255, 0.72);
+}
+
+.nova-avatar-lab {
+  max-width: 980px;
+}
+
+.nova-avatar-lab-stage {
+  display: grid;
+  grid-template-columns: minmax(0, 1.3fr) minmax(220px, 0.7fr);
+  gap: 16px;
+  margin-bottom: 20px;
+}
+
+.nova-avatar-lab-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.nova-identity-compare {
+  margin: 0 0 16px;
+}
+
+.nova-identity-compare img {
+  display: block;
+  width: 100%;
+  border-radius: 12px;
+  border: 1px solid rgba(140, 190, 255, 0.2);
+}
+
+.nova-identity-compare figcaption {
+  margin-top: 8px;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  color: rgba(190, 214, 235, 0.7);
+}
+
+@media (max-width: 800px) {
+  .nova-avatar-lab-stage,
+  .nova-avatar-lab-grid {
+    grid-template-columns: 1fr;
+  }
+}

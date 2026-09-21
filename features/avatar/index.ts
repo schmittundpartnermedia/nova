@@ -5,3 +5,5 @@ export { NovaFacialRigAdapter } from "@/features/avatar/rig-adapter";
 export { DigitalHumanRuntime } from "@/features/avatar/runtime";
 export { visemeToBlendshapes } from "@/features/avatar/viseme-map";
 export { emotionToBlendshapes } from "@/features/avatar/emotion-map";
+export { loadAvatarManifest, DEVELOPMENT_MANIFEST, MISSING_PRODUCTION_MANIFEST } from "@/features/avatar/manifest";
+export { FINAL_AVATAR_MISSING } from "@/features/avatar/production-guard";

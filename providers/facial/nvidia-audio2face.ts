@@ -4,7 +4,7 @@ import type {
   FacialAnimationProvider,
   FacialProviderHealth,
 } from "@/types/facial";
-import { nvidiaAnimationToFrames } from "@/providers/facial/heuristic";
+import { nvidiaAnimationToFrames } from "@/providers/facial/a2f-frames";
 
 /**
  * NVIDIA Audio2Face-3D läuft nicht im Browser.

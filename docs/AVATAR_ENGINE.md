@@ -63,11 +63,18 @@ NOVA-Weg:
 
 `Web App → /api/nova/avatar-animation → Avatar Animation Service → A2F gRPC → NovaFacialFrame[] → Web Runtime`
 
-Ohne `NOVA_A2F_GRPC_URL` bleibt der lokale Heuristic-Provider aktiv (Spektrum → Viseme → Blendshapes, zeitgestempelt). Das ist kein Bild-Lip-Sync.
+Ohne `NOVA_A2F_GRPC_URL` bleibt der lokale **HeuristicFacialProvider (DEVELOPMENT ONLY)** aktiv.
+Das ist kein Production-Lip-Sync.
 
-## Development Rig
+## Development Rig vs Production
 
 `public/nova/dev-rig/nova-dev-rig.glb` ist klar als **DEVELOPMENT RIG** gekennzeichnet.
-Es ist nicht das fotorealistische NOVA-Gesicht.
 
-Finale Datei, sobald sie existiert: `public/nova/nova.glb` (siehe `docs/NOVA_3D_ASSET_SPEC.md`).
+Finale Datei: `public/nova/avatar/nova.glb`.
+Sie wird **nur** geladen, wenn `public/nova/avatar/manifest.json` `validated: true` hat **und** `npm run validate:avatar` das Asset akzeptiert.
+
+Eine Datei namens `nova.glb` allein reicht nicht.
+
+In `NODE_ENV=production` ohne validiertes Asset: Status `FINAL_AVATAR_MISSING`.
+
+Siehe [NOVA Final Character Pipeline](NOVA_FINAL_CHARACTER_PIPELINE.md).

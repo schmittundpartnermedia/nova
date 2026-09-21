@@ -25,7 +25,8 @@ Prisma / SQLite
 ```
 
 Der zentrale Avatar ist ein Three.js Digital Human (glTF Morph Targets + Bones).
-Siehe [Avatar Engine](AVATAR_ENGINE.md). Das Referenzfoto ist keine Runtime-Geometrie.
+Siehe [Avatar Engine](AVATAR_ENGINE.md) und [Final Character Pipeline](NOVA_FINAL_CHARACTER_PIPELINE.md).
+Das Referenzfoto ist keine Runtime-Geometrie. Ohne validiertes `public/nova/avatar/nova.glb` läuft lokal nur die gekennzeichnete Development Rig.
 
 ## Tenant-Modell
 

@@ -1,5 +1,5 @@
 import type { NovaFacialFrame } from "@/types/avatar";
-import type { FacialAnimationProvider, FacialProviderHealth, NvidiaA2FAnimationPayload } from "@/types/facial";
+import type { FacialAnimationProvider, FacialProviderHealth } from "@/types/facial";
 import { visemeToBlendshapes } from "@/features/avatar/viseme-map";
 import {
   classifyVisemeFromBands,
@@ -23,9 +23,15 @@ function bandEnergy(spectrum: Uint8Array, sampleRate: number, fftSize: number, f
   return count ? sum / count / 255 : 0;
 }
 
+/**
+ * DEVELOPMENT ONLY.
+ * Spektrum → Viseme → Blendshapes. Kein Production-Lip-Sync.
+ * Produktionsziel: NVIDIA Audio2Face-3D über den Avatar Animation Service.
+ */
 export class HeuristicFacialProvider implements FacialAnimationProvider {
   id = "heuristic" as const;
-  name = "HeuristicFacialProvider";
+  name = "HeuristicFacialProvider (DEVELOPMENT ONLY)";
+  readonly developmentOnly = true;
   private analyser: AnalyserNode | null = null;
   private freq = new Uint8Array(0);
   private time = new Float32Array(0);
@@ -53,7 +59,8 @@ export class HeuristicFacialProvider implements FacialAnimationProvider {
       ok: true,
       provider: this.id,
       available: true,
-      message: "Lokaler Spektral-Provider. Kein Audio2Face. Erzeugt zeitgestempelte Blendshape-Frames.",
+      message:
+        "DEVELOPMENT ONLY. Spektral-Viseme, kein Audio2Face. Produktionsziel bleibt NVIDIA Audio2Face-3D.",
     };
   }
 
@@ -144,17 +151,4 @@ export class HeuristicFacialProvider implements FacialAnimationProvider {
   };
 }
 
-export function nvidiaAnimationToFrames(payload: NvidiaA2FAnimationPayload): NovaFacialFrame[] {
-  return payload.samples.map((sample) => {
-    const blendshapes: Record<string, number> = {};
-    payload.blendShapeNames.forEach((name, index) => {
-      const value = sample.blendShapeWeights[index];
-      if (typeof value === "number") blendshapes[name] = value;
-    });
-    return {
-      timestampMs: sample.timeCode * 1000,
-      blendshapes,
-      confidence: 1,
-    };
-  });
-}
+export { nvidiaAnimationToFrames } from "@/providers/facial/a2f-frames";

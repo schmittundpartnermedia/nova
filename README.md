@@ -52,6 +52,7 @@ npm run verify       # Demo- und Persistenzprüfung
 npx prisma studio    # Datenbank ansehen
 npm run verify:voice # Voice-Pipeline
 npm run verify:avatar # 3D Avatar Engine
+npm run validate:avatar # Production GLB Acceptance (erwartet derzeit FINAL_AVATAR_MISSING)
 npm run verify:conversation # Conversation Archive, Memory-Quelle, Tenant Isolation
 ```
 
@@ -60,6 +61,7 @@ npm run verify:conversation # Conversation Archive, Memory-Quelle, Tenant Isolat
 - [Architektur](docs/ARCHITECTURE.md)
 - [Avatar Engine](docs/AVATAR_ENGINE.md)
 - [NOVA 3D Asset Spec](docs/NOVA_3D_ASSET_SPEC.md)
+- [NOVA Final Character Pipeline](docs/NOVA_FINAL_CHARACTER_PIPELINE.md)
 - [Agenten](docs/AGENTS.md)
 - [Memory](docs/MEMORY.md)
 - [AI Provider](docs/AI-PROVIDERS.md)

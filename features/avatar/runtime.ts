@@ -8,12 +8,18 @@ import { RenderPass } from "three/addons/postprocessing/RenderPass.js";
 import { UnrealBloomPass } from "three/addons/postprocessing/UnrealBloomPass.js";
 import { OutputPass } from "three/addons/postprocessing/OutputPass.js";
 import type { OrbState } from "@/types";
-import type { NovaAvatarEmotion, NovaFacialFrame, NovaRenderQuality, NovaRigInfo } from "@/types/avatar";
+import type { NovaAvatarEmotion, NovaFacialFrame, NovaRenderQuality, NovaRigInfo, NovaVec3 } from "@/types/avatar";
 import { FacialAnimationEngine } from "@/features/avatar/facial-engine";
 import { detectQuality, qualitySettings } from "@/features/avatar/quality";
-import { FINAL_NOVA_GLB_URL, DEV_RIG_URL, isDevelopmentRigUrl } from "@/features/avatar/asset";
+import { DEVELOPMENT_RIG_URL, PRODUCTION_AVATAR_URL } from "@/features/avatar/acceptance";
+import { loadAvatarManifest, isProductionReady } from "@/features/avatar/manifest";
+import { allowDevelopmentRig, missingAvatarMessage } from "@/features/avatar/production-guard";
+import { applyNovaLighting, lightingPreset, type NovaLightingPresetId } from "@/features/avatar/lighting";
+import { applyNovaCamera, cameraPreset, type NovaCameraPresetId } from "@/features/avatar/camera";
+import { prepareAvatarMaterials, selectLodMeshes } from "@/features/avatar/materials";
+import { productionRigAccepted } from "@/features/avatar/runtime-validate";
 
-export type DigitalHumanStatus = "loading" | "ready" | "error";
+export type DigitalHumanStatus = "loading" | "ready" | "error" | "missing";
 
 type MorphMesh = THREE.Mesh | THREE.SkinnedMesh;
 
@@ -48,7 +54,7 @@ export class DigitalHumanRuntime {
   private camera: THREE.PerspectiveCamera | null = null;
   private composer: EffectComposer | null = null;
   private bloom: UnrealBloomPass | null = null;
-  private clock = { getDelta() { return 0; } };
+  private lightingGroup: THREE.Group | null = null;
   private rig: THREE.Object3D | null = null;
   private morphMeshes: MorphMesh[] = [];
   private bones = new Map<string, THREE.Object3D>();
@@ -62,11 +68,15 @@ export class DigitalHumanRuntime {
   private rigInfo: NovaRigInfo | null = null;
   private listeners = new Set<() => void>();
   private speechIntensity = 0;
+  private forceDevelopmentRig: boolean;
+  private lightingId: NovaLightingPresetId = "portrait";
+  private cameraId: NovaCameraPresetId = "portrait";
 
-  constructor(canvas: HTMLCanvasElement, quality?: NovaRenderQuality) {
+  constructor(canvas: HTMLCanvasElement, options?: { quality?: NovaRenderQuality; forceDevelopmentRig?: boolean }) {
     this.canvas = canvas;
-    this.quality = quality ?? detectQuality();
+    this.quality = options?.quality ?? detectQuality();
     this.reducedMotion = prefersReducedMotion();
+    this.forceDevelopmentRig = Boolean(options?.forceDevelopmentRig);
   }
 
   getStatus(): DigitalHumanStatus {
@@ -95,45 +105,45 @@ export class DigitalHumanRuntime {
     this.engine.setReducedMotion(this.reducedMotion);
     const renderer = new THREE.WebGLRenderer({
       canvas: this.canvas,
-      antialias: this.quality !== "LOW",
+      antialias: this.quality !== "LOW" && this.quality !== "MEDIUM",
       alpha: true,
       powerPreference: "high-performance",
+      preserveDrawingBuffer: this.forceDevelopmentRig,
     });
     if (!renderer.capabilities.isWebGL2 && !renderer.getContext()) {
       throw new Error("WebGL ist auf diesem Gerät nicht verfügbar.");
     }
     renderer.outputColorSpace = THREE.SRGBColorSpace;
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    renderer.toneMappingExposure = 1.25;
-    renderer.setClearColor(0x03070c, 1);
     renderer.shadowMap.enabled = qualitySettings(this.quality, this.reducedMotion).shadows;
     renderer.shadowMap.type = THREE.PCFShadowMap;
     this.renderer = renderer;
 
     const scene = new THREE.Scene();
-    scene.fog = new THREE.FogExp2(0x02060c, 0.08);
     this.scene = scene;
 
-    const camera = new THREE.PerspectiveCamera(28, 1, 0.05, 20);
-    camera.position.set(0, 1.58, 0.85);
-    camera.lookAt(0, 1.55, 0);
+    const camera = new THREE.PerspectiveCamera(26, 1, 0.05, 20);
     this.camera = camera;
+    applyNovaCamera(camera, cameraPreset(this.cameraId));
 
-    this.addLights(scene);
+    this.lightingGroup = applyNovaLighting(scene, renderer, lightingPreset(this.lightingId));
     const settings = qualitySettings(this.quality, this.reducedMotion);
+    this.lightingGroup.traverse((object) => {
+      if (object instanceof THREE.SpotLight) object.castShadow = settings.shadows;
+    });
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, settings.pixelRatio));
     if (settings.environment) {
       const pmrem = new THREE.PMREMGenerator(renderer);
       const env = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
       scene.environment = env;
-      scene.environmentIntensity = 0.28;
+      scene.environmentIntensity = lightingPreset(this.lightingId).environmentIntensity;
       pmrem.dispose();
     }
 
     const composer = new EffectComposer(renderer);
     composer.addPass(new RenderPass(scene, camera));
     if (settings.bloom) {
-      const bloom = new UnrealBloomPass(new THREE.Vector2(1, 1), 0.18, 0.6, 0.85);
+      const bloom = new UnrealBloomPass(new THREE.Vector2(1, 1), 0.12, 0.7, 0.88);
       this.bloom = bloom;
       composer.addPass(bloom);
     }
@@ -146,71 +156,84 @@ export class DigitalHumanRuntime {
     this.loop();
   }
 
-  private addLights(scene: THREE.Scene) {
-    const key = new THREE.SpotLight(0xc8e7ff, 28, 8, Math.PI / 4, 0.45, 1);
-    key.position.set(-0.25, 2.2, 1.4);
-    key.target.position.set(0, 1.55, 0);
-    key.castShadow = qualitySettings(this.quality, this.reducedMotion).shadows;
-    scene.add(key, key.target);
+  setLightingPreset(id: NovaLightingPresetId) {
+    if (!this.scene || !this.renderer) return;
+    this.lightingId = id;
+    if (this.lightingGroup) {
+      this.scene.remove(this.lightingGroup);
+      this.lightingGroup.traverse((object) => {
+        if (object instanceof THREE.Light) object.dispose();
+      });
+    }
+    this.lightingGroup = applyNovaLighting(this.scene, this.renderer, lightingPreset(id));
+  }
 
-    const rim = new THREE.DirectionalLight(0x3ec6ff, 4.2);
-    rim.position.set(0.7, 1.8, -0.8);
-    scene.add(rim);
-
-    const fill = new THREE.PointLight(0xe39a4e, 2.2, 4.5);
-    fill.position.set(0.45, 1.25, 0.6);
-    scene.add(fill);
-
-    const ambient = new THREE.HemisphereLight(0x7eb4ff, 0x0a1018, 1.15);
-    scene.add(ambient);
-
-    const eyeGlow = new THREE.PointLight(0x5ad2ff, 1.1, 0.8);
-    eyeGlow.position.set(0, 1.62, 0.22);
-    scene.add(eyeGlow);
+  setCameraPreset(id: NovaCameraPresetId) {
+    if (!this.camera) return;
+    this.cameraId = id;
+    applyNovaCamera(this.camera, cameraPreset(id));
   }
 
   async loadRig() {
     this.status = "loading";
     this.notify();
     const loader = new GLTFLoader();
-    const candidates = [FINAL_NOVA_GLB_URL, DEV_RIG_URL];
-    let loadedUrl = "";
-    let gltf: Awaited<ReturnType<GLTFLoader["loadAsync"]>> | null = null;
-    let lastError: unknown;
-    for (const url of candidates) {
+    const manifest = await loadAvatarManifest();
+    const tryProduction = isProductionReady(manifest) && !this.forceDevelopmentRig;
+
+    if (tryProduction) {
       try {
-        gltf = await loader.loadAsync(url);
-        loadedUrl = url;
-        break;
-      } catch (error) {
-        lastError = error;
+        const gltf = await loader.loadAsync(PRODUCTION_AVATAR_URL);
+        const accepted = productionRigAccepted(gltf.scene);
+        if (accepted.ok) {
+          this.mountRig(gltf.scene, PRODUCTION_AVATAR_URL, false);
+          return;
+        }
+      } catch {
+        // Production file missing or unloadable – never silently treat a named file as NOVA.
       }
     }
-    if (!gltf || !loadedUrl) {
+
+    if (!allowDevelopmentRig({ forceDevelopmentRig: this.forceDevelopmentRig })) {
+      this.status = "missing";
+      this.errorMessage = missingAvatarMessage();
+      this.rigInfo = {
+        isDevelopmentRig: false,
+        sourceUrl: "",
+        morphTargets: [],
+        bones: [],
+        mappedBlendshapes: [],
+        unmappedBlendshapes: [],
+        quality: "development",
+        validated: false,
+        readiness: "FINAL_AVATAR_MISSING",
+      };
+      this.notify();
+      return;
+    }
+
+    try {
+      const gltf = await loader.loadAsync(DEVELOPMENT_RIG_URL);
+      this.mountRig(gltf.scene, DEVELOPMENT_RIG_URL, true);
+    } catch (error) {
       this.status = "error";
       this.errorMessage = "3D-Modell konnte nicht geladen werden. Es gibt keinen Bild-Fallback.";
       this.notify();
-      throw lastError instanceof Error ? lastError : new Error(this.errorMessage);
+      throw error instanceof Error ? error : new Error(this.errorMessage);
     }
+  }
 
-    const root = gltf.scene;
-    root.traverse((object) => {
-      if (object instanceof THREE.Mesh) {
-        object.castShadow = true;
-        object.receiveShadow = true;
-        const materials = Array.isArray(object.material) ? object.material : [object.material];
-        for (const material of materials) {
-          if (material instanceof THREE.MeshStandardMaterial) {
-            material.envMapIntensity = 0.7;
-          }
-        }
-      }
-    });
-
+  private mountRig(root: THREE.Object3D, loadedUrl: string, development: boolean) {
+    if (this.rig && this.scene) this.scene.remove(this.rig);
+    const settings = qualitySettings(this.quality, this.reducedMotion);
+    const anisotropy = Math.min(settings.anisotropy, this.renderer?.capabilities.getMaxAnisotropy() ?? 8);
+    prepareAvatarMaterials(root, anisotropy);
+    selectLodMeshes(root, this.quality);
     this.scene?.add(root);
     this.rig = root;
     this.morphMeshes = collectMorphMeshes(root);
     this.bones.clear();
+    this.restRotations.clear();
     for (const node of collectNamed(root)) {
       this.bones.set(node.name, node);
       this.restRotations.set(node.name, node.rotation.clone());
@@ -226,12 +249,15 @@ export class DigitalHumanRuntime {
     });
     const adapter = this.engine.getAdapter();
     this.rigInfo = {
-      isDevelopmentRig: isDevelopmentRigUrl(loadedUrl) || Boolean(root.userData?.novaDevelopmentRig),
+      isDevelopmentRig: development,
       sourceUrl: loadedUrl,
       morphTargets: [...morphNames],
       bones: [...this.bones.keys()],
       mappedBlendshapes: adapter.mappedBlendshapes(),
       unmappedBlendshapes: adapter.unmappedBlendshapes(),
+      quality: development ? "development" : "production",
+      validated: !development,
+      readiness: development ? "DEVELOPMENT_RIG" : "PRODUCTION",
     };
     this.status = "ready";
     this.notify();
@@ -251,6 +277,15 @@ export class DigitalHumanRuntime {
     this.engine.setBlendshape(name, value);
   }
 
+  debugSetHeadPose(rotation: NovaVec3 | null) {
+    this.engine.setHeadPose(rotation);
+  }
+
+  capturePng(): string | null {
+    if (!this.canvas) return null;
+    return this.canvas.toDataURL("image/png");
+  }
+
   getDebugSnapshot() {
     const sample = this.engine.sample();
     return {
@@ -258,10 +293,23 @@ export class DigitalHumanRuntime {
       renderer: this.renderer ? "webgl" : "none",
       webgl: Boolean(this.renderer?.getContext()),
       isMesh: this.morphMeshes.length > 0,
+      skinned: this.morphMeshes.some((mesh) => mesh instanceof THREE.SkinnedMesh) || this.bones.size > 0,
+      meshCount: this.rig
+        ? (() => {
+            let count = 0;
+            this.rig?.traverse((object) => {
+              if (object instanceof THREE.Mesh) count += 1;
+            });
+            return count;
+          })()
+        : 0,
       morphCount: this.morphMeshes.reduce((sum, mesh) => sum + (mesh.morphTargetInfluences?.length ?? 0), 0),
       jawOpen: sample.blendshapes.jawOpen ?? 0,
       eyeBlinkLeft: sample.blendshapes.eyeBlinkLeft ?? 0,
       mapped: sample.mappedBlendshapes,
+      lighting: this.lightingId,
+      camera: this.cameraId,
+      quality: this.quality,
       rig: this.rigInfo,
     };
   }
@@ -289,7 +337,7 @@ export class DigitalHumanRuntime {
       this.rig.position.y = sample.breath;
     }
     if (this.bloom) {
-      this.bloom.strength = 0.14 + this.speechIntensity * 0.08;
+      this.bloom.strength = 0.1 + this.speechIntensity * 0.06;
     }
   }
 
@@ -304,7 +352,6 @@ export class DigitalHumanRuntime {
 
   private loop = () => {
     if (this.disposed) return;
-    this.clock.getDelta();
     this.applyOutput();
     if (this.composer && this.camera) this.composer.render();
     else if (this.renderer && this.scene && this.camera) this.renderer.render(this.scene, this.camera);
@@ -342,4 +389,4 @@ export class DigitalHumanRuntime {
   }
 }
 
-export { FINAL_NOVA_GLB_URL, DEV_RIG_URL };
+export { PRODUCTION_AVATAR_URL as FINAL_NOVA_GLB_URL, DEVELOPMENT_RIG_URL as DEV_RIG_URL };

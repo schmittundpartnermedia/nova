@@ -1,0 +1,11 @@
+{
+  "id": "nova",
+  "version": "0.0.0-unvalidated",
+  "type": "digital-human",
+  "asset": "/nova/avatar/nova.glb",
+  "rigProfile": "arkit-52",
+  "quality": "development",
+  "validated": false,
+  "status": "FINAL_AVATAR_MISSING",
+  "activeAsset": "/nova/dev-rig/nova-dev-rig.glb"
+}

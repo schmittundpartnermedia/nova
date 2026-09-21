@@ -1,6 +1,6 @@
 # NOVA 3D Asset Specification
 
-Dieses Dokument beschreibt das **finale** NOVA Digital-Human-Asset `nova.glb`.
+Dieses Dokument beschreibt das **finale** NOVA Digital-Human-Asset `public/nova/avatar/nova.glb`.
 Es ist die Produktionsvorgabe für Character Art / Rigging. Das im Repo liegende
 `public/nova/dev-rig/nova-dev-rig.glb` ist **nur** eine Development Rig.
 
@@ -19,7 +19,7 @@ Es darf nicht auf das Mesh projiziert, als Face-Plane verwendet oder animiert we
 | Feld | Vorgabe |
 | --- | --- |
 | Container | **glTF 2.0 Binary (`.glb`)** |
-| Dateiname | `public/nova/nova.glb` |
+| Dateiname | `public/nova/avatar/nova.glb` |
 | Koordinatensystem | Y-up, rechte Hand, glTF |
 | Einheit | 1 Einheit = 1 Meter |
 | Origin | Füße / Hüfte auf Y=0, Blick +Z |

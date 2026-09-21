@@ -22,9 +22,9 @@ export async function getAvatarAnimationHealth(): Promise<AvatarAnimationHealth>
   return {
     ok: true,
     provider: "heuristic",
-    a2fConfigured: a2f.configured,
-    a2fReachable: a2f.reachable,
-    message: a2f.message,
+      a2fConfigured: a2f.configured,
+      a2fReachable: a2f.reachable,
+      message: `${a2f.message} HeuristicFacialProvider ist DEVELOPMENT ONLY. Produktionsziel: NVIDIA Audio2Face-3D.`,
   };
 }
 

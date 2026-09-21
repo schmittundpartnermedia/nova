@@ -8,8 +8,13 @@ import { NovaFacialRigAdapter } from "@/features/avatar/rig-adapter";
 import { AvatarTimelineController } from "@/features/avatar/timeline";
 import { FacialAnimationEngine } from "@/features/avatar/facial-engine";
 import { LIP_SYNC_SET } from "@/features/avatar/contract";
-import { nvidiaAnimationToFrames } from "@/providers/facial/heuristic";
+import { nvidiaAnimationToFrames } from "@/providers/facial/a2f-frames";
 import { AUDIO2FACE_RUNTIME } from "@/services/avatar-animation";
+import { validateAvatarGlb } from "@/features/avatar/validate-glb";
+import { DEVELOPMENT_RIG_PATH, PRODUCTION_AVATAR_PATH } from "@/features/avatar/acceptance";
+import { isProductionReady, normalizeManifest, MISSING_PRODUCTION_MANIFEST } from "@/features/avatar/manifest";
+import { HeuristicFacialProvider } from "@/providers/facial/heuristic";
+import { mustNotClaimDigitalHumanReady } from "@/features/avatar/production-guard";
 
 function assert(condition: unknown, message: string): asserts condition {
   if (!condition) throw new Error(message);
@@ -25,7 +30,7 @@ function readGlbJson(path: string): Record<string, unknown> {
   return JSON.parse(buffer.subarray(20, 20 + chunkLength).toString("utf8")) as Record<string, unknown>;
 }
 
-function main() {
+async function main() {
   const glbPath = resolve("public/nova/dev-rig/nova-dev-rig.glb");
   const gltf = readGlbJson(glbPath);
   const meshes = (gltf.meshes as Array<{ extras?: { targetNames?: string[] }; primitives?: Array<{ extras?: { targetNames?: string[] }; targets?: unknown[] }> }>) ?? [];
@@ -118,6 +123,42 @@ function main() {
   assert(AUDIO2FACE_RUNTIME.runsInBrowser === false, "A2F läuft nicht im Browser");
   assert(AUDIO2FACE_RUNTIME.rpc === "ProcessAudioStream", "Dokumentierter RPC");
 
+  const production = validateAvatarGlb(PRODUCTION_AVATAR_PATH, "production");
+  assert(production.code === "FINAL_AVATAR_MISSING", `Production muss fehlen, war ${production.code}`);
+  assert(production.ok === false, "Unvalidiertes nova.glb darf nicht ok sein");
+
+  const development = validateAvatarGlb(DEVELOPMENT_RIG_PATH, "development");
+  assert(development.exists, "Development Rig Datei");
+  assert(development.ok, `Development Rig Validator: ${development.checks.filter((item) => !item.ok).map((item) => item.id).join(",")}`);
+  assert(development.morphChangesGeometry, "Development Rig Morphs müssen Vertices ändern");
+
+  const puppetAsProduction = validateAvatarGlb(DEVELOPMENT_RIG_PATH, "production");
+  assert(puppetAsProduction.ok === false, "Development Rig darf nicht als Production durchgehen");
+  assert(
+    puppetAsProduction.checks.some((item) => item.id === "not_development_rig" && !item.ok),
+    "Production Guard gegen Dev-Rig-Marker",
+  );
+
+  const ready = normalizeManifest({
+    id: "nova",
+    version: "1.0.0",
+    type: "digital-human",
+    asset: "/nova/avatar/nova.glb",
+    rigProfile: "arkit-52",
+    quality: "production",
+    validated: true,
+    status: "PRODUCTION",
+    activeAsset: "/nova/avatar/nova.glb",
+  });
+  assert(isProductionReady(ready), "Validiertes Manifest ist production-ready");
+  assert(isProductionReady(MISSING_PRODUCTION_MANIFEST) === false, "Missing Manifest ist nicht production-ready");
+  assert(mustNotClaimDigitalHumanReady(MISSING_PRODUCTION_MANIFEST), "Kein Digital-Human-Ready ohne Asset");
+
+  const heuristic = new HeuristicFacialProvider();
+  assert(heuristic.developmentOnly === true, "Heuristic ist DEVELOPMENT ONLY");
+  const health = await heuristic.healthCheck();
+  assert(health.message.includes("DEVELOPMENT ONLY"), "Heuristic Health markiert Development");
+
   console.log(
     JSON.stringify(
       {
@@ -139,4 +180,4 @@ function main() {
   );
 }
 
-main();
+void main();

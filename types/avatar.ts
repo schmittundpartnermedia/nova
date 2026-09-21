@@ -81,7 +81,9 @@ export type NovaAvatarMode =
   | "done"
   | "error";
 
-export type NovaRenderQuality = "HIGH" | "MEDIUM" | "LOW";
+export type NovaRenderQuality = "ULTRA" | "HIGH" | "MEDIUM" | "LOW";
+
+export type NovaAvatarReadiness = "FINAL_AVATAR_MISSING" | "DEVELOPMENT_RIG" | "PRODUCTION";
 
 export type NovaFacialFrame = {
   timestampMs: number;
@@ -105,6 +107,9 @@ export type NovaRigInfo = {
   bones: string[];
   mappedBlendshapes: string[];
   unmappedBlendshapes: string[];
+  quality: "development" | "production";
+  validated: boolean;
+  readiness: NovaAvatarReadiness;
 };
 
 export type AvatarTimelineSample = {

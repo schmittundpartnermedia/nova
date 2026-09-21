@@ -9,7 +9,7 @@ export const NOVA_IDENTITY = {
   glowSrc: "/nova/nova-glow.svg",
   particlesSrc: "/nova/nova-particles.svg",
   developmentRigSrc: "/nova/dev-rig/nova-dev-rig.glb",
-  finalRigSrc: "/nova/nova.glb",
+  finalRigSrc: "/nova/avatar/nova.glb",
 } as const;
 
 export const NOVA_GLOW_SRC = NOVA_IDENTITY.glowSrc;
