@@ -10,10 +10,14 @@ Personen, Firmen, Projekte, Aufgaben, Entscheidungen, Meetings, Memos, Dokumente
 
 Jeder Memory-Eintrag trägt:
 
-- `source_type` (`chatgpt` \| `nova` \| `email` \| `meeting` \| `document` \| `manual` \| `research` \| `calendar`)
-- `source_reference`
+- `source_type` (`chatgpt` \| `nova` \| `email` \| `meeting` \| `document` \| `manual` \| `research` \| `calendar` \| `conversation_message`)
+- `source_reference` (bei Gesprächen: `ConversationMessage.id`)
+- `conversation_message_id` (optionale direkte Quelle)
 - `source_url` (optional)
+- `version` (bei Bestätigung/Aktualisierung)
 - `created_at`
+
+Memory ist nicht die Conversation. Smalltalk bleibt nur im Conversation Archive.
 
 ## Relationen
 

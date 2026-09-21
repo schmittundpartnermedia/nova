@@ -19,6 +19,8 @@ export function NovaCommandBar({
   onMic,
   onStopSpeech,
   onToggleVoice,
+  onDraftChange,
+  onComposeStart,
 }: {
   disabled: boolean;
   listening: boolean;
@@ -29,6 +31,8 @@ export function NovaCommandBar({
   onMic: () => void;
   onStopSpeech: () => void;
   onToggleVoice: () => void;
+  onDraftChange?: (value: string) => void;
+  onComposeStart?: () => void;
 }) {
   const [value, setValue] = useState("");
   const [preparedHint, setPreparedHint] = useState(false);
@@ -47,7 +51,12 @@ export function NovaCommandBar({
     >
       <input
         value={value}
-        onChange={(event) => setValue(event.target.value)}
+        onChange={(event) => {
+          const next = event.target.value;
+          setValue(next);
+          onDraftChange?.(next);
+        }}
+        onFocus={() => onComposeStart?.()}
         disabled={disabled}
         placeholder={listening ? "Ich höre dir zu …" : speaking ? "NOVA spricht …" : "Was kann ich für dich tun?"}
         autoComplete="off"

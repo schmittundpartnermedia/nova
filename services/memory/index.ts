@@ -14,15 +14,18 @@ export type SaveMemoryInput = {
   sourceType: SourceType;
   sourceReference?: string;
   sourceUrl?: string;
+  conversationMessageId?: string;
 };
 
-export async function saveMemory(input: SaveMemoryInput) {
-  assertOrganizationId(input.organizationId);
-
-  const fulltext = [input.title, input.content, input.type, input.sourceType]
+function memoryFulltext(input: Pick<SaveMemoryInput, "title" | "content" | "type" | "sourceType">) {
+  return [input.title, input.content, input.type, input.sourceType]
     .filter(Boolean)
     .join(" ")
     .toLowerCase();
+}
+
+export async function saveMemory(input: SaveMemoryInput) {
+  assertOrganizationId(input.organizationId);
 
   return prisma.memoryEntry.create({
     data: {
@@ -37,9 +40,48 @@ export async function saveMemory(input: SaveMemoryInput) {
       sourceType: input.sourceType,
       sourceReference: input.sourceReference,
       sourceUrl: input.sourceUrl,
-      fulltext,
+      conversationMessageId: input.conversationMessageId,
+      fulltext: memoryFulltext(input),
     },
   });
+}
+
+export async function upsertDurableMemory(input: SaveMemoryInput) {
+  assertOrganizationId(input.organizationId);
+  const title = input.title.trim();
+  const content = input.content.trim();
+  if (!title || !content) return null;
+
+  const existing = await prisma.memoryEntry.findFirst({
+    where: {
+      organizationId: input.organizationId,
+      type: input.type,
+      title,
+    },
+    orderBy: { updatedAt: "desc" },
+  });
+
+  if (existing) {
+    const sameContent = existing.content === content;
+    return prisma.memoryEntry.update({
+      where: { id: existing.id },
+      data: {
+        content: sameContent ? existing.content : content,
+        fulltext: memoryFulltext({ ...input, title, content: sameContent ? existing.content : content }),
+        sourceId: input.sourceId ?? existing.sourceId,
+        sourceType: input.sourceType,
+        sourceReference: input.sourceReference ?? existing.sourceReference,
+        sourceUrl: input.sourceUrl ?? existing.sourceUrl,
+        conversationMessageId: input.conversationMessageId ?? existing.conversationMessageId,
+        projectId: input.projectId ?? existing.projectId,
+        companyId: input.companyId ?? existing.companyId,
+        contactId: input.contactId ?? existing.contactId,
+        version: { increment: 1 },
+      },
+    });
+  }
+
+  return saveMemory({ ...input, title, content });
 }
 
 export async function getMemory(organizationId: string, id: string) {
@@ -50,6 +92,7 @@ export async function getMemory(organizationId: string, id: string) {
       fromRelations: { include: { to: true } },
       toRelations: { include: { from: true } },
       source: true,
+      conversationMessage: true,
     },
   });
 }

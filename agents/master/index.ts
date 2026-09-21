@@ -4,7 +4,7 @@ import { resolveAIProvider } from "@/providers/ai/registry";
 import { createJob, updateJobStatus } from "@/services/jobs";
 import { createApprovalRequest } from "@/services/approvals";
 import { recordActivity } from "@/services/archive";
-import { createSource, saveMemory } from "@/services/memory";
+import { createSource, upsertDurableMemory } from "@/services/memory";
 import { loadRelevantBusinessContext } from "@/services/retrieval";
 import { prisma } from "@/lib/prisma";
 import { looksLikeSecret, redactSecrets } from "@/lib/secrets";
@@ -111,6 +111,7 @@ async function persistDurableMemory(input: {
   projectId?: string;
   sourceId: string;
   jobId: string;
+  conversationMessageId?: string;
 }) {
   const saved = [];
   for (const item of input.items) {
@@ -118,25 +119,18 @@ async function persistDurableMemory(input: {
     const content = item.content?.trim();
     if (!title || !content) continue;
     if (looksLikeSecret(title) || looksLikeSecret(content)) continue;
-    const existing = await prisma.memoryEntry.findFirst({
-      where: {
-        organizationId: input.organizationId,
-        title: redactSecrets(title),
-        content: redactSecrets(content),
-      },
-    });
-    if (existing) continue;
-    const entry = await saveMemory({
+    const entry = await upsertDurableMemory({
       organizationId: input.organizationId,
       type: asMemoryType(item.type),
       title: redactSecrets(title),
       content: redactSecrets(content),
       projectId: input.projectId,
       sourceId: input.sourceId,
-      sourceType: "nova",
-      sourceReference: input.jobId,
+      sourceType: input.conversationMessageId ? "conversation_message" : "nova",
+      sourceReference: input.conversationMessageId ?? input.jobId,
+      conversationMessageId: input.conversationMessageId,
     });
-    saved.push(entry);
+    if (entry) saved.push(entry);
   }
   return saved;
 }
@@ -145,6 +139,7 @@ export async function runMaster(input: {
   organizationId: string;
   userRequest: string;
   conversationId?: string;
+  sourceMessageId?: string;
   onEvent?: (event: MasterEvent) => void;
 }): Promise<MasterRunResult> {
   bootstrapAgents();
@@ -235,9 +230,9 @@ ${input.userRequest}`,
 
   const source = await createSource({
     organizationId: input.organizationId,
-    type: "nova",
+    type: input.sourceMessageId ? "conversation_message" : "nova",
     label: "NOVA Master",
-    reference: job.id,
+    reference: input.sourceMessageId ?? job.id,
   });
 
   await emit(input.onEvent, { type: "status", orbState: "WORKING", statusMessage: "Ich arbeite …" });
@@ -266,6 +261,15 @@ ${input.userRequest}`,
         context,
       });
       agentNotes.push(`Project Agent: ${result.result.summary}`);
+      await recordActivity({
+        organizationId: input.organizationId,
+        type: "project_activity",
+        title: result.result.summary,
+        description: "Projektkontext intern geladen oder aktualisiert.",
+        status: "prepared",
+        jobId: job.id,
+        projectId: project?.id,
+      });
     }
   }
 
@@ -383,17 +387,23 @@ ${input.userRequest}`,
       projectId: project?.id,
       sourceId: source.id,
       jobId: job.id,
+      conversationMessageId: input.sourceMessageId,
     });
     if (saved.length > 0) {
       agentNotes.push(`Memory: ${saved.length} langlebige Einträge gespeichert.`);
       await recordActivity({
         organizationId: input.organizationId,
-        type: "memory",
+        type: saved.some((item) => item.type === "decision") ? "decision" : "memory",
         title: "Business Memory aktualisiert",
         description: saved.map((item) => item.title).join(", "),
         status: "prepared",
         jobId: job.id,
         projectId: project?.id,
+        metadata: {
+          memoryIds: saved.map((item) => item.id),
+          sourceType: input.sourceMessageId ? "conversation_message" : "nova",
+          sourceMessageId: input.sourceMessageId ?? null,
+        },
       });
     }
   }
@@ -449,7 +459,8 @@ Du bist nicht rankPilot und nicht SURI.
 Antworte auf Deutsch, klar und knapp.
 Erfinde keine Fakten. Wenn Memory nichts enthält, sage das ehrlich.
 Behaupte niemals, E-Mails seien gesendet, Recherche sei live erfolgt oder Connectoren seien verbunden, wenn das nicht der Fall ist.
-Conversation ist nicht dasselbe wie persistentes Business Memory.
+Conversation Archive ist die vollständige Kommunikation. Business Memory ist extrahiertes Wissen mit Quelle.
+Wenn du auf gespeichertes Wissen antwortest, bleibt die Quelle (Gesprächsnachricht) nachvollziehbar.
 ${researchBlocked ? "Es ist kein echter Search Connector verbunden. Nenne keine erfundenen aktuellen Unternehmen als Rechercheergebnis." : ""}
 ${provider.id === "mock" ? "Du bist im Mock-Modus. Kennzeichne das, täusche keine echte Modellantwort vor." : ""}`,
       prompt: `Benutzer: ${input.userRequest}

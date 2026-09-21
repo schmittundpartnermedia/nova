@@ -1,7 +1,9 @@
 import { prisma } from "@/lib/prisma";
 import { assertOrganizationId } from "@/services/tenant";
 import { assertActivityStatusHonesty } from "@/lib/honesty";
+import { searchConversationMessages } from "@/services/conversation";
 import type { ActivityStatus, ActivityType } from "@/types";
+import type { ConversationInputMode } from "@/types/conversation";
 
 export type RecordActivityInput = {
   organizationId: string;
@@ -50,6 +52,35 @@ export async function recordActivity(input: RecordActivityInput) {
   });
 }
 
+export async function recordConversationTurn(input: {
+  organizationId: string;
+  conversationId: string;
+  userMessageId: string;
+  assistantMessageId?: string;
+  inputMode: ConversationInputMode;
+  userContent: string;
+  assistantContent?: string;
+}) {
+  const preview = input.userContent.trim().slice(0, 140);
+  return recordActivity({
+    organizationId: input.organizationId,
+    type: "conversation",
+    title: preview ? `Gespräch: ${preview}` : "Gespräch",
+    description: [input.userContent.trim(), input.assistantContent?.trim()]
+      .filter(Boolean)
+      .join("\n\n"),
+    status: "prepared",
+    metadata: {
+      conversationId: input.conversationId,
+      userMessageId: input.userMessageId,
+      assistantMessageId: input.assistantMessageId ?? null,
+      inputMode: input.inputMode,
+      stored: true,
+      visible: input.inputMode === "text",
+    },
+  });
+}
+
 export async function listActivities(input: {
   organizationId: string;
   query?: string;
@@ -85,4 +116,30 @@ export async function listActivities(input: {
       project: true,
     },
   });
+}
+
+export async function listArchive(input: {
+  organizationId: string;
+  query?: string;
+  type?: string;
+  limit?: number;
+}) {
+  const activities = await listActivities(input);
+  const type = input.type ?? "all";
+  const query = input.query?.trim() ?? "";
+  const includeConversation =
+    type === "all" || type === "conversation" || Boolean(query);
+
+  if (!includeConversation) return { activities, conversationMessages: [] };
+
+  const conversationMessages =
+    type === "conversation" || query
+      ? await searchConversationMessages({
+          organizationId: input.organizationId,
+          query,
+          limit: input.limit ?? 100,
+        })
+      : [];
+
+  return { activities, conversationMessages };
 }

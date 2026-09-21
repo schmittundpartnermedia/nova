@@ -19,12 +19,14 @@ export type ArchiveItem = {
 
 const FILTERS = [
   { id: "all", label: "Alle" },
-  { id: "communication", label: "Mails" },
-  { id: "meeting", label: "Meetings" },
-  { id: "task", label: "Aufgaben" },
+  { id: "conversation", label: "Gespräch" },
   { id: "research", label: "Recherche" },
-  { id: "document", label: "Dokumente" },
-  { id: "calendar", label: "Termine" },
+  { id: "task", label: "Aufgaben" },
+  { id: "project_activity", label: "Projekte" },
+  { id: "communication", label: "Kommunikation" },
+  { id: "decision", label: "Entscheidungen" },
+  { id: "approval", label: "Freigaben" },
+  { id: "execution", label: "Ausführung" },
 ] as const;
 
 function dayLabel(iso: string) {

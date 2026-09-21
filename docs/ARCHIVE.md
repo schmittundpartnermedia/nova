@@ -23,6 +23,8 @@ V1 markiert Recherche und Anschreiben als `prepared` / `suggested`. Versandversu
 
 Timeline, gruppiert nach Heute / Gestern / Wochentag.
 
-Filter: Alle, Mails, Meetings, Aufgaben, Recherche, Dokumente, Termine.
+Filter: Alle, Gespräch, Recherche, Aufgaben, Projekte, Kommunikation, Entscheidungen, Freigaben, Ausführung.
 
-Suche, z. B. nach einem Firmennamen.
+Gesprächseinträge stammen aus dem Conversation Archive und sind chronologisch auffindbar. Fulltext-Suche über `ConversationMessage` ist vorbereitet und aktiv.
+
+Die Oberfläche zeigt nicht den kompletten Chat. Das Archiv bleibt die Stelle für ältere Kommunikation.

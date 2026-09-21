@@ -41,7 +41,15 @@ Die normale Oberfläche zeigt **keine** Mandantenwahl.
 
 ## Persistenz
 
-Jobs, Steps, Memory, Aktivitäten, Entwürfe und Freigaben liegen in SQLite. Ein Neustart löscht sie nicht.
+Jobs, Steps, Memory, Conversation Archive, Aktivitäten, Entwürfe und Freigaben liegen in SQLite. Ein Neustart löscht sie nicht.
+
+Kommunikation und Anzeige sind getrennt: jede Nachricht wird persistiert, der Communication Layer zeigt nur das aktuelle Textfenster.
+
+## Conversation vs. Memory
+
+- **Conversation Archive** speichert die vollständige Kommunikation (Text, Voice-Transcript, NOVA-Antwort) als `Conversation` / `ConversationMessage`.
+- **Memory** speichert nur extrahiertes, langlebiges Wissen und zeigt mit `sourceType=conversation_message` auf die Ursprungsnachricht.
+- Der Communication Layer ist HUD links vom Avatar, kein Chatbot-Verlauf.
 
 ## Hybrid AI
 

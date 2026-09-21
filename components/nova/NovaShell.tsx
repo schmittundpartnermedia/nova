@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { NovaBackground } from "@/components/nova/NovaBackground";
 import { NovaAvatar } from "@/components/nova/NovaAvatar";
 import { NovaCommandBar } from "@/components/nova/NovaCommandBar";
-import { NovaSpeech } from "@/components/nova/NovaSpeech";
+import { NovaCommunicationLayer, type CommunicationLine } from "@/components/nova/NovaCommunicationLayer";
 import { NovaStatus } from "@/components/nova/NovaStatus";
 import { NovaVoiceWave } from "@/components/nova/NovaVoiceWave";
 import { NovaSidebar, type NovaSection } from "@/components/nova/NovaSidebar";
@@ -18,6 +18,10 @@ import type { OrbState } from "@/types";
 import type { ProviderMode } from "@/types/ai";
 
 const IDLE_STATUS = "Bereit für deine Anfrage";
+const COMM_HIDE_MS = 14000;
+const CONTEXT_WINDOW = 4;
+
+type InteractionMode = "voice" | "text" | "hybrid";
 
 type Approval = {
   id: string;
@@ -76,7 +80,6 @@ async function readSse(
 export function NovaShell() {
   const [orbState, setOrbState] = useState<OrbState>("IDLE");
   const [status, setStatus] = useState(IDLE_STATUS);
-  const [reply, setReply] = useState("");
   const [busy, setBusy] = useState(false);
   const [archiveOpen, setArchiveOpen] = useState(false);
   const [activities, setActivities] = useState<ArchiveItem[]>([]);
@@ -89,14 +92,56 @@ export function NovaShell() {
   const [job, setJob] = useState<NovaJobSummary | null>(null);
   const [navOpen, setNavOpen] = useState(false);
   const [contextOpen, setContextOpen] = useState(false);
+  const [commOpen, setCommOpen] = useState(false);
+  const [draft, setDraft] = useState("");
+  const [visibleLines, setVisibleLines] = useState<CommunicationLine[]>([]);
+  const [interactionMode, setInteractionMode] = useState<InteractionMode>("voice");
   const idleTimer = useRef<number | null>(null);
+  const hideTimer = useRef<number | null>(null);
   const interruptedRef = useRef(false);
+  const commOpenRef = useRef(false);
 
   const clearIdleTimer = useCallback(() => {
     if (idleTimer.current) {
       window.clearTimeout(idleTimer.current);
       idleTimer.current = null;
     }
+  }, []);
+
+  const clearHideTimer = useCallback(() => {
+    if (hideTimer.current) {
+      window.clearTimeout(hideTimer.current);
+      hideTimer.current = null;
+    }
+  }, []);
+
+  const keepComm = useCallback(() => {
+    commOpenRef.current = true;
+    setCommOpen(true);
+    clearHideTimer();
+  }, [clearHideTimer]);
+
+  const scheduleCommHide = useCallback(
+    (delay = COMM_HIDE_MS) => {
+      clearHideTimer();
+      hideTimer.current = window.setTimeout(() => {
+        commOpenRef.current = false;
+        setCommOpen(false);
+        setDraft("");
+        if (interactionMode === "hybrid") setInteractionMode("voice");
+      }, delay);
+    },
+    [clearHideTimer, interactionMode],
+  );
+
+  const openTextLayer = useCallback(() => {
+    setInteractionMode((current) => (current === "voice" ? "text" : current));
+    keepComm();
+  }, [keepComm]);
+
+  const clipWindow = useCallback((lines: CommunicationLine[]) => {
+    if (lines.length <= CONTEXT_WINDOW) return lines;
+    return lines.slice(lines.length - CONTEXT_WINDOW);
   }, []);
 
   const goIdleSoon = useCallback(
@@ -141,22 +186,39 @@ export function NovaShell() {
     });
   }, [goIdleSoon, setAfterSpeech]);
 
-  const sendMessage = useCallback(async (message: string) => {
+  const sendMessage = useCallback(async (message: string, inputMode: "text" | "voice" = "text") => {
     interruptedRef.current = false;
     stopVoice("idle");
     clearIdleTimer();
     setBusy(true);
     setOrbState("THINKING");
     setStatus("Ich denke nach …");
-    setReply("");
     clearHint();
     if (voiceEnabled) beginTurn("");
+
+    const textTurn = inputMode === "text";
+    if (textTurn) {
+      setInteractionMode((current) => (current === "voice" ? "text" : current === "hybrid" ? "hybrid" : "text"));
+      keepComm();
+      const userLine: CommunicationLine = { id: `user-${Date.now()}`, speaker: "JOACHIM", text: message };
+      const assistantLine: CommunicationLine = {
+        id: `nova-${Date.now()}`,
+        speaker: "NOVA",
+        text: "",
+        pending: true,
+      };
+      setVisibleLines((current) => clipWindow([...current.filter((line) => !line.pending), userLine, assistantLine]));
+      setDraft("");
+    } else if (commOpenRef.current) {
+      setInteractionMode("hybrid");
+    }
+
     let accumulated = "";
     try {
       const response = await fetch("/api/nova/message", {
         method: "POST",
         headers: { "Content-Type": "application/json", Accept: "text/event-stream" },
-        body: JSON.stringify({ message }),
+        body: JSON.stringify({ message, inputMode }),
       });
       if (!response.ok && !response.body) {
         setOrbState("ERROR");
@@ -175,13 +237,31 @@ export function NovaShell() {
         }
         if (type === "delta" && typeof payload.delta === "string") {
           accumulated += payload.delta;
-          setReply((current) => current + payload.delta);
+          if (textTurn) {
+            setVisibleLines((current) => {
+              const next = [...current];
+              const last = next[next.length - 1];
+              if (last?.speaker === "NOVA") {
+                next[next.length - 1] = { ...last, text: accumulated, pending: false };
+              }
+              return clipWindow(next);
+            });
+          }
           if (voiceEnabled && !interruptedRef.current) ingest(accumulated);
         }
         if (type === "done") {
           if (typeof payload.reply === "string" && payload.reply) {
             accumulated = payload.reply;
-            setReply(payload.reply);
+            if (textTurn) {
+              setVisibleLines((current) => {
+                const next = [...current];
+                const last = next[next.length - 1];
+                if (last?.speaker === "NOVA") {
+                  next[next.length - 1] = { ...last, text: payload.reply as string, pending: false };
+                }
+                return clipWindow(next);
+              });
+            }
           }
           setProviderMode((payload.providerMode as ProviderMode) ?? null);
           if (payload.approvalId) {
@@ -215,12 +295,28 @@ export function NovaShell() {
             setOrbState(nextState);
             if (nextState === "DONE") goIdleSoon(1800);
           }
+          if (textTurn || commOpenRef.current) {
+            scheduleCommHide(COMM_HIDE_MS);
+          }
         }
         if (type === "error") {
           setOrbState("ERROR");
           setProviderMode("error");
           setStatus(String(payload.statusMessage ?? "Etwas ist schiefgelaufen."));
-          setReply(String(payload.error ?? ""));
+          if (textTurn) {
+            setVisibleLines((current) => {
+              const next = [...current];
+              const last = next[next.length - 1];
+              if (last?.speaker === "NOVA") {
+                next[next.length - 1] = {
+                  ...last,
+                  text: String(payload.error ?? "Etwas ist schiefgelaufen."),
+                  pending: false,
+                };
+              }
+              return clipWindow(next);
+            });
+          }
         }
       });
     } catch {
@@ -230,11 +326,23 @@ export function NovaShell() {
     } finally {
       setBusy(false);
     }
-  }, [beginTurn, clearHint, clearIdleTimer, flush, goIdleSoon, ingest, stopVoice, voiceEnabled]);
+  }, [
+    beginTurn,
+    clearHint,
+    clearIdleTimer,
+    clipWindow,
+    flush,
+    goIdleSoon,
+    ingest,
+    keepComm,
+    scheduleCommHide,
+    stopVoice,
+    voiceEnabled,
+  ]);
 
   const voice = useVoiceInput((text) => {
     setOrbState("THINKING");
-    void sendMessage(text);
+    void sendMessage(text, "voice");
   });
 
   const loadArchive = useCallback(async (query = "", type = "all") => {
@@ -292,7 +400,6 @@ export function NovaShell() {
       setApproval(null);
       setOrbState(decision === "approved" ? "DONE" : "IDLE");
       setStatus(data.message ?? IDLE_STATUS);
-      setReply(data.message ?? "");
       goIdleSoon(2400);
     } finally {
       setBusy(false);
@@ -339,6 +446,43 @@ export function NovaShell() {
     }
   }, [clearIdleTimer, speechPlaying, stopVoice, voice]);
 
+  const reopenConversation = useCallback(async () => {
+    keepComm();
+    setInteractionMode((current) => (current === "voice" ? "text" : current));
+    try {
+      const response = await fetch("/api/nova/conversation");
+      const data = await response.json();
+      const messages = Array.isArray(data.messages) ? data.messages : [];
+      const lines: CommunicationLine[] = messages.map(
+        (item: { id: string; role: string; content: string }) => ({
+          id: item.id,
+          speaker: item.role === "user" ? "JOACHIM" : "NOVA",
+          text: String(item.content ?? ""),
+        }),
+      );
+      if (lines.length > 0) setVisibleLines(clipWindow(lines));
+    } catch {
+      // HUD remains open even if the window cannot be loaded.
+    }
+    scheduleCommHide(COMM_HIDE_MS);
+  }, [clipWindow, keepComm, scheduleCommHide]);
+
+  const handleDraftChange = useCallback(
+    (value: string) => {
+      setDraft(value);
+      if (value.trim()) openTextLayer();
+    },
+    [openTextLayer],
+  );
+
+  const commLines = useMemo(() => {
+    const lines = [...visibleLines];
+    if (draft.trim() && !busy) {
+      lines.push({ id: "draft", speaker: "JOACHIM", text: draft, pending: true });
+    }
+    return clipWindow(lines);
+  }, [busy, clipWindow, draft, visibleLines]);
+
   const uiState: OrbState = speechPlaying ? "SPEAKING" : orbState;
   const basePerformance = useMemo(() => performanceForState(uiState), [uiState]);
   const performance = speechPlaying
@@ -375,7 +519,7 @@ export function NovaShell() {
             </button>
           </div>
 
-          <div className="nova-hero">
+          <div className={`nova-hero ${commOpen && commLines.length > 0 ? "has-comm" : ""}`}>
             <p className="nova-hero-copy left">
               Denken
               <br />
@@ -390,6 +534,11 @@ export function NovaShell() {
                 bindFacialSink(runtime ? (frame) => runtime.applyFrame(frame) : null);
               }}
             />
+            <NovaCommunicationLayer
+              open={commOpen && commLines.length > 0}
+              lines={commLines}
+              onReopen={() => void reopenConversation()}
+            />
             <p className="nova-hero-copy right">
               Dein
               <br />
@@ -400,7 +549,6 @@ export function NovaShell() {
           </div>
 
           <div className="nova-command-dock">
-            <NovaSpeech text={reply} />
             {unavailableHint ? <p className="nova-voice-hint">{unavailableHint}</p> : null}
             {approval ? (
               <ApprovalCard
@@ -417,10 +565,12 @@ export function NovaShell() {
               speaking={speechPlaying}
               voiceSupported={voice.supported}
               voiceEnabled={voiceEnabled}
-              onSubmit={(value) => void sendMessage(value)}
+              onSubmit={(value) => void sendMessage(value, "text")}
               onMic={handleMic}
               onStopSpeech={stopSpeech}
               onToggleVoice={toggleEnabled}
+              onDraftChange={handleDraftChange}
+              onComposeStart={openTextLayer}
             />
             <NovaVoiceWave listening={voice.listening} />
           </div>

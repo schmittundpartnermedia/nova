@@ -30,7 +30,11 @@ export type ActivityType =
   | "calendar"
   | "job"
   | "memory"
-  | "approval";
+  | "approval"
+  | "conversation"
+  | "decision"
+  | "project_activity"
+  | "execution";
 
 export type ApprovalStatus = "pending" | "approved" | "rejected";
 
@@ -44,7 +48,8 @@ export type SourceType =
   | "document"
   | "manual"
   | "research"
-  | "calendar";
+  | "calendar"
+  | "conversation_message";
 
 export type MemoryType =
   | "person"

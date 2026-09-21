@@ -52,6 +52,7 @@ npm run verify       # Demo- und Persistenzprüfung
 npx prisma studio    # Datenbank ansehen
 npm run verify:voice # Voice-Pipeline
 npm run verify:avatar # 3D Avatar Engine
+npm run verify:conversation # Conversation Archive, Memory-Quelle, Tenant Isolation
 ```
 
 ## Dokumentation

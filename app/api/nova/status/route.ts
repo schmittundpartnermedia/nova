@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getCurrentTenant } from "@/services/tenant";
 import { listPendingApprovals } from "@/services/approvals";
+import { getOrCreateActiveConversation } from "@/services/conversation";
 import { prisma } from "@/lib/prisma";
 
 export const dynamic = "force-dynamic";
@@ -9,13 +10,14 @@ export const runtime = "nodejs";
 export async function GET() {
   try {
     const tenant = await getCurrentTenant();
-    const [pending, latestJob] = await Promise.all([
+    const [pending, latestJob, conversation] = await Promise.all([
       listPendingApprovals(tenant.organizationId),
       prisma.job.findFirst({
         where: { organizationId: tenant.organizationId },
         orderBy: { createdAt: "desc" },
         include: { approvalRequests: true, steps: true },
       }),
+      getOrCreateActiveConversation(tenant.organizationId),
     ]);
 
     return NextResponse.json({
@@ -26,6 +28,12 @@ export async function GET() {
       },
       pendingApprovals: pending,
       latestJob,
+      conversation: {
+        id: conversation.id,
+        title: conversation.title,
+        lastActivityAt: conversation.lastActivityAt,
+        status: conversation.status,
+      },
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unbekannter Fehler";

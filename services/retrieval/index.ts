@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { assertOrganizationId } from "@/services/tenant";
+import { searchConversationMessages } from "@/services/conversation";
 
 export type RetrievalMode = "structured" | "fulltext" | "semantic" | "relation";
 
@@ -107,6 +108,7 @@ export type BusinessContextPack = {
   contacts: Array<{ id: string; name: string; role: string | null; company: string | null }>;
   tasks: Array<{ id: string; title: string; status: string; dueAt: Date | null }>;
   recentMessages: Array<{ role: string; content: string }>;
+  retrievedMessages: Array<{ role: string; content: string; createdAt: string }>;
   promptBlock: string;
 };
 
@@ -125,7 +127,7 @@ export async function loadRelevantBusinessContext(input: {
     throw new Error("Organization nicht gefunden oder Tenant mismatch.");
   }
 
-  const [memories, projects, companies, contacts, tasks, recentMessages] = await Promise.all([
+  const [memories, projects, companies, contacts, tasks, recentMessages, retrievedMessages] = await Promise.all([
     searchMemory({ organizationId: input.organizationId, query, limit: 10 }),
     prisma.project.findMany({
       where: { organizationId: input.organizationId },
@@ -185,7 +187,14 @@ export async function loadRelevantBusinessContext(input: {
             conversationId: input.conversationId,
           },
           orderBy: { createdAt: "desc" },
-          take: 8,
+          take: 4,
+        })
+      : Promise.resolve([]),
+    query
+      ? searchConversationMessages({
+          organizationId: input.organizationId,
+          query,
+          limit: 6,
         })
       : Promise.resolve([]),
   ]);
@@ -195,6 +204,11 @@ export async function loadRelevantBusinessContext(input: {
   assertTenantIsolation(input.organizationId, contacts, "Kontakt");
   assertTenantIsolation(input.organizationId, tasks, "Aufgabe");
   assertTenantIsolation(input.organizationId, recentMessages, "Nachricht");
+  assertTenantIsolation(
+    input.organizationId,
+    retrievedMessages.map((item) => ({ organizationId: item.organizationId })),
+    "Gespräch",
+  );
 
   const pack: BusinessContextPack = {
     organizationName: organization.name,
@@ -230,6 +244,11 @@ export async function loadRelevantBusinessContext(input: {
     recentMessages: [...recentMessages].reverse().map((item) => ({
       role: item.role,
       content: item.content.slice(0, 400),
+    })),
+    retrievedMessages: retrievedMessages.map((item) => ({
+      role: item.role,
+      content: item.content.slice(0, 400),
+      createdAt: item.createdAt,
     })),
     promptBlock: "",
   };
@@ -269,9 +288,16 @@ function formatContextPack(pack: BusinessContextPack): string {
   ];
 
   if (pack.recentMessages.length > 0) {
-    lines.push("", "Letzte Gesprächsnachrichten (Conversation, kein Business Memory):");
+    lines.push("", "Aktuelle Conversation (Ausschnitt, nicht die komplette Historie):");
     for (const message of pack.recentMessages) {
       lines.push(`- ${message.role}: ${message.content}`);
+    }
+  }
+
+  if (pack.retrievedMessages.length > 0) {
+    lines.push("", "Gefundene Gesprächsstellen (Archive-Retrieval):");
+    for (const message of pack.retrievedMessages) {
+      lines.push(`- ${message.createdAt.slice(0, 16)} ${message.role}: ${message.content}`);
     }
   }
 
