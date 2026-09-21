@@ -9,7 +9,7 @@ Der Benutzer spricht ausschließlich mit NOVA. Agenten, Provider, Jobs und Conne
 ## Schichten
 
 ```
-UI (Digital Human, Composer, Archiv)
+UI (NOVA-Bild + Aura, Communication Layer, Composer, Archiv)
         ↓
 API / Bridge
         ↓
@@ -24,9 +24,8 @@ Providers / Connectors
 Prisma / SQLite
 ```
 
-Der zentrale Avatar ist ein Three.js Digital Human (glTF Morph Targets + Bones).
-Siehe [Avatar Engine](AVATAR_ENGINE.md) und [Final Character Pipeline](NOVA_FINAL_CHARACTER_PIPELINE.md).
-Das Referenzfoto ist keine Runtime-Geometrie. Ohne validiertes `public/nova/avatar/nova.glb` läuft lokal nur die gekennzeichnete Development Rig.
+Der zentrale Avatar der Haupt-UI ist das unveränderte Referenzbild `reference/nova-face.webp` mit einer audio-reaktiven Aura dahinter.
+Die Three.js Digital-Human-Runtime bleibt im Avatar Lab (`/dev/avatar`) isoliert. Siehe [Avatar Engine](AVATAR_ENGINE.md).
 
 ## Tenant-Modell
 

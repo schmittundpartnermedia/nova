@@ -167,7 +167,6 @@ export function NovaShell() {
     flush,
     stop: stopVoice,
     setAfterSpeech,
-    bindFacialSink,
   } = useNovaVoice();
 
   useEffect(() => {
@@ -536,13 +535,7 @@ export function NovaShell() {
               />
             </div>
             <div className="nova-hero-stage">
-              <NovaAvatar
-                state={uiState}
-                performance={performance}
-                onRuntime={(runtime) => {
-                  bindFacialSink(runtime ? (frame) => runtime.applyFrame(frame) : null);
-                }}
-              />
+              <NovaAvatar state={uiState} performance={performance} />
               <p className="nova-hero-copy right">
                 Dein
                 <br />

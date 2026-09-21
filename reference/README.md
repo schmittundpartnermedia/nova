@@ -1,7 +1,7 @@
 # NOVA Reference
 
-`nova-face.webp` is the **design identity** of NOVA.
+`nova-face.webp` is the **canonical identity** of NOVA.
 
-It is not a runtime face. It must not be rendered, warped, overlaid, or lip-synced.
+The main UI displays this image **untransformed**: no warping, no lip-sync, no facial overlays.
 
-The productive avatar is a 3D digital human (`public/nova/avatar/nova.glb` when validated). Otherwise the labeled Development Rig is used locally.
+The Three.js Digital Human and Development Rig remain available in `/dev/avatar` for future experiments. They do not drive the productive NOVA screen.

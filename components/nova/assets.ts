@@ -1,11 +1,12 @@
 /**
  * NOVA visual identity.
- * The reference photograph is design-only. It is not a runtime face.
+ * The canonical photograph is shown untransformed in the main UI.
+ * 3D rigs stay isolated in /dev/avatar.
  */
 export const NOVA_IDENTITY = {
   name: "NOVA",
   tagline: "Dein Business. Deine KI.",
-  referenceFaceSrc: "/reference/nova-face.webp",
+  referenceFaceSrc: "/api/nova/reference-face",
   glowSrc: "/nova/nova-glow.svg",
   particlesSrc: "/nova/nova-particles.svg",
   developmentRigSrc: "/nova/dev-rig/nova-dev-rig.glb",

@@ -10,7 +10,7 @@ export async function GET() {
     headers: {
       "Content-Type": "image/webp",
       "Cache-Control": "public, max-age=3600",
-      "X-Nova-Role": "identity-reference-not-runtime-face",
+      "X-Nova-Role": "canonical-nova-identity",
     },
   });
 }

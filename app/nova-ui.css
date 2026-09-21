@@ -130,6 +130,8 @@
   display: grid;
   place-items: center;
   min-width: 0;
+  overflow: hidden;
+  isolation: isolate;
 }
 
 .nova-hero-copy {
@@ -341,9 +343,10 @@
 .nova-avatar-stage {
   position: relative;
   z-index: 1;
-  width: min(100%, 900px);
+  width: min(100%, 920px);
   height: clamp(440px, 74vh, 980px);
   max-height: 78vh;
+  overflow: hidden;
   --nova-speech-intensity: 0;
 }
 
@@ -413,10 +416,155 @@
   pointer-events: none;
 }
 
+.nova-layer-aura { z-index: 1; }
 .nova-layer-glow { z-index: 1; }
 .nova-layer-hud { z-index: 2; }
-.nova-layer-effects { z-index: 4; }
+.nova-layer-portrait { z-index: 3; }
+.nova-layer-effects { z-index: 2; }
 
+.nova-face-wrap {
+  position: absolute;
+  inset: 2% 8% 0;
+  display: block;
+  -webkit-mask-image: radial-gradient(ellipse 62% 78% at 50% 38%, #000 46%, rgba(0, 0, 0, 0.88) 68%, transparent 92%);
+  mask-image: radial-gradient(ellipse 62% 78% at 50% 38%, #000 46%, rgba(0, 0, 0, 0.88) 68%, transparent 92%);
+}
+
+.nova-face {
+  object-fit: contain;
+  object-position: center 8%;
+  pointer-events: none;
+  user-select: none;
+}
+
+.nova-voice-aura {
+  --nova-aura: 0;
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.nova-aura-halo {
+  position: absolute;
+  left: 16%;
+  right: 16%;
+  top: 6%;
+  bottom: 16%;
+  border-radius: 50%;
+  background: radial-gradient(
+    ellipse at 50% 40%,
+    rgba(126, 200, 255, calc(0.1 + var(--nova-aura) * 0.28)),
+    rgba(62, 150, 255, calc(0.04 + var(--nova-aura) * 0.12)) 46%,
+    transparent 72%
+  );
+  filter: blur(28px);
+  transform: scale(calc(0.94 + var(--nova-aura) * 0.14));
+  animation: nova-aura-breathe 8.4s ease-in-out infinite;
+}
+
+.nova-aura-core {
+  position: absolute;
+  left: 28%;
+  right: 28%;
+  top: 14%;
+  height: 48%;
+  border-radius: 50%;
+  background: radial-gradient(
+    ellipse at 50% 42%,
+    rgba(190, 230, 255, calc(0.05 + var(--nova-aura) * 0.2)),
+    transparent 70%
+  );
+  filter: blur(18px);
+  mix-blend-mode: screen;
+  transform: scale(calc(0.96 + var(--nova-aura) * 0.1));
+}
+
+.nova-aura-backlight {
+  position: absolute;
+  left: 24%;
+  right: 24%;
+  top: 8%;
+  height: 58%;
+  border-radius: 50%;
+  background: radial-gradient(
+    ellipse at 50% 36%,
+    rgba(160, 220, 255, calc(0.03 + var(--nova-aura) * 0.18)),
+    rgba(227, 154, 78, calc(var(--nova-aura) * 0.04)) 52%,
+    transparent 74%
+  );
+  filter: blur(24px);
+  mix-blend-mode: screen;
+}
+
+.nova-aura-floor {
+  position: absolute;
+  left: 22%;
+  right: 22%;
+  bottom: 6%;
+  height: 14%;
+  background: radial-gradient(ellipse at 50% 50%, rgba(50, 140, 255, calc(0.1 + var(--nova-aura) * 0.16)), transparent 72%);
+  filter: blur(12px);
+}
+
+.nova-aura-pulse {
+  position: absolute;
+  left: 21%;
+  right: 21%;
+  top: 11%;
+  bottom: 20%;
+  border-radius: 50%;
+  border: 1px solid rgba(126, 200, 255, calc(0.04 + var(--nova-aura) * 0.28));
+  opacity: calc(0.08 + var(--nova-aura) * 0.55);
+  transform: scale(calc(0.86 + var(--nova-aura) * 0.16));
+}
+
+.nova-aura-pulse.a {
+  animation: nova-aura-expand 4.8s ease-out infinite;
+}
+
+.nova-aura-pulse.b {
+  animation: nova-aura-expand 4.8s ease-out infinite 1.5s;
+  border-color: rgba(190, 230, 255, calc(0.03 + var(--nova-aura) * 0.2));
+}
+
+.nova-aura-pulse.c {
+  animation: nova-aura-expand 6.4s ease-out infinite 2.6s;
+  border-color: rgba(227, 154, 78, calc(0.02 + var(--nova-aura) * 0.14));
+}
+
+.nova-aura-orbits {
+  position: absolute;
+  inset: 4% 8% 10%;
+  overflow: visible;
+}
+
+.nova-aura-orbit {
+  fill: none;
+  stroke-linecap: round;
+  transform-origin: 400px 358px;
+}
+
+.nova-aura-orbit.a {
+  stroke: rgba(126, 200, 255, calc(0.08 + var(--nova-aura) * 0.28));
+  stroke-width: 1.1;
+  stroke-dasharray: 10 18 3 28;
+  animation: nova-spin-ccw 54s linear infinite;
+}
+
+.nova-aura-orbit.b {
+  stroke: rgba(90, 170, 255, calc(0.05 + var(--nova-aura) * 0.2));
+  stroke-width: 0.9;
+  stroke-dasharray: 90 40 8 70;
+  animation: nova-spin-cw 72s linear infinite;
+}
+
+.nova-aura-orbit.c {
+  stroke: rgba(227, 154, 78, calc(0.04 + var(--nova-aura) * 0.12));
+  stroke-width: 1;
+  stroke-dasharray: 14 96 6 140;
+  animation: nova-spin-cw 96s linear infinite;
+}
 
 .nova-glow-asset {
   position: absolute;
@@ -494,7 +642,7 @@
   pointer-events: none;
   position: absolute;
   inset: 0;
-  z-index: 4;
+  z-index: 2;
 }
 
 .nova-particle {
@@ -504,14 +652,14 @@
   border-radius: 999px;
   background: #b7e4ff;
   box-shadow: 0 0 8px rgba(120, 210, 255, 0.8);
-  opacity: 0.35;
+  opacity: calc(0.14 + var(--nova-aura, 0) * 0.42);
   animation: nova-float 11s ease-in-out infinite;
 }
 
 .nova-lightpaths {
   position: absolute;
   inset: 8% 18% 22%;
-  z-index: 4;
+  z-index: 1;
   pointer-events: none;
   opacity: 0;
   background: linear-gradient(105deg, transparent 20%, rgba(120, 210, 255, 0.16) 48%, transparent 72%);
@@ -522,7 +670,7 @@
 .nova-sweep {
   position: absolute;
   inset: 12% 16% 28%;
-  z-index: 4;
+  z-index: 1;
   pointer-events: none;
   opacity: 0;
   background: linear-gradient(90deg, transparent, rgba(170, 230, 255, 0.18), transparent);
@@ -540,6 +688,10 @@
   background: var(--nova-error);
   box-shadow: 0 0 10px rgba(210, 90, 50, 0.8);
   opacity: 0;
+}
+
+.nova-avatar-stage[data-speaking="true"] .nova-particle {
+  animation-duration: 6.2s;
 }
 
 .nova-stage[data-state="IDLE"] .nova-glow-asset {
@@ -1062,6 +1214,17 @@
   display: none;
 }
 
+@keyframes nova-aura-breathe {
+  0%, 100% { opacity: 0.78; }
+  50% { opacity: 1; }
+}
+
+@keyframes nova-aura-expand {
+  0% { transform: scale(0.86); opacity: calc(0.05 + var(--nova-aura, 0) * 0.45); }
+  70% { opacity: calc(0.02 + var(--nova-aura, 0) * 0.18); }
+  100% { transform: scale(1.12); opacity: 0; }
+}
+
 @keyframes nova-glow-pulse {
   0%, 100% { opacity: 0.68; }
   50% { opacity: 1; }
@@ -1272,9 +1435,14 @@
   .nova-wave span,
   .nova-listen-ring,
   .nova-error-pip,
-  .nova-comm {
+  .nova-comm,
+  .nova-aura-halo,
+  .nova-aura-pulse,
+  .nova-aura-orbit {
     animation: none !important;
     transition: opacity 0.2s linear;
+  }
+  .nova-comm {
     filter: none;
   }
 }

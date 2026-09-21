@@ -2,23 +2,20 @@
 
 import type { OrbState } from "@/types";
 import { NovaHud } from "@/components/nova/NovaHud";
-import { NovaParticles } from "@/components/nova/NovaParticles";
-import { NovaDigitalHuman } from "@/components/nova/NovaDigitalHuman";
+import { NovaPortrait } from "@/components/nova/NovaPortrait";
+import { NovaVoiceAura } from "@/components/nova/NovaVoiceAura";
 import {
   IDLE_PERFORMANCE,
   modeFromOrbState,
   type NovaAvatarPerformance,
 } from "@/components/nova/avatar-performance";
-import type { DigitalHumanRuntime } from "@/features/avatar/runtime";
 
 export function NovaAvatar({
   state,
   performance = IDLE_PERFORMANCE,
-  onRuntime,
 }: {
   state: OrbState;
   performance?: NovaAvatarPerformance;
-  onRuntime?: (runtime: DigitalHumanRuntime | null) => void;
 }) {
   const mode = modeFromOrbState(state);
   const intensity = Math.min(1, Math.max(0, performance.speechIntensity));
@@ -35,29 +32,19 @@ export function NovaAvatar({
       aria-hidden="true"
     >
       <div className="nova-avatar">
-        <div className="nova-layer nova-layer-glow">
-          <div className="nova-glow-asset" />
-          <div className="nova-floor" />
+        <div className="nova-layer nova-layer-aura">
+          <NovaVoiceAura speaking={performance.isSpeaking} intensity={intensity} />
+          <div className="nova-lightpaths" />
+          <div className="nova-sweep" />
         </div>
         <div className="nova-layer nova-layer-hud">
           <NovaHud />
           <div className="nova-listen-ring" />
+          <span className="nova-error-pip" />
         </div>
-        <div className="nova-avatar-live">
-          <NovaDigitalHuman
-            state={state}
-            isSpeaking={performance.isSpeaking}
-            speechIntensity={intensity}
-            emotion={performance.emotion}
-            onRuntime={onRuntime}
-          />
-          <div className="nova-layer nova-layer-effects">
-            <div className="nova-lightpaths" />
-            <div className="nova-sweep" />
-            <span className="nova-error-pip" />
-          </div>
+        <div className="nova-layer nova-layer-portrait">
+          <NovaPortrait />
         </div>
-        <NovaParticles />
       </div>
     </div>
   );
