@@ -26,6 +26,8 @@ export type VoiceSynthesizeInput = {
   text: string;
   language?: string;
   signal?: AbortSignal;
+  voice?: string;
+  speed?: number;
 };
 
 export type VoiceSynthesizeResult = {

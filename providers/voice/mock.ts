@@ -1,4 +1,4 @@
-import { NOVA_VOICE_CONFIG } from "@/providers/voice/config";
+import { getNovaVoiceConfig } from "@/providers/voice/config";
 import type {
   VoiceHealthCheckResult,
   VoiceProvider,
@@ -23,8 +23,8 @@ export class MockVoiceProvider implements VoiceProvider {
     return {
       ok: false,
       provider: this.id,
-      model: NOVA_VOICE_CONFIG.model,
-      voice: NOVA_VOICE_CONFIG.voice,
+      model: getNovaVoiceConfig().model,
+      voice: getNovaVoiceConfig().voice,
       message: "Mock-Voice: keine Sprachausgabe.",
     };
   }

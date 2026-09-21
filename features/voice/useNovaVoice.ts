@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { NovaAvatarPerformance, NovaEmotion, NovaGazeTarget } from "@/components/nova/avatar-performance";
 import { SpeechPlaybackController } from "@/features/voice/speech-playback";
 import { useVoiceEnabled } from "@/features/voice/settings";
+import { applyLipSyncStage } from "@/features/voice/apply-lipsync";
 import { inferSpeechEmotion } from "@/services/voice/emotion";
 import type { SpeechViseme } from "@/types/voice";
 
@@ -28,6 +29,7 @@ export function useNovaVoice() {
   const afterRef = useRef<AfterSpeech>("done");
   const onAfterRef = useRef<(next: AfterSpeech) => void>(() => undefined);
   const stageRef = useRef<HTMLElement | null>(null);
+  const lastLipLog = useRef(0);
 
   const applyMotion = useCallback((headX: number, headY: number, headRot: number, gazeX: number, gazeY: number) => {
     const node = stageRef.current;
@@ -47,6 +49,7 @@ export function useNovaVoice() {
     speakingRef.current = false;
     setSpeaking(false);
     setPerformance(REST_PERFORMANCE);
+    applyLipSyncStage(stageRef.current, { speaking: false, viseme: "REST", intensity: 0 });
     applyMotion(0, 0, 0, 0, 0);
   }, [applyMotion]);
 
@@ -69,15 +72,26 @@ export function useNovaVoice() {
         speakingRef.current = false;
         setSpeaking(false);
         setPerformance(REST_PERFORMANCE);
+        applyLipSyncStage(stageRef.current, { speaking: false, viseme: "REST", intensity: 0 });
         applyMotion(0, 0, 0, 0, 0);
         onAfterRef.current(afterRef.current);
       },
       onLipSync: (frame) => {
-        const node = stageRef.current;
-        if (node) {
-          node.style.setProperty("--nova-speech-intensity", frame.intensity.toFixed(3));
-          node.dataset.viseme = frame.viseme;
-          node.dataset.speaking = "true";
+        applyLipSyncStage(stageRef.current, {
+          speaking: true,
+          viseme: frame.viseme,
+          intensity: frame.intensity,
+        });
+        if (process.env.NODE_ENV === "development") {
+          const now = globalThis.performance.now();
+          if (now - lastLipLog.current > 280) {
+            lastLipLog.current = now;
+            console.debug("[nova-lipsync]", {
+              isSpeaking: true,
+              speechIntensity: Number(frame.intensity.toFixed(3)),
+              currentViseme: frame.viseme,
+            });
+          }
         }
         setPerformance((current) => {
           if (current.viseme === frame.viseme && Math.abs(current.speechIntensity - frame.intensity) < 0.04) {
@@ -100,6 +114,7 @@ export function useNovaVoice() {
         setSpeaking(false);
         setPerformance(REST_PERFORMANCE);
         setUnavailableHint(message);
+        applyLipSyncStage(stageRef.current, { speaking: false, viseme: "REST", intensity: 0 });
         applyMotion(0, 0, 0, 0, 0);
         onAfterRef.current(afterRef.current);
       },

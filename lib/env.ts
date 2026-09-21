@@ -8,6 +8,8 @@ export const envSchema = z.object({
   ANTHROPIC_API_KEY: z.string().optional(),
   LOCAL_AI_BASE_URL: z.string().optional(),
   LOCAL_AI_MODEL: z.string().optional(),
+  NOVA_VOICE: z.string().optional(),
+  NOVA_VOICE_SPEED: z.string().optional(),
 });
 
 export type Env = z.infer<typeof envSchema>;
@@ -21,5 +23,7 @@ export function getEnv(): Env {
     ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY,
     LOCAL_AI_BASE_URL: process.env.LOCAL_AI_BASE_URL,
     LOCAL_AI_MODEL: process.env.LOCAL_AI_MODEL,
+    NOVA_VOICE: process.env.NOVA_VOICE,
+    NOVA_VOICE_SPEED: process.env.NOVA_VOICE_SPEED,
   });
 }

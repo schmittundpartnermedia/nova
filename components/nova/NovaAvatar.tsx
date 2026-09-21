@@ -1,4 +1,3 @@
-import type { CSSProperties } from "react";
 import type { OrbState } from "@/types";
 import { NovaFace } from "@/components/nova/NovaFace";
 import { NovaEyes } from "@/components/nova/NovaEyes";
@@ -35,7 +34,6 @@ export function NovaAvatar({
       data-viseme={viseme}
       data-emotion={performance.emotion}
       data-gaze={performance.gazeTarget}
-      style={{ "--nova-speech-intensity": String(intensity) } as CSSProperties}
       aria-hidden="true"
     >
       <div className="nova-avatar">
@@ -48,20 +46,22 @@ export function NovaAvatar({
           <div className="nova-listen-ring" />
         </div>
         <div className="nova-avatar-live">
-          <div className="nova-layer nova-layer-face">
-            <NovaFace />
+          <div className="nova-face-stack">
+            <div className="nova-layer nova-layer-face">
+              <NovaFace region="upper" />
+            </div>
+            <div className="nova-layer nova-layer-jaw">
+              <NovaJaw intensity={intensity} speaking={performance.isSpeaking} />
+            </div>
           </div>
-          <div className="nova-layer nova-layer-jaw">
-            <NovaJaw intensity={intensity} speaking={performance.isSpeaking} />
+          <div className="nova-layer nova-layer-mouth">
+            <NovaMouth viseme={viseme} intensity={intensity} speaking={performance.isSpeaking} />
           </div>
           <div className="nova-layer nova-layer-eyes">
             <NovaEyes
               intensity={state === "THINKING" || state === "LISTENING" || state === "SPEAKING" ? 1 : 0.7}
               speaking={performance.isSpeaking}
             />
-          </div>
-          <div className="nova-layer nova-layer-mouth">
-            <NovaMouth viseme={viseme} intensity={intensity} speaking={performance.isSpeaking} />
           </div>
           <div className="nova-layer nova-layer-effects">
             <div className="nova-lightpaths" />

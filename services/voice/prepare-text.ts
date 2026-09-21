@@ -1,5 +1,5 @@
 import { redactSecrets } from "@/lib/secrets";
-import { NOVA_VOICE_CONFIG } from "@/providers/voice/config";
+import { getNovaVoiceConfig } from "@/providers/voice/config";
 
 const CODE_FENCE = /```[\s\S]*?```/g;
 const UNCLOSED_FENCE = /```[\s\S]*$/;
@@ -49,7 +49,7 @@ function shortenLongLists(text: string): string {
 
 function applyPronunciation(text: string): string {
   let next = text;
-  for (const rule of NOVA_VOICE_CONFIG.pronunciation) {
+  for (const rule of getNovaVoiceConfig().pronunciation) {
     next = next.replace(rule.from, rule.to);
   }
   return next;
@@ -87,8 +87,8 @@ export function prepareTextForSpeech(text: string, options?: { finalize?: boolea
   next = next.replace(/[ \t]+\n/g, "\n").replace(/\n{3,}/g, "\n\n");
   next = next.replace(/[ \t]{2,}/g, " ").trim();
 
-  if (next.length > NOVA_VOICE_CONFIG.maxInputChars) {
-    next = `${next.slice(0, NOVA_VOICE_CONFIG.maxInputChars - 24).trim()} … Der Rest steht im Text.`;
+  if (next.length > getNovaVoiceConfig().maxInputChars) {
+    next = `${next.slice(0, getNovaVoiceConfig().maxInputChars - 24).trim()} … Der Rest steht im Text.`;
   }
 
   return next;

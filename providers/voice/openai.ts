@@ -1,6 +1,10 @@
 import OpenAI from "openai";
 import { hasOpenAIApiKey, publicErrorMessage } from "@/lib/secrets";
-import { NOVA_VOICE_CONFIG } from "@/providers/voice/config";
+import {
+  getNovaVoiceConfig,
+  resolveVoiceName,
+  resolveVoiceSpeed,
+} from "@/providers/voice/config";
 import { prepareTextForSpeech } from "@/services/voice/prepare-text";
 import type {
   VoiceHealthCheckResult,
@@ -39,15 +43,19 @@ export class OpenAIVoiceProvider implements VoiceProvider {
       throw new VoiceUnavailableError("Kein sprechbarer Text.");
     }
 
+    const config = getNovaVoiceConfig();
+    const voice = resolveVoiceName(input.voice);
+    const speed = resolveVoiceSpeed(input.speed ?? config.speed);
+
     try {
       const response = await this.getClient().audio.speech.create(
         {
-          model: NOVA_VOICE_CONFIG.model,
-          voice: NOVA_VOICE_CONFIG.voice,
+          model: config.model,
+          voice,
           input: spoken,
-          instructions: NOVA_VOICE_CONFIG.instructions,
-          response_format: NOVA_VOICE_CONFIG.responseFormat,
-          speed: NOVA_VOICE_CONFIG.speed,
+          instructions: config.instructions,
+          response_format: config.responseFormat,
+          speed,
         },
         input.signal ? { signal: input.signal } : undefined,
       );
@@ -57,8 +65,8 @@ export class OpenAIVoiceProvider implements VoiceProvider {
         mimeType: "audio/wav",
         visemes: undefined,
         provider: this.id,
-        model: NOVA_VOICE_CONFIG.model,
-        voice: NOVA_VOICE_CONFIG.voice,
+        model: config.model,
+        voice,
       };
     } catch (error) {
       if (input.signal?.aborted) {
@@ -73,10 +81,11 @@ export class OpenAIVoiceProvider implements VoiceProvider {
       return this.healthCache.result;
     }
 
+    const config = getNovaVoiceConfig();
     const base = {
       provider: this.id,
-      model: NOVA_VOICE_CONFIG.model,
-      voice: NOVA_VOICE_CONFIG.voice,
+      model: config.model,
+      voice: config.voice,
     };
 
     if (!hasOpenAIApiKey()) {
@@ -92,7 +101,7 @@ export class OpenAIVoiceProvider implements VoiceProvider {
     const result = {
       ...base,
       ok: true,
-      message: `OpenAI Speech bereit (${NOVA_VOICE_CONFIG.model} / ${NOVA_VOICE_CONFIG.voice}).`,
+      message: `OpenAI Speech bereit (${config.model} / ${config.voice} / ${config.speed}x).`,
     };
     this.healthCache = { at: Date.now(), result };
     return result;

@@ -12,6 +12,7 @@
   --nova-brow: 28.4%;
   --nova-mouth-x: 50%;
   --nova-mouth-y: 57.15%;
+  --nova-lip-split: 57.15%;
   --nova-speech-intensity: 0;
   --nova-head-x: 0px;
   --nova-head-y: 0px;
@@ -19,6 +20,9 @@
   --nova-gaze-x: 0%;
   --nova-gaze-y: 0%;
   --nova-jaw-drop: 0px;
+  --nova-mouth-w: 9.2%;
+  --nova-mouth-h: 0.35%;
+  --nova-mouth-teeth: 0;
   position: relative;
   isolation: isolate;
   min-height: 100dvh;
@@ -143,6 +147,11 @@
   width: min(100%, 900px);
   height: clamp(440px, 74vh, 980px);
   max-height: 78vh;
+  --nova-speech-intensity: 0;
+  --nova-mouth-w: 9.2%;
+  --nova-mouth-h: 0.35%;
+  --nova-jaw-drop: 0px;
+  --nova-mouth-teeth: 0;
 }
 
 .nova-avatar {
@@ -150,7 +159,6 @@
   inset: 0;
   display: grid;
   place-items: center;
-  mix-blend-mode: lighten;
 }
 
 .nova-avatar-live {
@@ -172,12 +180,21 @@
 .nova-layer-face { z-index: 3; }
 .nova-layer-jaw { z-index: 4; }
 .nova-layer-effects { z-index: 4; }
-.nova-layer-eyes { z-index: 5; }
-.nova-layer-mouth { z-index: 6; }
+.nova-layer-mouth { z-index: 6; isolation: isolate; mix-blend-mode: normal; }
+.nova-layer-eyes { z-index: 7; }
 
 .nova-avatar-stage[data-speaking="true"] .nova-avatar-live {
   animation: none;
   transform: translate3d(var(--nova-head-x), var(--nova-head-y), 0) rotate(var(--nova-head-rot));
+}
+
+.nova-face-stack {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  mix-blend-mode: lighten;
+  -webkit-mask-image: radial-gradient(ellipse 52% 70% at 50% 40%, #000 54%, rgba(0, 0, 0, 0.7) 72%, transparent 88%);
+  mask-image: radial-gradient(ellipse 52% 70% at 50% 40%, #000 54%, rgba(0, 0, 0, 0.7) 72%, transparent 88%);
 }
 
 .nova-face-wrap {
@@ -185,8 +202,46 @@
   inset: -2% 0 -4%;
   z-index: 3;
   background: transparent;
-  -webkit-mask-image: radial-gradient(ellipse 52% 70% at 50% 40%, #000 54%, rgba(0, 0, 0, 0.7) 72%, transparent 88%);
-  mask-image: radial-gradient(ellipse 52% 70% at 50% 40%, #000 54%, rgba(0, 0, 0, 0.7) 72%, transparent 88%);
+}
+
+.nova-face-wrap.region-upper {
+  -webkit-mask-image: linear-gradient(
+    to bottom,
+    #000 0%,
+    #000 calc(var(--nova-lip-split) - 0.2%),
+    transparent calc(var(--nova-lip-split) + 0.9%)
+  );
+  mask-image: linear-gradient(
+    to bottom,
+    #000 0%,
+    #000 calc(var(--nova-lip-split) - 0.2%),
+    transparent calc(var(--nova-lip-split) + 0.9%)
+  );
+}
+
+.nova-face-wrap.region-lower {
+  z-index: 4;
+  transform: translate3d(0, var(--nova-jaw-drop), 0);
+  transition: transform 90ms linear;
+  -webkit-mask-image: linear-gradient(
+    to bottom,
+    transparent 0%,
+    transparent calc(var(--nova-lip-split) - 0.9%),
+    #000 calc(var(--nova-lip-split) + 0.2%),
+    #000 100%
+  );
+  mask-image: linear-gradient(
+    to bottom,
+    transparent 0%,
+    transparent calc(var(--nova-lip-split) - 0.9%),
+    #000 calc(var(--nova-lip-split) + 0.2%),
+    #000 100%
+  );
+}
+
+.nova-avatar-stage:not([data-speaking="true"]) .nova-face-wrap.region-lower {
+  transform: none;
+  transition-duration: 50ms;
 }
 
 .nova-face {
@@ -346,111 +401,109 @@
 .nova-jaw-hint {
   position: absolute;
   left: 50%;
-  top: 63.4%;
-  width: 20%;
-  height: 9%;
+  top: 64.2%;
+  width: 22%;
+  height: 10%;
   border-radius: 50%;
   transform: translate(-50%, calc(-50% + var(--nova-jaw-drop)));
-  background: radial-gradient(ellipse at 50% 30%, rgba(8, 10, 16, 0.22), transparent 72%);
-  filter: blur(7px);
+  background: radial-gradient(ellipse at 50% 30%, rgba(8, 10, 16, 0.28), transparent 74%);
+  filter: blur(6px);
   opacity: 0;
+  transition: opacity 80ms linear, transform 90ms linear;
 }
 
 .nova-avatar-stage[data-speaking="true"] .nova-jaw-hint {
-  opacity: calc(0.12 + var(--nova-speech-intensity) * 0.22);
+  opacity: calc(0.18 + var(--nova-speech-intensity) * 0.28);
 }
 
 .nova-mouth-aperture {
   position: absolute;
   left: var(--nova-mouth-x);
   top: var(--nova-mouth-y);
-  width: 7.4%;
-  height: 1.05%;
-  border-radius: 50% / 45%;
-  transform: translate(-50%, calc(-50% + var(--nova-jaw-drop) * 0.4));
+  width: var(--nova-mouth-w);
+  height: var(--nova-mouth-h);
+  border-radius: 46% / 48%;
+  transform: translate(-50%, calc(-38% + var(--nova-jaw-drop) * 0.28));
   overflow: hidden;
   opacity: 0;
-  background: #2a1518;
+  mix-blend-mode: normal;
+  background: radial-gradient(ellipse at 50% 28%, #5a2a30 0%, #2a1216 46%, #12080a 100%);
   box-shadow:
-    0 0 0 0.4px rgba(90, 50, 48, 0.28),
-    inset 0 1px 2px rgba(0, 0, 0, 0.45);
-  transition: width 70ms linear, height 70ms linear, border-radius 70ms linear, opacity 80ms linear;
+    0 0 0 1px rgba(154, 96, 90, 0.55),
+    0 0 0 2px rgba(92, 48, 46, 0.22),
+    inset 0 3px 5px rgba(0, 0, 0, 0.5);
+  transition:
+    width 80ms linear,
+    height 80ms linear,
+    border-radius 90ms linear,
+    opacity 70ms linear,
+    transform 90ms linear;
 }
 
+.nova-avatar-stage[data-speaking="true"][data-viseme="A"] .nova-mouth-aperture,
+.nova-avatar-stage[data-speaking="true"][data-viseme="E"] .nova-mouth-aperture,
+.nova-avatar-stage[data-speaking="true"][data-viseme="I"] .nova-mouth-aperture,
+.nova-avatar-stage[data-speaking="true"][data-viseme="O"] .nova-mouth-aperture,
+.nova-avatar-stage[data-speaking="true"][data-viseme="U"] .nova-mouth-aperture,
+.nova-avatar-stage[data-speaking="true"][data-viseme="W_Q"] .nova-mouth-aperture,
+.nova-avatar-stage[data-speaking="true"][data-viseme="F_V"] .nova-mouth-aperture,
+.nova-avatar-stage[data-speaking="true"][data-viseme="TH"] .nova-mouth-aperture,
+.nova-avatar-stage[data-speaking="true"][data-viseme="S_Z"] .nova-mouth-aperture,
+.nova-avatar-stage[data-speaking="true"][data-viseme="SH_CH"] .nova-mouth-aperture,
+.nova-avatar-stage[data-speaking="true"][data-viseme="L"] .nova-mouth-aperture,
+.nova-avatar-stage[data-speaking="true"][data-viseme="R"] .nova-mouth-aperture,
 .nova-mouth[data-open="true"] .nova-mouth-aperture {
-  opacity: calc(0.32 + var(--nova-mouth-energy) * 0.38);
+  opacity: calc(0.78 + var(--nova-speech-intensity) * 0.22);
 }
+
+.nova-avatar-stage[data-viseme="A"] .nova-mouth-aperture { border-radius: 42% / 50%; }
+.nova-avatar-stage[data-viseme="E"] .nova-mouth-aperture { border-radius: 36% / 44%; }
+.nova-avatar-stage[data-viseme="I"] .nova-mouth-aperture { border-radius: 38% / 46%; }
+.nova-avatar-stage[data-viseme="O"] .nova-mouth-aperture,
+.nova-avatar-stage[data-viseme="U"] .nova-mouth-aperture,
+.nova-avatar-stage[data-viseme="W_Q"] .nova-mouth-aperture { border-radius: 50%; }
+.nova-avatar-stage[data-viseme="F_V"] .nova-mouth-aperture,
+.nova-avatar-stage[data-viseme="TH"] .nova-mouth-aperture { border-radius: 46% / 38%; }
+.nova-avatar-stage[data-viseme="S_Z"] .nova-mouth-aperture,
+.nova-avatar-stage[data-viseme="SH_CH"] .nova-mouth-aperture { border-radius: 48% / 40%; }
 
 .nova-mouth-cavity {
   display: block;
   width: 100%;
   height: 100%;
-  background: radial-gradient(ellipse at 50% 30%, rgba(68, 28, 32, 0.9), rgba(18, 8, 10, 0.95));
+  background: radial-gradient(ellipse at 50% 18%, #4a2026 0%, #1a0b0e 58%, #0a0506 100%);
 }
 
 .nova-mouth-teeth {
   position: absolute;
-  left: 18%;
-  right: 18%;
+  left: 16%;
+  right: 16%;
   top: 0;
-  height: 28%;
-  border-radius: 40% 40% 20% 20%;
-  background: linear-gradient(180deg, rgba(230, 220, 214, 0.55), rgba(180, 160, 150, 0.05));
+  height: 26%;
+  border-radius: 40% 40% 18% 18%;
+  background: linear-gradient(180deg, rgba(214, 198, 188, 0.38), rgba(150, 120, 112, 0.04));
+  opacity: var(--nova-mouth-teeth);
+  pointer-events: none;
+}
+
+.nova-mouth-lip {
+  position: absolute;
+  inset: -22% -8%;
+  border-radius: inherit;
+  box-shadow:
+    inset 0 1px 0 rgba(210, 150, 140, 0.18),
+    inset 0 -2px 3px rgba(70, 30, 32, 0.28);
+  border: 1px solid rgba(156, 96, 90, 0.35);
+  pointer-events: none;
+}
+
+.nova-avatar-stage:not([data-speaking="true"]) .nova-mouth-aperture,
+.nova-avatar-stage[data-viseme="REST"] .nova-mouth-aperture,
+.nova-avatar-stage[data-viseme="M_B_P"] .nova-mouth-aperture {
   opacity: 0;
-}
-
-.nova-mouth[data-viseme="A"] .nova-mouth-aperture {
-  width: 8.4%;
-  height: 2.35%;
-  border-radius: 46% / 50%;
-}
-.nova-mouth[data-viseme="A"] .nova-mouth-teeth { opacity: 0.28; }
-
-.nova-mouth[data-viseme="E"] .nova-mouth-aperture {
-  width: 8.8%;
-  height: 1.55%;
-}
-
-.nova-mouth[data-viseme="I"] .nova-mouth-aperture {
-  width: 6.6%;
-  height: 1.2%;
-}
-
-.nova-mouth[data-viseme="O"] .nova-mouth-aperture {
-  width: 5.6%;
-  height: 2.1%;
-  border-radius: 50%;
-}
-
-.nova-mouth[data-viseme="U"] .nova-mouth-aperture,
-.nova-mouth[data-viseme="W_Q"] .nova-mouth-aperture {
-  width: 4.6%;
-  height: 1.7%;
-  border-radius: 50%;
-}
-
-.nova-mouth[data-viseme="F_V"] .nova-mouth-aperture,
-.nova-mouth[data-viseme="TH"] .nova-mouth-aperture {
-  width: 7.8%;
-  height: 0.85%;
-}
-
-.nova-mouth[data-viseme="S_Z"] .nova-mouth-aperture,
-.nova-mouth[data-viseme="SH_CH"] .nova-mouth-aperture {
-  width: 7.2%;
-  height: 0.72%;
-}
-
-.nova-mouth[data-viseme="L"] .nova-mouth-aperture,
-.nova-mouth[data-viseme="R"] .nova-mouth-aperture {
-  width: 6.8%;
-  height: 1.35%;
-}
-
-.nova-mouth[data-viseme="REST"] .nova-mouth-aperture,
-.nova-mouth[data-viseme="M_B_P"] .nova-mouth-aperture {
-  opacity: 0;
-  height: 0.4%;
+  height: 0.35%;
+  width: 9.2%;
+  transition-duration: 50ms;
 }
 
 .nova-avatar-stage[data-emotion="positive"] .nova-brow-node {
@@ -1240,7 +1293,69 @@
     transform: none;
   }
   .nova-mouth-aperture,
-  .nova-jaw-hint {
+  .nova-jaw-hint,
+  .nova-face-wrap.region-lower {
     transition: none;
   }
+}
+
+.nova-voice-lab {
+  max-width: 640px;
+  margin: 48px auto;
+  padding: 24px;
+  color: #e8eef6;
+  font-family: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+}
+
+.nova-voice-lab h1 {
+  margin: 0 0 8px;
+  font-size: 22px;
+}
+
+.nova-voice-lab p {
+  color: rgba(210, 224, 245, 0.7);
+  margin: 0 0 16px;
+}
+
+.nova-voice-lab label {
+  display: grid;
+  gap: 8px;
+  margin-bottom: 16px;
+  font-size: 13px;
+}
+
+.nova-voice-lab select,
+.nova-voice-lab textarea,
+.nova-voice-lab input[type="range"] {
+  width: 100%;
+  background: #101820;
+  color: #f4f7fb;
+  border: 1px solid rgba(140, 190, 255, 0.22);
+  border-radius: 8px;
+  padding: 8px 10px;
+}
+
+.nova-voice-lab-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 12px 0;
+}
+
+.nova-voice-lab button {
+  background: #163044;
+  color: #e8f4ff;
+  border: 1px solid rgba(140, 190, 255, 0.28);
+  border-radius: 8px;
+  padding: 8px 12px;
+  cursor: pointer;
+}
+
+.nova-voice-lab button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.nova-voice-lab-status {
+  font-size: 13px;
 }
