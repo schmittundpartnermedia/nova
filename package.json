@@ -14,6 +14,7 @@
     "db:reset": "prisma migrate reset --force",
     "verify": "tsx scripts/verify-demo.ts",
     "verify:voice": "tsx scripts/verify-voice.ts",
+    "verify:voice-session": "tsx scripts/verify-voice-session.ts",
     "verify:avatar": "tsx scripts/verify-avatar.ts",
     "validate:avatar": "tsx scripts/validate-nova-avatar.ts",
     "verify:conversation": "tsx scripts/verify-conversation.ts",

@@ -12,8 +12,9 @@ import { NovaContextPanel, type NovaJobSummary } from "@/components/nova/NovaCon
 import { ApprovalCard } from "@/components/nova/ApprovalCard";
 import { ArchivePanel, type ArchiveItem } from "@/components/archive/ArchivePanel";
 import { performanceForState } from "@/components/nova/avatar-performance";
-import { useVoiceInput } from "@/features/voice/useVoiceInput";
+import { useVoiceSession } from "@/features/voice/useVoiceSession";
 import { useNovaVoice } from "@/features/voice/useNovaVoice";
+import type { VoiceTurn } from "@/features/voice/session-types";
 import type { OrbState } from "@/types";
 import type { ProviderMode } from "@/types/ai";
 
@@ -30,8 +31,8 @@ type Approval = {
 };
 
 function humanStatus(state: OrbState, text: string): string {
-  if (state === "LISTENING") return "Ich höre dir zu …";
-  if (state === "THINKING") return "Ich denke nach …";
+  if (state === "LISTENING") return text || "Zuhören";
+  if (state === "THINKING") return text || "Ich denke nach …";
   if (state === "WORKING") {
     const cleaned = text
       .replace(/\b[\w.]*Agent[\w.]*\b/gi, "")
@@ -41,7 +42,7 @@ function humanStatus(state: OrbState, text: string): string {
     if (!cleaned || cleaned.length < 4) return "Ich arbeite daran …";
     return cleaned;
   }
-  if (state === "SPEAKING") return text;
+  if (state === "SPEAKING") return "NOVA spricht";
   return text;
 }
 
@@ -100,6 +101,8 @@ export function NovaShell() {
   const hideTimer = useRef<number | null>(null);
   const interruptedRef = useRef(false);
   const commOpenRef = useRef(false);
+  const sessionActiveRef = useRef(false);
+  const sendVoiceTurnRef = useRef<(turn: VoiceTurn) => void>(() => undefined);
 
   const clearIdleTimer = useCallback(() => {
     if (idleTimer.current) {
@@ -148,8 +151,13 @@ export function NovaShell() {
     (delay = 1800) => {
       clearIdleTimer();
       idleTimer.current = window.setTimeout(() => {
+        if (sessionActiveRef.current) {
+          setOrbState((current) => (current === "WAITING_FOR_APPROVAL" ? current : "LISTENING"));
+          setStatus("Zuhören");
+          return;
+        }
         setOrbState((current) => (current === "LISTENING" ? current : "IDLE"));
-        setStatus((current) => (current === "Ich höre dir zu …" ? current : IDLE_STATUS));
+        setStatus((current) => (current === "Ich höre dir zu …" || current === "Zuhören" ? current : IDLE_STATUS));
       }, delay);
     },
     [clearIdleTimer],
@@ -169,8 +177,33 @@ export function NovaShell() {
     setAfterSpeech,
   } = useNovaVoice();
 
+  const voiceSession = useVoiceSession((turn) => {
+    sendVoiceTurnRef.current(turn);
+  });
+  const {
+    snapshot: sessionSnap,
+    supported: voiceSupported,
+    start: startVoiceSession,
+    stop: stopVoiceSession,
+    notifyProcessing,
+    notifyNovaSpeaking,
+    notifyNovaIdle,
+    bindInterrupt,
+  } = voiceSession;
+
+  useEffect(() => {
+    sessionActiveRef.current =
+      sessionSnap.active || sessionSnap.state === "PROCESSING";
+  }, [sessionSnap.active, sessionSnap.state]);
+
   useEffect(() => {
     setAfterSpeech((next) => {
+      if (sessionActiveRef.current) {
+        notifyNovaIdle();
+        setOrbState((current) => (current === "WAITING_FOR_APPROVAL" ? current : "LISTENING"));
+        setStatus("Zuhören");
+        return;
+      }
       if (next === "listen") return;
       setOrbState((current) => {
         if (current === "LISTENING" || current === "WAITING_FOR_APPROVAL") return current;
@@ -178,17 +211,35 @@ export function NovaShell() {
         return "DONE";
       });
       if (next === "idle") {
-        setStatus((current) => (current === "Ich höre dir zu …" ? current : IDLE_STATUS));
+        setStatus((current) => (current === "Ich höre dir zu …" || current === "Zuhören" ? current : IDLE_STATUS));
         return;
       }
       goIdleSoon(1600);
     });
-  }, [goIdleSoon, setAfterSpeech]);
+  }, [goIdleSoon, notifyNovaIdle, setAfterSpeech]);
 
-  const sendMessage = useCallback(async (message: string, inputMode: "text" | "voice" = "text") => {
+  useEffect(() => {
+    if (speechPlaying && sessionActiveRef.current) {
+      notifyNovaSpeaking();
+    }
+  }, [notifyNovaSpeaking, speechPlaying]);
+
+  useEffect(() => {
+    bindInterrupt(() => {
+      interruptedRef.current = true;
+      stopVoice("idle");
+    });
+  }, [bindInterrupt, stopVoice]);
+
+  const sendMessage = useCallback(async (
+    message: string,
+    inputMode: "text" | "voice" = "text",
+    voiceTurn?: VoiceTurn,
+  ) => {
     interruptedRef.current = false;
     stopVoice("idle");
     clearIdleTimer();
+    if (sessionActiveRef.current) notifyProcessing();
     setBusy(true);
     setOrbState("THINKING");
     setStatus("Ich denke nach …");
@@ -217,12 +268,27 @@ export function NovaShell() {
       const response = await fetch("/api/nova/message", {
         method: "POST",
         headers: { "Content-Type": "application/json", Accept: "text/event-stream" },
-        body: JSON.stringify({ message, inputMode }),
+        body: JSON.stringify({
+          message,
+          inputMode,
+          ...(voiceTurn
+            ? {
+                voice: {
+                  startedAt: voiceTurn.startedAt,
+                  endedAt: voiceTurn.endedAt,
+                  durationMs: voiceTurn.durationMs,
+                  confidence: voiceTurn.confidence,
+                  sttEngine: voiceTurn.sttEngine,
+                },
+              }
+            : {}),
+        }),
       });
       if (!response.ok && !response.body) {
         setOrbState("ERROR");
         setProviderMode("error");
         setStatus("Etwas ist schiefgelaufen.");
+        if (sessionActiveRef.current) notifyNovaIdle();
         return;
       }
       await readSse(response, (payload) => {
@@ -291,8 +357,14 @@ export function NovaShell() {
               setOrbState("WAITING_FOR_APPROVAL");
             }
           } else {
-            setOrbState(nextState);
-            if (nextState === "DONE") goIdleSoon(1800);
+            if (sessionActiveRef.current) {
+              notifyNovaIdle();
+              setOrbState(nextState === "WAITING_FOR_APPROVAL" ? "WAITING_FOR_APPROVAL" : "LISTENING");
+              setStatus("Zuhören");
+            } else {
+              setOrbState(nextState);
+              if (nextState === "DONE") goIdleSoon(1800);
+            }
           }
           if (textTurn || commOpenRef.current) {
             scheduleCommHide(COMM_HIDE_MS);
@@ -302,6 +374,7 @@ export function NovaShell() {
           setOrbState("ERROR");
           setProviderMode("error");
           setStatus(String(payload.statusMessage ?? "Etwas ist schiefgelaufen."));
+          if (sessionActiveRef.current) notifyNovaIdle();
           if (textTurn) {
             setVisibleLines((current) => {
               const next = [...current];
@@ -322,6 +395,7 @@ export function NovaShell() {
       setOrbState("ERROR");
       setProviderMode("error");
       setStatus("Etwas ist schiefgelaufen.");
+      if (sessionActiveRef.current) notifyNovaIdle();
     } finally {
       setBusy(false);
     }
@@ -337,12 +411,15 @@ export function NovaShell() {
     scheduleCommHide,
     stopVoice,
     voiceEnabled,
+    notifyNovaIdle,
+    notifyProcessing,
   ]);
 
-  const voice = useVoiceInput((text) => {
-    setOrbState("THINKING");
-    void sendMessage(text, "voice");
-  });
+  useEffect(() => {
+    sendVoiceTurnRef.current = (turn) => {
+      void sendMessage(turn.transcript, "voice", turn);
+    };
+  }, [sendMessage]);
 
   const loadArchive = useCallback(async (query = "", type = "all") => {
     setArchiveLoading(true);
@@ -420,30 +497,42 @@ export function NovaShell() {
   const stopSpeech = useCallback(() => {
     interruptedRef.current = true;
     stopVoice("idle");
+    if (sessionActiveRef.current) {
+      notifyNovaIdle();
+      setOrbState("LISTENING");
+      setStatus("Zuhören");
+      return;
+    }
     setOrbState("IDLE");
     setStatus(IDLE_STATUS);
-  }, [stopVoice]);
+  }, [notifyNovaIdle, stopVoice]);
 
   const handleMic = useCallback(() => {
-    if (voice.listening) {
-      voice.stop();
+    if (sessionSnap.active || sessionSnap.state === "STARTING") {
+      interruptedRef.current = true;
+      stopVoice("idle");
+      stopVoiceSession();
       setOrbState("IDLE");
       setStatus(IDLE_STATUS);
       return;
     }
     if (speechPlaying) {
       interruptedRef.current = true;
-      stopVoice("listen");
+      stopVoice("idle");
     }
     clearIdleTimer();
-    const started = voice.start();
-    if (started) {
-      setOrbState("LISTENING");
-      setStatus("Ich höre dir zu …");
-    } else {
-      setStatus("Spracheingabe ist vorbereitet, in diesem Browser aber nicht verfügbar.");
-    }
-  }, [clearIdleTimer, speechPlaying, stopVoice, voice]);
+    setOrbState("LISTENING");
+    setStatus("Zuhören");
+    startVoiceSession();
+  }, [
+    clearIdleTimer,
+    sessionSnap.active,
+    sessionSnap.state,
+    speechPlaying,
+    startVoiceSession,
+    stopVoice,
+    stopVoiceSession,
+  ]);
 
   const reopenConversation = useCallback(async () => {
     keepComm();
@@ -482,7 +571,14 @@ export function NovaShell() {
     return clipWindow(lines);
   }, [busy, clipWindow, draft, visibleLines]);
 
-  const uiState: OrbState = speechPlaying ? "SPEAKING" : orbState;
+  let uiState: OrbState = orbState;
+  if (speechPlaying) {
+    uiState = "SPEAKING";
+  } else if (orbState !== "WAITING_FOR_APPROVAL" && orbState !== "WORKING") {
+    if (sessionSnap.state === "ERROR") uiState = "ERROR";
+    else if (sessionSnap.state === "PROCESSING") uiState = "THINKING";
+    else if (sessionSnap.capturing || sessionSnap.state === "STARTING") uiState = "LISTENING";
+  }
   const basePerformance = useMemo(() => performanceForState(uiState), [uiState]);
   const performance = speechPlaying
     ? {
@@ -492,7 +588,16 @@ export function NovaShell() {
       }
     : { ...basePerformance, isSpeaking: false, viseme: "REST" as const, speechIntensity: 0 };
 
-  const shownStatus = humanStatus(uiState, status);
+  const shownStatus =
+    sessionSnap.state === "ERROR"
+      ? sessionSnap.error ?? "Voice Session fehlgeschlagen."
+      : speechPlaying
+        ? "NOVA spricht"
+        : sessionSnap.state === "USER_SPEAKING" || sessionSnap.state === "INTERRUPTED"
+          ? "Ich höre zu"
+          : sessionSnap.state === "LISTENING" || sessionSnap.state === "SILENCE_WAIT" || sessionSnap.state === "STARTING"
+            ? "Zuhören"
+            : humanStatus(uiState, status);
 
   return (
     <div className="nova-stage" data-state={uiState}>
@@ -559,10 +664,14 @@ export function NovaShell() {
             <NovaStatus text={shownStatus} />
             <NovaCommandBar
               disabled={busy}
-              listening={voice.listening}
+              listening={sessionSnap.capturing}
               speaking={speechPlaying}
-              voiceSupported={voice.supported}
+              voiceSupported={voiceSupported}
               voiceEnabled={voiceEnabled}
+              sessionActive={sessionSnap.active}
+              sessionState={sessionSnap.state}
+              silenceRemainingMs={sessionSnap.silenceRemainingMs}
+              silenceTimeoutMs={sessionSnap.silenceTimeoutMs}
               onSubmit={(value) => void sendMessage(value, "text")}
               onMic={handleMic}
               onStopSpeech={stopSpeech}
@@ -570,7 +679,11 @@ export function NovaShell() {
               onDraftChange={handleDraftChange}
               onComposeStart={openTextLayer}
             />
-            <NovaVoiceWave listening={voice.listening} />
+            <NovaVoiceWave
+              listening={sessionSnap.capturing}
+              amplitude={sessionSnap.capturing ? sessionSnap.level : null}
+              sessionLabel={sessionSnap.label}
+            />
           </div>
         </main>
 

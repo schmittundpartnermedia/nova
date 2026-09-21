@@ -3,6 +3,7 @@ import { nextUnspokenChunks, splitSpeechChunks } from "@/services/voice/chunk-te
 import { inferSpeechEmotion } from "@/services/voice/emotion";
 import { classifyVisemeFromBands } from "@/services/voice/viseme-heuristic";
 import { visemeToBlendshapes } from "@/features/avatar/viseme-map";
+import { runVoiceSessionChecks } from "@/scripts/verify-voice-session";
 import {
   getNovaVoiceConfig,
   NOVA_VOICE_DEFAULTS,
@@ -15,7 +16,7 @@ function assert(condition: unknown, message: string): asserts condition {
   if (!condition) throw new Error(message);
 }
 
-function main() {
+async function main() {
   const original = "Hallo Joachim. Siehe https://rankpilot.de und ```js\nconsole.log(1)\n``` danke.";
   const spoken = prepareTextForSpeech(original);
   assert(original.includes("```js"), "Originaltext darf nicht mutiert werden.");
@@ -120,6 +121,9 @@ function main() {
   assert((s.jawOpen ?? 0) < (e.jawOpen ?? 0), "S/Z weniger Kiefer als E");
   assert(Object.keys(restShapes).length === 0, "REST ohne Mundformen");
 
+  const session = await runVoiceSessionChecks();
+  assert(session.ok, "Voice Session Checks");
+
   console.log(
     JSON.stringify(
       {
@@ -130,6 +134,7 @@ function main() {
         chunks,
         visemes: { rest, sibilant, openA },
         blendshapes: { rest: restShapes, A: a, E: e, O: o, U: u, M_B_P: m },
+        session,
       },
       null,
       2,
@@ -137,4 +142,4 @@ function main() {
   );
 }
 
-main();
+void main();

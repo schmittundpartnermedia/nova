@@ -1,14 +1,16 @@
 export function NovaVoiceWave({
   listening,
   amplitude = null,
+  sessionLabel = null,
 }: {
   listening: boolean;
   amplitude?: number | null;
+  sessionLabel?: string | null;
 }) {
   const measured = typeof amplitude === "number";
   return (
-    <div className="nova-voice" aria-hidden="true">
-      <span className="nova-voice-label">Sprich mit mir</span>
+    <div className={`nova-voice ${listening ? "session-on" : ""}`} aria-hidden="true">
+      <span className="nova-voice-label">{sessionLabel ?? "Sprich mit mir"}</span>
       <div className={`nova-wave ${listening ? "listening" : "idle"}`}>
         {Array.from({ length: 18 }, (_, index) => (
           <span

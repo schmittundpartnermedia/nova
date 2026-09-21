@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import type { VoiceSessionState } from "@/features/voice/session-types";
 
 const QUICK_ACTIONS = [
   { id: "research", label: "Recherchieren", prefix: "Recherchiere: " },
@@ -15,6 +16,10 @@ export function NovaCommandBar({
   speaking,
   voiceSupported,
   voiceEnabled,
+  sessionActive = false,
+  sessionState = "OFF",
+  silenceRemainingMs = null,
+  silenceTimeoutMs = 5000,
   onSubmit,
   onMic,
   onStopSpeech,
@@ -27,6 +32,10 @@ export function NovaCommandBar({
   speaking: boolean;
   voiceSupported: boolean;
   voiceEnabled: boolean;
+  sessionActive?: boolean;
+  sessionState?: VoiceSessionState;
+  silenceRemainingMs?: number | null;
+  silenceTimeoutMs?: number;
   onSubmit: (value: string) => void;
   onMic: () => void;
   onStopSpeech: () => void;
@@ -36,6 +45,18 @@ export function NovaCommandBar({
 }) {
   const [value, setValue] = useState("");
   const [preparedHint, setPreparedHint] = useState(false);
+  const silenceProgress =
+    sessionState === "SILENCE_WAIT" && silenceRemainingMs != null
+      ? Math.max(0, Math.min(1, silenceRemainingMs / silenceTimeoutMs))
+      : 0;
+  const micClass = [
+    "nova-icon-btn",
+    sessionActive ? "session-active" : listening ? "listening" : "",
+    sessionState === "USER_SPEAKING" || sessionState === "INTERRUPTED" ? "user-speaking" : "",
+    sessionState === "SILENCE_WAIT" ? "silence-wait" : "",
+  ]
+    .filter(Boolean)
+    .join(" ");
 
   return (
     <form
@@ -58,7 +79,15 @@ export function NovaCommandBar({
         }}
         onFocus={() => onComposeStart?.()}
         disabled={disabled}
-        placeholder={listening ? "Ich höre dir zu …" : speaking ? "NOVA spricht …" : "Was kann ich für dich tun?"}
+        placeholder={
+          sessionState === "USER_SPEAKING"
+            ? "Ich höre zu …"
+            : sessionActive
+              ? "NOVA hört zu …"
+              : speaking
+                ? "NOVA spricht …"
+                : "Was kann ich für dich tun?"
+        }
         autoComplete="off"
       />
       <div className="nova-command-row">
@@ -117,9 +146,23 @@ export function NovaCommandBar({
           <button
             type="button"
             onClick={onMic}
-            className={`nova-icon-btn ${listening ? "listening" : ""}`}
-            aria-label={voiceSupported ? "Spracheingabe" : "Spracheingabe vorbereitet"}
-            title={voiceSupported ? "Mikrofon" : "Spracheingabe vorbereitet (Web Speech API)"}
+            className={micClass}
+            style={{ ["--silence-progress" as string]: String(silenceProgress) }}
+            aria-pressed={sessionActive}
+            aria-label={
+              sessionActive
+                ? "Voice Session beenden"
+                : voiceSupported
+                  ? "Voice Session starten"
+                  : "Spracheingabe vorbereitet"
+            }
+            title={
+              sessionActive
+                ? "Voice Session aktiv — klicken zum Beenden"
+                : voiceSupported
+                  ? "Mikrofon"
+                  : "Spracheingabe vorbereitet (Web Speech API)"
+            }
           >
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
               <path

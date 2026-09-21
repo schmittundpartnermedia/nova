@@ -10,9 +10,18 @@ export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 export const maxDuration = 60;
 
+const voiceMetaSchema = z.object({
+  startedAt: z.string().min(1).max(64).optional(),
+  endedAt: z.string().min(1).max(64).optional(),
+  durationMs: z.number().nonnegative().max(60 * 60 * 1000).optional(),
+  confidence: z.number().min(0).max(1).optional(),
+  sttEngine: z.string().min(1).max(64).optional(),
+});
+
 const bodySchema = z.object({
   message: z.string().min(1).max(4000),
   inputMode: z.enum(["text", "voice", "system", "external"]).default("text"),
+  voice: voiceMetaSchema.optional(),
 });
 
 function encodeEvent(payload: Record<string, unknown>): Uint8Array {
@@ -21,7 +30,17 @@ function encodeEvent(payload: Record<string, unknown>): Uint8Array {
 
 export async function POST(request: Request) {
   const encoder = new TextEncoder();
-  let parsed: { message: string; inputMode: ConversationInputMode };
+  let parsed: {
+    message: string;
+    inputMode: ConversationInputMode;
+    voice?: {
+      startedAt?: string;
+      endedAt?: string;
+      durationMs?: number;
+      confidence?: number;
+      sttEngine?: string;
+    };
+  };
   try {
     const json = await request.json();
     parsed = bodySchema.parse(json);
@@ -40,6 +59,7 @@ export async function POST(request: Request) {
       try {
         const tenant = await getCurrentTenant();
         const conversation = await getOrCreateActiveConversation(tenant.organizationId);
+        const voiceMeta = parsed.inputMode === "voice" ? parsed.voice : undefined;
         const userMessage = await appendMessage({
           organizationId: tenant.organizationId,
           conversationId: conversation.id,
@@ -47,7 +67,18 @@ export async function POST(request: Request) {
           content: redactSecrets(parsed.message),
           inputMode: parsed.inputMode,
           visible: parsed.inputMode === "text",
-          metadata: { channel: "nova-ui" },
+          metadata: {
+            channel: "nova-ui",
+            ...(voiceMeta
+              ? {
+                  startedAt: voiceMeta.startedAt,
+                  endedAt: voiceMeta.endedAt,
+                  durationMs: voiceMeta.durationMs,
+                  confidence: voiceMeta.confidence,
+                  sttEngine: voiceMeta.sttEngine,
+                }
+              : {}),
+          },
         });
 
         let assistantMessageId: string | undefined;

@@ -928,6 +928,32 @@
   box-shadow: 0 0 16px rgba(80, 190, 255, 0.35);
 }
 
+.nova-icon-btn.session-active {
+  position: relative;
+  background: rgba(90, 200, 255, 0.12);
+  color: rgba(240, 248, 255, 0.94);
+  box-shadow: 0 0 12px rgba(80, 190, 255, 0.22);
+}
+
+.nova-icon-btn.session-active.user-speaking {
+  background: rgba(90, 210, 255, 0.2);
+  box-shadow: 0 0 16px rgba(90, 220, 255, 0.32);
+}
+
+.nova-icon-btn.silence-wait::after {
+  content: "";
+  position: absolute;
+  inset: 4px;
+  border-radius: 999px;
+  pointer-events: none;
+  background: conic-gradient(
+    rgba(150, 220, 255, 0.55) calc(var(--silence-progress, 0) * 360deg),
+    rgba(150, 220, 255, 0.08) 0
+  );
+  mask: radial-gradient(circle, transparent 62%, #000 64%);
+  opacity: 0.85;
+}
+
 .nova-icon-btn.voice-off {
   opacity: 0.42;
 }
@@ -967,6 +993,11 @@
   font-size: 10px;
   letter-spacing: 0.38em;
   color: rgba(180, 205, 235, 0.38);
+}
+
+.nova-voice.session-on .nova-voice-label {
+  letter-spacing: 0.28em;
+  color: rgba(200, 226, 255, 0.55);
 }
 
 .nova-wave {
