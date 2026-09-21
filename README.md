@@ -23,6 +23,17 @@ npx prisma db seed
 
 ## Start
 
+Lokale macOS-App (ein Klick, ohne Terminal):
+
+```bash
+npm run macos:build
+open "macos/build/NOVA.app"
+```
+
+Details, Icon-Pfad und Production-Modus: [macos/README.md](macos/README.md)
+
+Oder weiterhin manuell:
+
 ```bash
 npm run dev
 ```

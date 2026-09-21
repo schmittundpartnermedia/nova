@@ -44,6 +44,11 @@ prisma/*.db-shm
 .nova/
 services/desktop-service/native/bin/
 
+# native macOS launcher build
+macos/build/
+macos/launcher/Resources/AppIcon.icns
+macos/launcher/Resources/AppIcon.iconset/*.png
+
 # vercel
 .vercel
 

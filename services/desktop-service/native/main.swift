@@ -5,6 +5,19 @@ import AppKit
 import ApplicationServices
 import CoreGraphics
 import ScreenCaptureKit
+import Darwin
+
+private let tccDisclaimEnv = "NOVA_HELPER_TCC_DISCLAIMED"
+private let tccAxResultEnv = "NOVA_HELPER_AX_RESULT"
+
+@_silgen_name("responsibility_spawnattrs_setdisclaim")
+func responsibility_spawnattrs_setdisclaim(
+    _ attrs: UnsafeMutablePointer<posix_spawnattr_t?>,
+    _ disclaim: Int32
+) -> Int32
+
+@_silgen_name("responsibility_get_pid_responsible_for_pid")
+func responsibility_get_pid_responsible_for_pid(_ pid: pid_t) -> pid_t
 
 struct Command: Decodable {
     let cmd: String
@@ -31,6 +44,76 @@ func axTrusted() -> Bool {
 func screenTrusted() -> Bool {
     if #available(macOS 11.0, *) {
         return CGPreflightScreenCaptureAccess()
+    }
+    return false
+}
+
+func helperExecutablePath() -> String {
+    var size = UInt32(PATH_MAX)
+    var buffer = [CChar](repeating: 0, count: Int(size))
+    let status = buffer.withUnsafeMutableBufferPointer { ptr in
+        _NSGetExecutablePath(ptr.baseAddress, &size)
+    }
+    if status == 0 {
+        return String(cString: buffer)
+    }
+    return CommandLine.arguments.first ?? "nova-desktop-helper"
+}
+
+func withCStringArray(_ strings: [String], _ body: (UnsafeMutablePointer<UnsafeMutablePointer<CChar>?>) -> Int32) -> Int32 {
+    var pointers: [UnsafeMutablePointer<CChar>?] = strings.map { strdup($0) }
+    pointers.append(nil)
+    defer {
+        for pointer in pointers {
+            free(pointer)
+        }
+    }
+    return pointers.withUnsafeMutableBufferPointer { buffer in
+        body(buffer.baseAddress!)
+    }
+}
+
+func reexecDisclaimedIfNeeded(extraEnv: [String: String] = [:]) {
+    guard getenv(tccDisclaimEnv) == nil else { return }
+    let me = getpid()
+    let responsible = responsibility_get_pid_responsible_for_pid(me)
+    guard responsible > 0, responsible != me else { return }
+
+    var attr: posix_spawnattr_t?
+    posix_spawnattr_init(&attr)
+    defer { posix_spawnattr_destroy(&attr) }
+    guard responsibility_spawnattrs_setdisclaim(&attr, 1) == 0 else { return }
+
+    let exe = helperExecutablePath()
+    let argv = [exe] + Array(CommandLine.arguments.dropFirst())
+    var env = ProcessInfo.processInfo.environment
+    env[tccDisclaimEnv] = "1"
+    for (key, value) in extraEnv {
+        env[key] = value
+    }
+    let envList = env.map { "\($0.key)=\($0.value)" }
+
+    var child: pid_t = 0
+    let spawned = withCStringArray(argv) { argvPtr in
+        withCStringArray(envList) { envPtr in
+            posix_spawn(&child, exe, nil, &attr, argvPtr, envPtr)
+        }
+    }
+    guard spawned == 0 else { return }
+
+    var status: Int32 = 0
+    _ = waitpid(child, &status, 0)
+    if (status & 0x7f) == 0 {
+        exit((status >> 8) & 0xff)
+    }
+    exit(1)
+}
+
+func requestScreenRecordingAccess() -> Bool {
+    _ = NSApplication.shared
+    NSApp.setActivationPolicy(.accessory)
+    if #available(macOS 10.15, *) {
+        return CGRequestScreenCaptureAccess()
     }
     return false
 }
@@ -107,9 +190,7 @@ func performAction(_ identifier: String, action: String, value: String?) -> [Str
 }
 
 func captureScreen() -> [String: Any] {
-    guard screenTrusted() else {
-        return ["ok": false, "permission": "screen_recording", "error": "PERMISSION_REQUIRED"]
-    }
+    reexecDisclaimedIfNeeded()
     var result: [String: Any] = ["ok": false, "error": "capture_timeout"]
     let sem = DispatchSemaphore(value: 0)
     Task {
@@ -217,10 +298,13 @@ guard let data = raw.data(using: .utf8), let command = try? JSONDecoder().decode
 
 switch command.cmd {
 case "permissions":
+    let accessibility =
+        getenv(tccAxResultEnv).map { String(cString: $0) == "1" } ?? axTrusted()
+    reexecDisclaimedIfNeeded(extraEnv: [tccAxResultEnv: accessibility ? "1" : "0"])
     writeJSON([
         "ok": true,
         "data": [
-            "accessibility": axTrusted(),
+            "accessibility": accessibility,
             "screenRecording": screenTrusted(),
             "automation": false,
         ],
@@ -231,6 +315,9 @@ case "windows":
     writeJSON(["ok": true, "data": ["windows": windows()]])
 case "capture":
     writeJSON(captureScreen())
+case "request.screen":
+    reexecDisclaimedIfNeeded()
+    writeJSON(["ok": requestScreenRecordingAccess(), "permission": "screen_recording"])
 case "ax.inspect":
     if !axTrusted() {
         writeJSON(["ok": false, "permission": "accessibility", "error": "PERMISSION_REQUIRED"])

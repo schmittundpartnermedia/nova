@@ -14,16 +14,57 @@ export type NativeHelperResult = {
   status?: string;
 };
 
+export const HELPER_BUNDLE_IDENTIFIER = "de.joachimschmitt.nova.desktop-helper";
+const HELPER_APP_NAME = "NOVA Desktop Helper.app";
+
+function helperAppPath(): string {
+  return path.join(process.cwd(), "services/desktop-service/native/bin", HELPER_APP_NAME);
+}
+
 function helperBinaryPath(): string {
-  return path.join(process.cwd(), "services/desktop-service/native/bin/nova-desktop-helper");
+  return path.join(helperAppPath(), "Contents/MacOS/nova-desktop-helper");
 }
 
 function helperSourcePath(): string {
   return path.join(process.cwd(), "services/desktop-service/native/main.swift");
 }
 
+function helperInfoPlistPath(): string {
+  return path.join(process.cwd(), "services/desktop-service/native/Info.plist");
+}
+
 export function helperAvailable(): boolean {
   return fs.existsSync(helperBinaryPath());
+}
+
+async function resolveAppleDevelopmentIdentity(): Promise<{ ok: true; identity: string } | { ok: false; reason: string }> {
+  const result = await runProcess("/usr/bin/security", ["find-identity", "-v", "-p", "codesigning"], 15_000);
+  const match = result.stdout.match(/^\s*\d+\)\s+[A-F0-9]+\s+"((?:Apple Development|Developer ID Application): [^"]+)"/m);
+  if (!match?.[1]) {
+    return {
+      ok: false,
+      reason: "Keine gültige Apple-Development- oder Developer-ID-Identity. security find-identity -v -p codesigning ist leer.",
+    };
+  }
+  return { ok: true, identity: match[1] };
+}
+
+async function signNativeHelper(appPath: string): Promise<{ ok: boolean; reason: string }> {
+  const identity = await resolveAppleDevelopmentIdentity();
+  if (!identity.ok) return identity;
+  const result = await runProcess(
+    "/usr/bin/codesign",
+    ["--force", "--sign", identity.identity, "--identifier", HELPER_BUNDLE_IDENTIFIER, "--timestamp=none", appPath],
+    30_000,
+  );
+  if (result.code !== 0) {
+    return { ok: false, reason: result.stderr.slice(0, 500) || "codesign fehlgeschlagen." };
+  }
+  const verify = await runProcess("/usr/bin/codesign", ["--verify", "--verbose=2", appPath], 10_000);
+  if (verify.code !== 0) {
+    return { ok: false, reason: verify.stderr.slice(0, 500) || "codesign verify fehlgeschlagen." };
+  }
+  return { ok: true, reason: `Native Helper signiert mit ${identity.identity}.` };
 }
 
 export async function buildNativeHelper(): Promise<{ ok: boolean; reason: string }> {
@@ -34,13 +75,29 @@ export async function buildNativeHelper(): Promise<{ ok: boolean; reason: string
   if (!fs.existsSync(source)) {
     return { ok: false, reason: "Swift-Quelle fehlt." };
   }
+  const infoPlist = helperInfoPlistPath();
+  if (!fs.existsSync(infoPlist)) {
+    return { ok: false, reason: "Info.plist für den Native Helper fehlt." };
+  }
+  const appPath = helperAppPath();
   const bin = helperBinaryPath();
-  fs.mkdirSync(path.dirname(bin), { recursive: true });
+  const macosDir = path.dirname(bin);
+  const contentsDir = path.dirname(macosDir);
+  fs.mkdirSync(macosDir, { recursive: true });
+  fs.copyFileSync(infoPlist, path.join(contentsDir, "Info.plist"));
   const args = [
     "-O",
     "-o",
     bin,
     source,
+    "-Xlinker",
+    "-sectcreate",
+    "-Xlinker",
+    "__TEXT",
+    "-Xlinker",
+    "__info_plist",
+    "-Xlinker",
+    infoPlist,
     "-framework",
     "AppKit",
     "-framework",
@@ -58,7 +115,9 @@ export async function buildNativeHelper(): Promise<{ ok: boolean; reason: string
   if (result.code !== 0) {
     return { ok: false, reason: result.stderr.slice(0, 500) || "swiftc fehlgeschlagen." };
   }
-  return { ok: true, reason: "Native Helper gebaut." };
+  const signed = await signNativeHelper(appPath);
+  if (!signed.ok) return signed;
+  return { ok: true, reason: signed.reason };
 }
 
 export async function ensureNativeHelper(): Promise<{ ok: boolean; reason: string }> {

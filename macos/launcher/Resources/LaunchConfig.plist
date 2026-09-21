@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>NOVALaunchMode</key>
+	<string>development</string>
+	<key>NOVAUIMode</key>
+	<string>webview</string>
+	<key>NOVAProjectRoot</key>
+	<string>/Volumes/My Book 24/NOVA</string>
+	<key>NOVAWebHost</key>
+	<string>127.0.0.1</string>
+	<key>NOVAWebPort</key>
+	<integer>3000</integer>
+	<key>NOVADesktopHost</key>
+	<string>127.0.0.1</string>
+	<key>NOVADesktopPort</key>
+	<integer>47821</integer>
+	<key>NOVAStartAtLogin</key>
+	<false/>
+</dict>
+</plist>
