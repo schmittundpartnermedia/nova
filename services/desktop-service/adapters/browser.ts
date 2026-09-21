@@ -26,6 +26,7 @@ import {
   getActivePage,
   listBrowserTabs,
   openBrowserTab,
+  pageConsoleEntries,
   persistDownload,
   playwrightAvailable,
   switchBrowserTab,
@@ -116,6 +117,8 @@ export async function executeBrowserAction(input: {
         return await handleWaitFor(payload, startedAt);
       case "screenshot":
         return await handleScreenshot(payload.persist === true, startedAt);
+      case "setViewport":
+        return await handleSetViewport(payload.width, payload.height, startedAt);
       case "back":
         return await handleHistory("back", startedAt);
       case "forward":
@@ -237,6 +240,7 @@ async function handleInspect(maxItems: number, startedAt: Date): Promise<ActionR
   const page = await getActivePage();
   const after = await snapshot(page);
   const tree = await inspectDom(page, maxItems);
+  const consoleEntries = pageConsoleEntries(page);
   const untrusted = wrapExternalContent(after.url, JSON.stringify(tree).slice(0, 4000));
   return createActionResult({
     tool: "browser",
@@ -250,13 +254,15 @@ async function handleInspect(maxItems: number, startedAt: Date): Promise<ActionR
       url: after.url,
       title: after.title,
       ...tree,
+      console: consoleEntries,
+      consoleErrors: consoleEntries.filter((item) => item.type === "error" || item.type === "pageerror"),
       injectionSuspected: untrusted.injectionSuspected,
       untrusted,
     },
     verification: {
       verified: true,
       method: "playwright_dom_inspect",
-      details: `${tree.links.length} Links, ${tree.inputs.length} Felder, ${tree.buttons.length} Buttons`,
+      details: `${tree.links.length} Links, ${tree.inputs.length} Felder, ${tree.buttons.length} Buttons, ${consoleEntries.length} Console-Einträge`,
     },
   });
 }
@@ -478,6 +484,27 @@ async function handleScreenshot(persist: boolean, startedAt: Date): Promise<Acti
     artifacts: [{ kind: "screenshot", path: file, ephemeral: true, description: "Browser-Screenshot, nicht ins Memory." }],
     verification: { verified: bytes > 0, method: "screenshot_bytes", details: `${bytes} bytes` },
     metadata: { note: "Screenshot bleibt ephemer und wird nicht ins Memory geschrieben." },
+  });
+}
+
+async function handleSetViewport(width: number, height: number, startedAt: Date): Promise<ActionResult> {
+  const page = await getActivePage();
+  await page.setViewportSize({ width, height });
+  const size = page.viewportSize();
+  return createActionResult({
+    tool: "browser",
+    action: "setViewport",
+    startedAt,
+    success: size?.width === width && size.height === height,
+    riskLevel: "READ_ONLY",
+    approvalRequired: false,
+    target: page.url(),
+    result: { width: size?.width, height: size?.height },
+    verification: {
+      verified: size?.width === width && size.height === height,
+      method: "playwright_viewport",
+      details: `${size?.width ?? "?"}x${size?.height ?? "?"}`,
+    },
   });
 }
 

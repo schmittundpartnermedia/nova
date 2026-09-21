@@ -11,6 +11,7 @@ import {
 } from "@/services/computer/audit";
 import { createApprovalRequest } from "@/services/approvals";
 import { recordActivity } from "@/services/archive";
+import { cancelCodingSessions } from "@/services/coding/sessions";
 import { classifyComputerAction } from "@/lib/computer/risk";
 import { detectHardBlock } from "@/lib/computer/hard-blocks";
 import { isInjectionAttempt, wrapExternalContent } from "@/lib/computer/injection";
@@ -385,8 +386,9 @@ export async function runComputerAgent(input: {
 export async function cancelComputerWork(organizationId: string): Promise<{ count: number }> {
   noteCancelOrganization(organizationId);
   const count = await requestComputerCancel(organizationId);
+  const coding = await cancelCodingSessions(organizationId);
   await cancelDesktopJobs();
-  return { count };
+  return { count: count + coding };
 }
 
 function cancelledResult(actions: ActionResult[]): ComputerAgentResult {
@@ -495,6 +497,11 @@ function userReply(
       return `${discovery?.reason ?? "Cursor Agent CLI ist auf diesem Mac nicht verfügbar."} Ich habe deshalb keine TypeScript-Analyse von Cursor erhalten.`;
     }
     const output = String((ask?.result as { output?: string })?.output ?? "").trim();
+    if (!ask?.success) {
+      return ask?.error?.message
+        ? ask.error.message
+        : "Cursor war erreichbar, hat aber keine verifizierte Antwort geliefert.";
+    }
     return output
       ? `Cursor-Antwort (verifiziert empfangen):\n${output.slice(0, 3000)}`
       : "Cursor war erreichbar, hat aber keine verifizierte Antwort geliefert.";

@@ -9,6 +9,8 @@ const INJECTION_PATTERNS: RegExp[] = [
   /run this (?:terminal )?command/i,
   /send all files/i,
   /disable (?:safety|security|guardrail)/i,
+  /export(?:iere)?\s+(?:credentials|secrets|api.?keys)/i,
+  /sicherheit deaktivieren/i,
 ];
 
 export type UntrustedContent = {

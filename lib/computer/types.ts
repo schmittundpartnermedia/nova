@@ -43,6 +43,8 @@ export const CAPABILITY_IDS = [
   "cursor.plan",
   "cursor.agent",
   "cursor.status",
+  "cursor.resume",
+  "cursor.stop",
 ] as const;
 
 export type CapabilityId = (typeof CAPABILITY_IDS)[number];

@@ -1,6 +1,8 @@
 import { bootstrapAgents, getAgent, listAgents } from "@/agents/bootstrap";
 import { detectComputerIntent } from "@/agents/computer/intent";
 import { runComputerAgent } from "@/agents/computer";
+import { detectCodingIntent } from "@/agents/coding/intent";
+import { runCodingAgent } from "@/agents/coding";
 import { getDefaultProject, runAgentStep } from "@/agents/runtime";
 import { resolveAIProvider } from "@/providers/ai/registry";
 import { createJob, updateJobStatus } from "@/services/jobs";
@@ -148,6 +150,15 @@ export async function runMaster(input: {
   await emit(input.onEvent, { type: "status", orbState: "THINKING", statusMessage: "Ich denke nach …" });
 
   const computerIntent = detectComputerIntent(input.userRequest);
+  if (computerIntent.kind === "cancel") {
+    return runComputerMasterPath(input, computerIntent.statusMessage);
+  }
+
+  const codingIntent = detectCodingIntent(input.userRequest);
+  if (codingIntent.kind !== "none") {
+    return runCodingMasterPath(input, codingIntent.statusMessage);
+  }
+
   if (computerIntent.kind !== "none") {
     return runComputerMasterPath(input, computerIntent.statusMessage);
   }
@@ -189,7 +200,7 @@ export async function runMaster(input: {
     model: decision.model,
     schemaName: "master-plan",
     schemaDescription:
-      'JSON mit intent, goal, agents (Teilmenge von research|communication|task|project), needsApproval, remember, searchRequired, externalAction (none|mail.send|calendar|other), replyHint, communicationBrief, taskDraft, projectDraft {create,name,description,list}, memoryItems [{type,title,content}], mock=false wenn echter Provider.',
+      'JSON mit intent, goal, agents (Teilmenge von research|communication|task|project|coding), needsApproval, remember, searchRequired, externalAction (none|mail.send|calendar|other), replyHint, communicationBrief, taskDraft, projectDraft {create,name,description,list}, memoryItems [{type,title,content}], mock=false wenn echter Provider.',
     prompt: `Du bist NOVA, persönlicher Business-Assistent der Organization ${contextPack.organizationName}.
 Entscheide anhand von Intent und Kontext, nicht anhand einzelner Keywords, ob du direkt antwortest oder interne Agenten nutzt.
 
@@ -201,6 +212,7 @@ Regeln:
 - communication für Mail-/Anschreiben-Entwürfe, niemals Versand.
 - task für Aufgaben/Deadlines.
 - project für Projektübersicht, Status oder neues Projekt.
+- coding für Softwareentwicklung, Website-Bau und Cursor-Umsetzung. Der Master schreibt keinen Projektcode selbst.
 - remember=true nur bei langlebigen Fakten (Entscheidungen, Projekte, Firmen, Kontakte, Aufgaben, Präferenzen, Deadlines, Zusagen). Kein Smalltalk speichern.
 - Erfinde keine Fakten, Firmen oder Kontakte.
 - searchRequired=true wenn aktuelle Webrecherche nötig wäre.
@@ -251,6 +263,47 @@ ${input.userRequest}`,
   let researchBlocked = false;
 
   const shouldRun = (id: string) => requestedAgents.includes(id);
+
+  if (shouldRun("coding")) {
+    await emit(input.onEvent, { type: "status", orbState: "WORKING", statusMessage: "Cursor setzt den Auftrag um." });
+    const coding = await runCodingAgent({
+      organizationId: input.organizationId,
+      jobId: job.id,
+      userRequest: input.userRequest,
+      onStatus: (message) => {
+        void emit(input.onEvent, { type: "status", orbState: "WORKING", statusMessage: message });
+      },
+    });
+    if (coding.reply) {
+      await emit(input.onEvent, { type: "delta", delta: coding.reply });
+    }
+    const jobStatus =
+      coding.status === "WAITING_FOR_APPROVAL"
+        ? "waiting_for_approval"
+        : coding.status === "CANCELLED_BY_USER"
+          ? "cancelled"
+          : coding.status === "FAILED" || coding.status === "UNVERIFIED"
+            ? "failed"
+            : "completed";
+    await updateJobStatus(input.organizationId, job.id, jobStatus, { completedAt: new Date() });
+    return {
+      jobId: job.id,
+      status: jobStatus,
+      orbState:
+        coding.status === "WAITING_FOR_APPROVAL"
+          ? "WAITING_FOR_APPROVAL"
+          : coding.status === "FAILED"
+            ? "ERROR"
+            : "DONE",
+      statusMessage: coding.statusMessage,
+      reply: coding.reply,
+      approvalId: coding.approvalId,
+      mock: false,
+      providerMode: mode,
+      providerId: provider.id,
+      model: decision.model,
+    };
+  }
 
   if (shouldRun("project") || plan.projectDraft?.list || plan.projectDraft?.create) {
     const projectAgent = getAgent("project");
@@ -577,6 +630,71 @@ async function runComputerMasterPath(
     providerMode: "fallback",
     providerId: "computer",
     model: "nova-desktop",
+  };
+}
+
+async function runCodingMasterPath(
+  input: {
+    organizationId: string;
+    userRequest: string;
+    conversationId?: string;
+    sourceMessageId?: string;
+    onEvent?: (event: MasterEvent) => void;
+  },
+  statusMessage: string,
+): Promise<MasterRunResult> {
+  const project = await getDefaultProject(input.organizationId);
+  const job = await createJob({
+    organizationId: input.organizationId,
+    userRequest: input.userRequest,
+    goal: statusMessage || input.userRequest,
+    projectId: project?.id,
+  });
+  await updateJobStatus(input.organizationId, job.id, "running", { startedAt: new Date() });
+  await emit(input.onEvent, { type: "status", orbState: "WORKING", statusMessage });
+
+  const result = await runCodingAgent({
+    organizationId: input.organizationId,
+    jobId: job.id,
+    userRequest: input.userRequest,
+    onStatus: (message) => {
+      void emit(input.onEvent, { type: "status", orbState: "WORKING", statusMessage: message });
+    },
+  });
+
+  if (result.reply) {
+    await emit(input.onEvent, { type: "delta", delta: result.reply });
+  }
+
+  const orbState: OrbState =
+    result.status === "WAITING_FOR_APPROVAL"
+      ? "WAITING_FOR_APPROVAL"
+      : result.status === "FAILED"
+        ? "ERROR"
+        : "DONE";
+
+  const jobStatus =
+    result.status === "WAITING_FOR_APPROVAL"
+      ? "waiting_for_approval"
+      : result.status === "CANCELLED_BY_USER"
+        ? "cancelled"
+        : result.status === "FAILED" || result.status === "UNVERIFIED"
+          ? "failed"
+          : "completed";
+
+  await updateJobStatus(input.organizationId, job.id, jobStatus, { completedAt: new Date() });
+
+  return {
+    jobId: job.id,
+    status: jobStatus,
+    orbState,
+    statusMessage: result.statusMessage,
+    reply: result.reply,
+    approvalId: result.approvalId,
+    mock: false,
+    providerMode: "fallback",
+    providerId: "coding",
+    model: "cursor-agent",
   };
 }
 

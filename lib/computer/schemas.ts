@@ -44,18 +44,50 @@ export const processActionSchema = z.discriminatedUnion("action", [
   z.object({ action: z.literal("stop"), pid: z.number().int().positive(), owned: z.boolean().optional() }),
 ]);
 
+const cursorTask = z.string().min(1).max(20_000);
+const cursorTimeout = z.number().int().positive().max(10 * 60_000).optional();
+
 export const cursorActionSchema = z.discriminatedUnion("action", [
   z.object({ action: z.literal("available") }),
-  z.object({ action: z.literal("ask"), workspace: z.string().min(1), question: z.string().min(1).max(8000) }),
-  z.object({ action: z.literal("plan"), workspace: z.string().min(1), task: z.string().min(1).max(8000) }),
+  z.object({
+    action: z.literal("ask"),
+    workspace: z.string().min(1),
+    question: cursorTask,
+    resumeSessionId: z.string().min(1).max(200).optional(),
+    timeoutMs: cursorTimeout,
+  }),
+  z.object({
+    action: z.literal("plan"),
+    workspace: z.string().min(1),
+    task: cursorTask,
+    resumeSessionId: z.string().min(1).max(200).optional(),
+    timeoutMs: cursorTimeout,
+  }),
   z.object({
     action: z.literal("agent"),
     workspace: z.string().min(1),
-    task: z.string().min(1).max(8000),
+    task: cursorTask,
     mode: z.enum(["ask", "plan", "agent"]).default("agent"),
-    constraints: z.array(z.string()).optional(),
+    constraints: z.array(z.string()).max(20).optional(),
+    resumeSessionId: z.string().min(1).max(200).optional(),
+    timeoutMs: cursorTimeout,
   }),
-  z.object({ action: z.literal("status"), jobId: z.string().min(1) }),
+  z.object({
+    action: z.literal("resume"),
+    workspace: z.string().min(1),
+    sessionId: z.string().min(1).max(200),
+    task: cursorTask,
+    timeoutMs: cursorTimeout,
+  }),
+  z.object({
+    action: z.literal("createSession"),
+    workspace: z.string().min(1),
+  }),
+  z.object({
+    action: z.literal("stop"),
+    sessionId: z.string().min(1).max(200).optional(),
+  }),
+  z.object({ action: z.literal("status"), jobId: z.string().min(1).optional(), sessionId: z.string().min(1).max(200).optional() }),
 ]);
 
 export const browserLocatorSchema = z.object({
@@ -100,6 +132,11 @@ export const browserActionSchema = z.discriminatedUnion("action", [
     timeoutMs: z.number().int().positive().max(60_000).optional(),
   }),
   z.object({ action: z.literal("screenshot"), persist: z.boolean().optional() }),
+  z.object({
+    action: z.literal("setViewport"),
+    width: z.number().int().min(320).max(3840),
+    height: z.number().int().min(240).max(2160),
+  }),
   z.object({ action: z.literal("download"), ...browserTargetFields, timeoutMs: z.number().int().positive().max(60_000).optional() }),
   z.object({ action: z.literal("upload"), ...browserTargetFields, filePath: z.string().min(1) }),
   z.object({ action: z.literal("submit"), ...browserTargetFields }),

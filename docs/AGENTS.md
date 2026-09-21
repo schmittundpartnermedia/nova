@@ -24,6 +24,7 @@ Der Master wählt Agenten dynamisch anhand dieser Metadaten und eines Plans vom 
 | Communication | Mail-Entwürfe, kein Versand |
 | Task | Folgeaufgaben / Wiedervorlagen |
 | Project | Projektkontext laden |
+| Coding | Softwareentwicklung: plant, delegiert an Cursor Agent CLI, prüft Git/Tests/Browser, iteriert |
 | Computer | Lokale Mac-Steuerung über Desktop Service: Git, Dateien, Shell, Prozesse, Playwright-Browser, Cursor CLI |
 
 ## Vorbereitet (Registry, nicht vollständig)

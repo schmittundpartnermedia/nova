@@ -37,6 +37,8 @@ model Organization {
   aiProviderConfigs AiProviderConfig[]
   computerJobs      ComputerJob[]
   computerActions   ComputerAction[]
+  projectContexts   ProjectContext[]
+  cursorSessions    CursorSession[]
 
   @@map("organizations")
 }
@@ -90,6 +92,8 @@ model Project {
   communications Communication[]
   memoryEntries  MemoryEntry[]
   conversations  Conversation[]
+  context        ProjectContext?
+  cursorSessions CursorSession[]
 
   @@index([organizationId])
   @@map("projects")
@@ -197,6 +201,7 @@ model Job {
   conversations    Conversation[]
   computerJobs     ComputerJob[]
   computerActions  ComputerAction[]
+  cursorSessions   CursorSession[]
 
   @@index([organizationId])
   @@index([organizationId, status])
@@ -587,4 +592,55 @@ model ComputerAction {
   @@index([organizationId, startedAt])
   @@index([organizationId, jobId])
   @@map("computer_actions")
+}
+
+model ProjectContext {
+  id             String    @id @default(cuid())
+  organizationId String    @map("organization_id")
+  projectId      String    @unique @map("project_id")
+  localPath      String?   @map("local_path")
+  repository     String?
+  branch         String?
+  framework      String?
+  architecture   String?
+  rules          String?
+  decisions      String?
+  openItems      String?   @map("open_items")
+  lastChanges    String?   @map("last_changes")
+  lastAnalyzedAt DateTime? @map("last_analyzed_at")
+  metadata       String?
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  project      Project      @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId])
+  @@map("project_contexts")
+}
+
+model CursorSession {
+  id              String   @id @default(cuid())
+  organizationId  String   @map("organization_id")
+  jobId           String?  @map("job_id")
+  projectId       String?  @map("project_id")
+  projectPath     String   @map("project_path")
+  repository      String?
+  branch          String?
+  startedAt       DateTime @default(now()) @map("started_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+  status          String
+  cursorSessionId String?  @map("cursor_session_id")
+  initialPrompt   String   @map("initial_prompt")
+  iterations      String?
+  lastResult      String?  @map("last_result")
+  metadata        String?
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  job          Job?         @relation(fields: [jobId], references: [id], onDelete: SetNull)
+  project      Project?     @relation(fields: [projectId], references: [id], onDelete: SetNull)
+
+  @@index([organizationId, status])
+  @@index([organizationId, jobId])
+  @@map("cursor_sessions")
 }

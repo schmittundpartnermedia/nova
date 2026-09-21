@@ -28,6 +28,7 @@ const FILTERS = [
   { id: "approval", label: "Freigaben" },
   { id: "execution", label: "Ausführung" },
   { id: "computer", label: "Computer" },
+  { id: "coding", label: "Coding" },
 ] as const;
 
 function dayLabel(iso: string) {

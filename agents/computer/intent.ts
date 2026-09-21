@@ -35,7 +35,7 @@ export function detectComputerIntent(userRequest: string): ComputerIntent {
     return { kind: "generic", userCommissioned: false, statusMessage: "Inhalt wird geprüft" };
   }
 
-  if (/frag\s+cursor|cursor.*(typescript|fehler|analys)|lass\s+cursor/i.test(lower)) {
+  if (/frag(?:e)?\s+cursor|cursor.*(analysier)/i.test(lower) && !/umsetz|änder|bau|beheb|implement/i.test(lower)) {
     return { kind: "cursor_ask", userCommissioned: true, statusMessage: "Cursor analysiert NOVA" };
   }
 

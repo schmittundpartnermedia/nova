@@ -22,11 +22,18 @@ export type SavedDownload = {
   failed: string | null;
 };
 
+export type BrowserConsoleEntry = {
+  type: string;
+  text: string;
+};
+
 let context: BrowserContext | null = null;
 let activePage: Page | null = null;
 let launching: Promise<BrowserContext> | null = null;
 const pendingDownloads: Download[] = [];
 const savedDownloads: SavedDownload[] = [];
+const pageConsole = new WeakMap<Page, BrowserConsoleEntry[]>();
+const boundPages = new WeakSet<Page>();
 
 export async function playwrightAvailable(): Promise<boolean> {
   try {
@@ -186,10 +193,28 @@ async function ensureActivePage(): Promise<Page> {
   return activePage;
 }
 
+export function pageConsoleEntries(page: Page): BrowserConsoleEntry[] {
+  return [...(pageConsole.get(page) ?? [])];
+}
+
 function bindPage(page: Page): void {
   page.removeAllListeners("download");
   page.on("download", (download) => {
     pendingDownloads.push(download);
+  });
+  if (boundPages.has(page)) return;
+  boundPages.add(page);
+  const entries: BrowserConsoleEntry[] = [];
+  pageConsole.set(page, entries);
+  page.on("console", (msg) => {
+    if (msg.type() === "error" || msg.type() === "warning") {
+      entries.push({ type: msg.type(), text: msg.text().slice(0, 500) });
+      if (entries.length > 50) entries.splice(0, entries.length - 50);
+    }
+  });
+  page.on("pageerror", (error) => {
+    entries.push({ type: "pageerror", text: error.message.slice(0, 500) });
+    if (entries.length > 50) entries.splice(0, entries.length - 50);
   });
 }
 

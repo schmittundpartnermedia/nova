@@ -28,6 +28,7 @@ export function defaultWorkspaceRoots(): string[] {
     path.join(os.homedir(), "Documents"),
     path.join(os.homedir(), "Desktop"),
     path.join(os.homedir(), "Downloads"),
+    path.join(os.tmpdir(), "nova-coding-e2e"),
   ].flat();
   const unique: string[] = [];
   for (const candidate of candidates) {

@@ -4,6 +4,14 @@ import { detectHardBlock, isHardBlockedPath } from "@/lib/computer/hard-blocks";
 import { isInjectionAttempt, wrapExternalContent } from "@/lib/computer/injection";
 import { redactEnvFile, redactSecrets, shouldRedactFilePath } from "@/lib/computer/redaction";
 import { detectComputerIntent } from "@/agents/computer/intent";
+import { detectCodingIntent } from "@/agents/coding/intent";
+import {
+  buildAgentCliArgv,
+  parseCursorAuth,
+  parseCursorCliOutput,
+  looksLikeAgentCli,
+  isElectronGuiHelp,
+} from "@/lib/computer/cursor-cli";
 import { browserActionSchema, filesystemActionSchema, shellActionSchema } from "@/lib/computer/schemas";
 import { CAPABILITY_IDS } from "@/lib/computer/types";
 import { capabilitiesFrom } from "@/lib/computer/capabilities";
@@ -95,6 +103,7 @@ export function runComputerUnitTests(): string[] {
     assert.equal(detectComputerIntent("NOVA, starte NOVA lokal.").kind, "start_dev");
     assert.equal(detectComputerIntent("NOVA, öffne die lokale NOVA-Seite und prüfe ob sie erreichbar ist.").kind, "open_local");
     assert.equal(detectComputerIntent("NOVA, frag Cursor, ob im Projekt TypeScript-Fehler vorhanden sind.").kind, "cursor_ask");
+    assert.equal(detectComputerIntent("Ändere auf rankPilot die Startseite und lass Cursor das umsetzen.").kind, "none");
     assert.equal(detectComputerIntent("NOVA, lösche das NOVA-Projekt.").kind, "delete_dangerous");
     assert.equal(detectComputerIntent("Was ist der Sponsorenstatus?").kind, "none");
   });
@@ -177,6 +186,45 @@ export function runComputerUnitTests(): string[] {
       locator: { role: "link", name: "Learn more" },
     });
     assert.equal(parsed.success, true);
+  });
+
+  check("coding intent routing", () => {
+    assert.equal(detectCodingIntent("Baue mir eine neue ELEVUM Website.").kind, "website_build");
+    assert.equal(detectCodingIntent("Ändere auf rankPilot die Startseite und lass Cursor das umsetzen.").kind, "implement");
+    assert.equal(detectCodingIntent("Prüfe planexus und behebe die Fehler.").kind, "fix");
+    assert.equal(detectCodingIntent("Erstelle eine kleine Testseite mit Überschrift, Text und Button.").kind, "website_build");
+    assert.equal(detectCodingIntent("NOVA, frag Cursor, ob im Projekt TypeScript-Fehler vorhanden sind.").kind, "none");
+    assert.equal(detectCodingIntent("NOVA stop").kind, "cancel");
+  });
+
+  check("cursor cli argv and output", () => {
+    const argv = buildAgentCliArgv({
+      kind: "agent-cli",
+      action: "agent",
+      prompt: "task",
+      workspace: "/tmp/nova-coding-e2e",
+      resumeSessionId: "chat-1",
+    });
+    assert.equal(argv.includes("--print"), true);
+    assert.equal(argv.includes("--force"), true);
+    assert.equal(argv.includes("--resume"), true);
+    assert.equal(argv.includes("chat-1"), true);
+    const plan = buildAgentCliArgv({
+      kind: "agent-cli",
+      action: "plan",
+      prompt: "plan",
+      workspace: "/tmp/x",
+    });
+    assert.equal(plan.includes("--mode"), true);
+    assert.equal(plan.includes("plan"), true);
+    assert.equal(plan.includes("--force"), false);
+    assert.equal(looksLikeAgentCli("Start the Cursor Agent\n--print\n--output-format json"), true);
+    assert.equal(isElectronGuiHelp("Electron/Chromium options"), true);
+    const auth = parseCursorAuth('{"isAuthenticated":false,"message":"Not logged in"}');
+    assert.equal(auth.authenticated, false);
+    const parsed = parseCursorCliOutput('{"session_id":"abc","result":"done"}');
+    assert.equal(parsed.sessionId, "abc");
+    assert.equal(parsed.text, "done");
   });
 
   check("upload secrets blocked", () => {

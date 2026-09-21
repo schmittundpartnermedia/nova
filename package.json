@@ -19,6 +19,7 @@
     "validate:avatar": "tsx scripts/validate-nova-avatar.ts",
     "verify:conversation": "tsx scripts/verify-conversation.ts",
     "verify:computer": "tsx scripts/verify-computer.ts",
+    "verify:coding": "tsx scripts/verify-coding.ts",
     "verify:browser": "tsx scripts/verify-browser.ts",
     "playwright:install": "PLAYWRIGHT_BROWSERS_PATH=.nova/ms-playwright playwright install chromium",
     "desktop-service": "tsx services/desktop-service/index.ts",

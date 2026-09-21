@@ -78,7 +78,13 @@ async function dispatch(envelope: ComputerActionEnvelope, userCommissioned: bool
     }
     case "cursor": {
       const payload = cursorActionSchema.parse(envelope.payload);
-      return executeCursorAction({ payload, userCommissioned, approvalToken: envelope.approvalToken, signal });
+      return executeCursorAction({
+        payload,
+        userCommissioned,
+        approvalToken: envelope.approvalToken,
+        signal,
+        timeoutMs: envelope.timeoutMs,
+      });
     }
     case "browser": {
       const payload = browserActionSchema.parse(envelope.payload);
