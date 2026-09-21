@@ -1,0 +1,1246 @@
+.nova-stage {
+  --nova-ice: #7ec8ff;
+  --nova-cyan: #3ec6ff;
+  --nova-navy: #071018;
+  --nova-orange: #e39a4e;
+  --nova-error: #d0764c;
+  --nova-glass: rgba(16, 24, 40, 0.88);
+  --nova-line: rgba(160, 205, 255, 0.28);
+  --nova-eye-y: 41.6%;
+  --nova-eye-left: 38.6%;
+  --nova-eye-right: 61.4%;
+  --nova-brow: 28.4%;
+  --nova-mouth-x: 50%;
+  --nova-mouth-y: 57.15%;
+  --nova-speech-intensity: 0;
+  --nova-head-x: 0px;
+  --nova-head-y: 0px;
+  --nova-head-rot: 0deg;
+  --nova-gaze-x: 0%;
+  --nova-gaze-y: 0%;
+  --nova-jaw-drop: 0px;
+  position: relative;
+  isolation: isolate;
+  min-height: 100dvh;
+  overflow: hidden;
+  color: #f4f7fb;
+  background: #000;
+}
+
+.nova-stage[data-state="WAITING_FOR_APPROVAL"] {
+  --nova-line: rgba(227, 154, 78, 0.28);
+}
+
+.nova-stage[data-state="ERROR"] {
+  --nova-line: rgba(210, 92, 64, 0.28);
+}
+
+.nova-depth-grid {
+  pointer-events: none;
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  opacity: 0.18;
+  background-image:
+    linear-gradient(rgba(110, 160, 230, 0.04) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(110, 160, 230, 0.04) 1px, transparent 1px);
+  background-size: 80px 80px;
+  mask-image: radial-gradient(ellipse 70% 60% at 50% 46%, transparent 30%, #000 88%);
+}
+
+.nova-rays {
+  pointer-events: none;
+  position: absolute;
+  inset: 6% 26% 28%;
+  z-index: 0;
+  opacity: 0.35;
+  background:
+    conic-gradient(from 180deg at 50% 42%, transparent 0deg, rgba(90, 170, 255, 0.04) 8deg, transparent 16deg, transparent 164deg, rgba(90, 170, 255, 0.03) 172deg, transparent 182deg);
+  filter: blur(12px);
+  animation: nova-ray-drift 28s linear infinite;
+}
+
+.nova-mist {
+  pointer-events: none;
+  position: absolute;
+  inset: 18% 28% 28%;
+  z-index: 0;
+  background: radial-gradient(ellipse at 50% 42%, rgba(40, 90, 160, 0.08), transparent 72%);
+  filter: blur(36px);
+  animation: nova-mist-breathe 9s ease-in-out infinite;
+}
+
+.nova-vignette-deep {
+  pointer-events: none;
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  background:
+    linear-gradient(90deg, rgba(0, 0, 0, 0.45) 0%, transparent 22%, transparent 78%, rgba(0, 0, 0, 0.45) 100%),
+    radial-gradient(ellipse 80% 70% at 50% 48%, transparent 52%, rgba(0, 0, 0, 0.55) 100%);
+}
+
+.nova-grain {
+  z-index: 2;
+  opacity: 0.045;
+}
+
+.nova-shell {
+  position: relative;
+  z-index: 3;
+  display: grid;
+  grid-template-columns: 248px minmax(0, 1fr) 300px;
+  min-height: 100dvh;
+  padding: 18px 18px 16px;
+  gap: 8px;
+}
+
+.nova-center {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  min-width: 0;
+  min-height: 0;
+  gap: 0;
+}
+
+.nova-hero {
+  position: relative;
+  display: grid;
+  place-items: center;
+  min-height: 0;
+  flex: 0 1 auto;
+}
+
+.nova-hero-copy {
+  position: absolute;
+  top: 18%;
+  z-index: 4;
+  margin: 0;
+  font-size: clamp(13px, 1.05vw, 18px);
+  font-weight: 500;
+  letter-spacing: 0.28em;
+  line-height: 1.7;
+  text-transform: uppercase;
+  color: rgba(236, 244, 255, 0.72);
+  text-shadow: 0 0 24px rgba(80, 160, 255, 0.18);
+  pointer-events: none;
+}
+
+.nova-hero-copy.left {
+  left: clamp(8px, 4%, 64px);
+  text-align: left;
+}
+
+.nova-hero-copy.right {
+  right: clamp(8px, 4%, 64px);
+  text-align: right;
+}
+
+.nova-avatar-stage {
+  position: relative;
+  width: min(100%, 900px);
+  height: clamp(440px, 74vh, 980px);
+  max-height: 78vh;
+}
+
+.nova-avatar {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  mix-blend-mode: lighten;
+}
+
+.nova-avatar-live {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  transform-origin: 50% 58%;
+  animation: nova-idle-sway 9.5s ease-in-out infinite;
+}
+
+.nova-layer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.nova-layer-glow { z-index: 1; }
+.nova-layer-hud { z-index: 2; }
+.nova-layer-face { z-index: 3; }
+.nova-layer-jaw { z-index: 4; }
+.nova-layer-effects { z-index: 4; }
+.nova-layer-eyes { z-index: 5; }
+.nova-layer-mouth { z-index: 6; }
+
+.nova-avatar-stage[data-speaking="true"] .nova-avatar-live {
+  animation: none;
+  transform: translate3d(var(--nova-head-x), var(--nova-head-y), 0) rotate(var(--nova-head-rot));
+}
+
+.nova-face-wrap {
+  position: absolute;
+  inset: -2% 0 -4%;
+  z-index: 3;
+  background: transparent;
+  -webkit-mask-image: radial-gradient(ellipse 52% 70% at 50% 40%, #000 54%, rgba(0, 0, 0, 0.7) 72%, transparent 88%);
+  mask-image: radial-gradient(ellipse 52% 70% at 50% 40%, #000 54%, rgba(0, 0, 0, 0.7) 72%, transparent 88%);
+}
+
+.nova-face {
+  object-fit: contain;
+  object-position: center 6%;
+  background: transparent;
+  filter: saturate(1.08) contrast(1.08) brightness(1.06) drop-shadow(0 18px 40px rgba(0, 0, 0, 0.45));
+}
+
+.nova-glow-asset {
+  position: absolute;
+  inset: 8% 12% 18%;
+  z-index: 1;
+  background: radial-gradient(ellipse at 50% 42%, rgba(70, 150, 255, 0.16), transparent 62%);
+  filter: blur(18px);
+  opacity: 0.7;
+  animation: nova-glow-pulse 6.8s ease-in-out infinite;
+}
+
+.nova-floor {
+  position: absolute;
+  left: 18%;
+  right: 18%;
+  bottom: 4%;
+  height: 12%;
+  z-index: 1;
+  background: radial-gradient(ellipse at 50% 50%, rgba(50, 140, 255, 0.14), transparent 72%);
+  filter: blur(10px);
+}
+
+.nova-hud {
+  position: absolute;
+  inset: -16% -18% -2%;
+  z-index: 2;
+  overflow: visible;
+  filter: drop-shadow(0 0 12px rgba(80, 180, 255, 0.22));
+}
+
+.nova-hud svg {
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+
+.nova-hud-ring {
+  fill: none;
+  stroke-linecap: round;
+  transform-origin: 400px 390px;
+}
+
+.nova-hud-ring.a {
+  stroke: rgba(130, 210, 255, 0.62);
+  stroke-width: 1.35;
+  animation: nova-spin-ccw 48s linear infinite;
+}
+
+.nova-hud-ring.b {
+  stroke: rgba(90, 170, 255, 0.4);
+  stroke-width: 0.95;
+  animation: nova-spin-cw 64s linear infinite;
+}
+
+.nova-hud-ring.c {
+  stroke: rgba(227, 154, 78, 0.42);
+  stroke-width: 1.25;
+  animation: nova-spin-cw 90s linear infinite;
+}
+
+.nova-hud-ticks {
+  stroke: rgba(150, 210, 255, 0.55);
+  stroke-width: 1.4;
+  transform-origin: 400px 390px;
+  animation: nova-spin-ccw 36s linear infinite;
+}
+
+.nova-hud-dots {
+  fill: rgba(170, 220, 255, 0.7);
+  transform-origin: 400px 390px;
+  animation: nova-spin-cw 22s linear infinite;
+}
+
+.nova-particles {
+  pointer-events: none;
+  position: absolute;
+  inset: 0;
+  z-index: 4;
+}
+
+.nova-particle {
+  position: absolute;
+  width: 3px;
+  height: 3px;
+  border-radius: 999px;
+  background: #b7e4ff;
+  box-shadow: 0 0 8px rgba(120, 210, 255, 0.8);
+  opacity: 0.35;
+  animation: nova-float 11s ease-in-out infinite;
+}
+
+.nova-eyes {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  pointer-events: none;
+}
+
+.nova-eye {
+  position: absolute;
+  top: var(--nova-eye-y);
+  width: 7.2%;
+  height: 4.6%;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(190, 240, 255, 0.95) 0%, rgba(70, 190, 255, 0.55) 38%, transparent 70%);
+  filter: blur(1.5px);
+  transform: translate(calc(-50% + var(--nova-gaze-x)), calc(-50% + var(--nova-gaze-y)));
+  animation: nova-eye-live 4.6s ease-in-out infinite;
+  mix-blend-mode: screen;
+}
+
+.nova-eye.left {
+  left: var(--nova-eye-left);
+}
+
+.nova-eye.right {
+  left: var(--nova-eye-right);
+}
+
+.nova-brow-node {
+  position: absolute;
+  top: var(--nova-brow);
+  left: 50%;
+  width: 8%;
+  height: 6%;
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+  background: radial-gradient(circle, rgba(180, 240, 255, 0.7), transparent 68%);
+  filter: blur(2px);
+  mix-blend-mode: screen;
+  animation: nova-glow-pulse 5.4s ease-in-out infinite;
+}
+
+.nova-eyelid {
+  display: none;
+}
+
+.nova-mouth-rig {
+  display: none;
+}
+
+.nova-jaw,
+.nova-mouth {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.nova-jaw-hint {
+  position: absolute;
+  left: 50%;
+  top: 63.4%;
+  width: 20%;
+  height: 9%;
+  border-radius: 50%;
+  transform: translate(-50%, calc(-50% + var(--nova-jaw-drop)));
+  background: radial-gradient(ellipse at 50% 30%, rgba(8, 10, 16, 0.22), transparent 72%);
+  filter: blur(7px);
+  opacity: 0;
+}
+
+.nova-avatar-stage[data-speaking="true"] .nova-jaw-hint {
+  opacity: calc(0.12 + var(--nova-speech-intensity) * 0.22);
+}
+
+.nova-mouth-aperture {
+  position: absolute;
+  left: var(--nova-mouth-x);
+  top: var(--nova-mouth-y);
+  width: 7.4%;
+  height: 1.05%;
+  border-radius: 50% / 45%;
+  transform: translate(-50%, calc(-50% + var(--nova-jaw-drop) * 0.4));
+  overflow: hidden;
+  opacity: 0;
+  background: #2a1518;
+  box-shadow:
+    0 0 0 0.4px rgba(90, 50, 48, 0.28),
+    inset 0 1px 2px rgba(0, 0, 0, 0.45);
+  transition: width 70ms linear, height 70ms linear, border-radius 70ms linear, opacity 80ms linear;
+}
+
+.nova-mouth[data-open="true"] .nova-mouth-aperture {
+  opacity: calc(0.32 + var(--nova-mouth-energy) * 0.38);
+}
+
+.nova-mouth-cavity {
+  display: block;
+  width: 100%;
+  height: 100%;
+  background: radial-gradient(ellipse at 50% 30%, rgba(68, 28, 32, 0.9), rgba(18, 8, 10, 0.95));
+}
+
+.nova-mouth-teeth {
+  position: absolute;
+  left: 18%;
+  right: 18%;
+  top: 0;
+  height: 28%;
+  border-radius: 40% 40% 20% 20%;
+  background: linear-gradient(180deg, rgba(230, 220, 214, 0.55), rgba(180, 160, 150, 0.05));
+  opacity: 0;
+}
+
+.nova-mouth[data-viseme="A"] .nova-mouth-aperture {
+  width: 8.4%;
+  height: 2.35%;
+  border-radius: 46% / 50%;
+}
+.nova-mouth[data-viseme="A"] .nova-mouth-teeth { opacity: 0.28; }
+
+.nova-mouth[data-viseme="E"] .nova-mouth-aperture {
+  width: 8.8%;
+  height: 1.55%;
+}
+
+.nova-mouth[data-viseme="I"] .nova-mouth-aperture {
+  width: 6.6%;
+  height: 1.2%;
+}
+
+.nova-mouth[data-viseme="O"] .nova-mouth-aperture {
+  width: 5.6%;
+  height: 2.1%;
+  border-radius: 50%;
+}
+
+.nova-mouth[data-viseme="U"] .nova-mouth-aperture,
+.nova-mouth[data-viseme="W_Q"] .nova-mouth-aperture {
+  width: 4.6%;
+  height: 1.7%;
+  border-radius: 50%;
+}
+
+.nova-mouth[data-viseme="F_V"] .nova-mouth-aperture,
+.nova-mouth[data-viseme="TH"] .nova-mouth-aperture {
+  width: 7.8%;
+  height: 0.85%;
+}
+
+.nova-mouth[data-viseme="S_Z"] .nova-mouth-aperture,
+.nova-mouth[data-viseme="SH_CH"] .nova-mouth-aperture {
+  width: 7.2%;
+  height: 0.72%;
+}
+
+.nova-mouth[data-viseme="L"] .nova-mouth-aperture,
+.nova-mouth[data-viseme="R"] .nova-mouth-aperture {
+  width: 6.8%;
+  height: 1.35%;
+}
+
+.nova-mouth[data-viseme="REST"] .nova-mouth-aperture,
+.nova-mouth[data-viseme="M_B_P"] .nova-mouth-aperture {
+  opacity: 0;
+  height: 0.4%;
+}
+
+.nova-avatar-stage[data-emotion="positive"] .nova-brow-node {
+  opacity: 0.95;
+  filter: blur(2px) brightness(1.15);
+}
+
+.nova-avatar-stage[data-emotion="concerned"] .nova-brow-node {
+  top: calc(var(--nova-brow) + 0.7%);
+}
+
+.nova-avatar-stage[data-emotion="focused"] .nova-eye {
+  filter: blur(1.2px) brightness(1.18);
+}
+
+.nova-avatar-stage[data-speaking="true"] .nova-eye {
+  animation-duration: 3.4s;
+}
+
+.nova-lightpaths {
+  position: absolute;
+  inset: 8% 18% 22%;
+  z-index: 4;
+  pointer-events: none;
+  opacity: 0;
+  background: linear-gradient(105deg, transparent 20%, rgba(120, 210, 255, 0.16) 48%, transparent 72%);
+  mix-blend-mode: screen;
+  mask-image: radial-gradient(ellipse at 50% 38%, #000 30%, transparent 72%);
+}
+
+.nova-sweep {
+  position: absolute;
+  inset: 12% 16% 28%;
+  z-index: 4;
+  pointer-events: none;
+  opacity: 0;
+  background: linear-gradient(90deg, transparent, rgba(170, 230, 255, 0.18), transparent);
+  mix-blend-mode: screen;
+}
+
+.nova-error-pip {
+  position: absolute;
+  top: 17%;
+  right: 29%;
+  z-index: 6;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--nova-error);
+  box-shadow: 0 0 10px rgba(210, 90, 50, 0.8);
+  opacity: 0;
+}
+
+.nova-stage[data-state="IDLE"] .nova-glow-asset {
+  opacity: 0.78;
+}
+
+.nova-stage[data-state="LISTENING"] .nova-eye,
+.nova-stage[data-state="THINKING"] .nova-eye,
+.nova-stage[data-state="SPEAKING"] .nova-eye {
+  opacity: 1;
+  filter: blur(1.1px) brightness(1.28);
+}
+
+.nova-stage[data-state="LISTENING"] .nova-hud-ring.a,
+.nova-stage[data-state="THINKING"] .nova-hud-ring.a,
+.nova-stage[data-state="SPEAKING"] .nova-hud-ring.a {
+  stroke: rgba(140, 220, 255, 0.78);
+}
+
+.nova-stage[data-state="THINKING"] .nova-hud-ring.a {
+  animation-duration: 14s;
+}
+
+.nova-stage[data-state="THINKING"] .nova-hud-ticks {
+  animation-duration: 16s;
+}
+
+.nova-stage[data-state="THINKING"] .nova-hud-ring.b,
+.nova-stage[data-state="WORKING"] .nova-hud-ring.b {
+  animation-duration: 16s;
+}
+
+.nova-stage[data-state="WORKING"] .nova-hud-ring.a {
+  animation-duration: 12s;
+}
+
+.nova-stage[data-state="THINKING"] .nova-lightpaths {
+  opacity: 1;
+  animation: nova-paths 2.8s linear infinite;
+}
+
+.nova-stage[data-state="THINKING"] .nova-particle {
+  opacity: 0.48;
+  animation-duration: 7.5s;
+}
+
+.nova-stage[data-state="WORKING"] .nova-sweep {
+  opacity: 1;
+  animation: nova-sweep 2.2s ease-in-out infinite;
+}
+
+.nova-stage[data-state="WORKING"] .nova-particle {
+  animation-duration: 6s;
+  opacity: 0.55;
+}
+
+.nova-stage[data-state="SPEAKING"] .nova-glow-asset {
+  opacity: 0.95;
+}
+
+.nova-stage[data-state="WAITING_FOR_APPROVAL"] .nova-hud-ring.c {
+  stroke: rgba(227, 154, 78, 0.7);
+  animation-duration: 22s;
+}
+
+.nova-stage[data-state="DONE"] .nova-glow-asset,
+.nova-stage[data-state="DONE"] .nova-eye {
+  animation: nova-done-flash 1.6s ease-out;
+}
+
+.nova-stage[data-state="ERROR"] .nova-error-pip {
+  opacity: 0.9;
+  animation: nova-error-pip 1.8s ease-in-out infinite;
+}
+
+.nova-listen-ring {
+  position: absolute;
+  left: 18%;
+  right: 18%;
+  top: 10%;
+  bottom: 18%;
+  border-radius: 50%;
+  border: 1px solid rgba(120, 210, 255, 0.0);
+  opacity: 0;
+  z-index: 2;
+}
+
+.nova-stage[data-state="LISTENING"] .nova-hud-ring.b {
+  animation-duration: 20s;
+}
+
+.nova-stage[data-state="LISTENING"] .nova-glow-asset {
+  opacity: 0.95;
+}
+
+.nova-stage[data-state="LISTENING"] .nova-listen-ring {
+  opacity: 1;
+  animation: nova-listen-pulse 1.8s ease-out infinite;
+}
+
+.nova-command-dock {
+  position: relative;
+  z-index: 5;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  margin-top: -72px;
+  padding-bottom: 10px;
+}
+
+.nova-speech {
+  width: min(90%, 760px);
+  max-height: 20vh;
+  overflow: auto;
+  margin: 0 0 6px;
+  padding: 8px 18px 12px;
+  text-align: center;
+  background: radial-gradient(ellipse at 50% 120%, rgba(40, 110, 200, 0.16), transparent 72%);
+  filter: drop-shadow(0 0 18px rgba(70, 160, 255, 0.12));
+}
+
+.nova-speech-name {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 10px;
+  letter-spacing: 0.38em;
+  color: rgba(150, 210, 255, 0.55);
+}
+
+.nova-speech p {
+  margin: 0;
+  font-size: 16px;
+  line-height: 1.55;
+  color: rgba(245, 250, 255, 0.92);
+  white-space: pre-wrap;
+}
+
+.nova-status-copy {
+  min-height: 1.2em;
+  margin: 0 0 8px;
+  text-align: center;
+  font-size: 13px;
+  letter-spacing: 0.03em;
+  color: rgba(210, 224, 245, 0.62);
+}
+
+.nova-command {
+  width: min(94%, 920px);
+  border-radius: 28px;
+  border: 1px solid rgba(150, 210, 255, 0.34);
+  background: linear-gradient(180deg, rgba(18, 30, 50, 0.92), rgba(8, 14, 26, 0.9));
+  box-shadow:
+    0 0 0 1px rgba(255, 255, 255, 0.04) inset,
+    0 18px 46px rgba(0, 0, 0, 0.5),
+    0 0 42px rgba(40, 140, 255, 0.2);
+  backdrop-filter: blur(20px);
+  padding: 12px 14px 12px;
+}
+
+.nova-command input {
+  width: 100%;
+  background: transparent;
+  border: 0;
+  outline: none;
+  color: rgba(245, 250, 255, 0.95);
+  font-size: 17px;
+  padding: 8px 16px 8px;
+}
+
+.nova-command input::placeholder {
+  color: rgba(180, 205, 235, 0.42);
+}
+
+.nova-chip {
+  font-size: 11px;
+  letter-spacing: 0.01em;
+  color: rgba(190, 214, 240, 0.5);
+  padding: 6px 8px;
+}
+
+.nova-icon-btn {
+  width: 44px;
+  height: 44px;
+}
+
+.nova-command-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 6px 2px;
+  flex-wrap: wrap;
+}
+
+.nova-command-tools {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+}
+
+.nova-chip,
+.nova-icon-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 0;
+  background: transparent;
+  color: rgba(210, 228, 250, 0.55);
+  font-size: 11px;
+  cursor: pointer;
+  border-radius: 999px;
+  padding: 7px 10px;
+  transition: background 0.2s ease, color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.nova-chip:hover,
+.nova-icon-btn:hover {
+  background: rgba(120, 180, 255, 0.1);
+  color: rgba(240, 248, 255, 0.9);
+}
+
+.nova-icon-btn {
+  width: 44px;
+  height: 44px;
+  justify-content: center;
+  padding: 0;
+  font-size: 18px;
+}
+
+.nova-icon-btn.send {
+  background: radial-gradient(circle at 40% 35%, #5ad0ff, #1e7dff);
+  color: white;
+  box-shadow: 0 0 18px rgba(60, 170, 255, 0.45);
+}
+
+.nova-icon-btn.send:disabled {
+  opacity: 0.28;
+  box-shadow: none;
+}
+
+.nova-icon-btn.listening {
+  background: rgba(90, 200, 255, 0.2);
+  color: white;
+  box-shadow: 0 0 16px rgba(80, 190, 255, 0.35);
+}
+
+.nova-icon-btn.voice-off {
+  opacity: 0.42;
+}
+
+.nova-chip.stop {
+  color: rgba(240, 248, 255, 0.82);
+  border: 1px solid rgba(150, 210, 255, 0.28);
+  padding: 6px 12px;
+}
+
+.nova-voice-hint {
+  margin: 0 0 6px;
+  text-align: center;
+  font-size: 12px;
+  color: rgba(190, 210, 230, 0.55);
+}
+
+.nova-icon-btn.prepared {
+  opacity: 0.55;
+}
+
+.nova-hint {
+  margin: 4px 8px 0;
+  font-size: 11px;
+  color: rgba(227, 154, 78, 0.8);
+}
+
+.nova-voice {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  margin-top: 10px;
+}
+
+.nova-voice-label {
+  font-size: 10px;
+  letter-spacing: 0.38em;
+  color: rgba(180, 205, 235, 0.38);
+}
+
+.nova-wave {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  height: 22px;
+}
+
+.nova-wave span {
+  width: 2px;
+  height: 6px;
+  border-radius: 99px;
+  background: rgba(90, 180, 255, 0.55);
+  transform-origin: center;
+}
+
+.nova-wave.idle span {
+  animation: nova-wave-idle 2.8s ease-in-out infinite;
+}
+
+.nova-wave.listening span {
+  animation: nova-wave-listen 0.9s ease-in-out infinite;
+  background: #8de7ff;
+  box-shadow: 0 0 8px rgba(90, 220, 255, 0.7);
+}
+
+.nova-panel {
+  border: 1px solid rgba(170, 210, 255, 0.16);
+  background: linear-gradient(180deg, rgba(20, 30, 48, 0.82), rgba(10, 16, 28, 0.78));
+  backdrop-filter: blur(24px);
+  box-shadow:
+    0 16px 36px rgba(0, 0, 0, 0.38),
+    0 0 0 1px rgba(255, 255, 255, 0.04) inset,
+    0 0 24px rgba(50, 130, 230, 0.1);
+}
+
+.nova-sidebar {
+  display: flex;
+  flex-direction: column;
+  border-radius: 24px;
+  padding: 20px 14px 14px;
+  min-height: calc(100dvh - 36px);
+}
+
+.nova-brand {
+  padding: 4px 12px 18px;
+}
+
+.nova-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex: 1;
+}
+
+.nova-nav button {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  border: 0;
+  background: transparent;
+  color: rgba(220, 232, 250, 0.72);
+  font-size: 14.5px;
+  text-align: left;
+  border-radius: 14px;
+  padding: 10px 12px;
+  cursor: pointer;
+}
+
+.nova-nav-icon {
+  display: grid;
+  width: 22px;
+  place-items: center;
+  flex: none;
+}
+
+.nova-nav button.active {
+  background: linear-gradient(90deg, rgba(46, 118, 230, 0.5), rgba(40, 110, 220, 0.1));
+  color: white;
+  box-shadow: inset 0 0 0 1px rgba(140, 200, 255, 0.2), 0 8px 20px rgba(20, 80, 180, 0.16);
+}
+
+.nova-nav button:hover {
+  color: white;
+  background: rgba(120, 180, 255, 0.08);
+}
+
+.nova-brand strong {
+  display: block;
+  font-size: 20px;
+  font-weight: 600;
+  letter-spacing: 0.32em;
+}
+
+.nova-brand span {
+  display: block;
+  margin-top: 4px;
+  font-size: 11px;
+  color: rgba(190, 210, 235, 0.5);
+}
+
+.nova-nav button:hover {
+  color: white;
+  background: rgba(120, 180, 255, 0.08);
+}
+
+.nova-user {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: auto;
+  padding: 10px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.nova-user-mark {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: radial-gradient(circle at 35% 30%, #7ec8ff, #1d4f9a);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.nova-user small {
+  display: block;
+  color: rgba(170, 200, 235, 0.5);
+}
+
+.nova-context {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-height: 0;
+}
+
+.nova-card {
+  border-radius: 20px;
+  padding: 18px 20px;
+  background: linear-gradient(180deg, rgba(22, 34, 54, 0.78), rgba(12, 18, 32, 0.72));
+}
+
+.nova-card h3 {
+  margin: 0 0 12px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: rgba(230, 240, 255, 0.78);
+}
+
+.nova-card-meta {
+  margin: 4px 0 0;
+  font-size: 12px;
+  color: rgba(180, 205, 235, 0.5);
+}
+
+.nova-item {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  padding: 10px 0;
+}
+
+.nova-item strong {
+  display: block;
+  font-size: 14px;
+  font-weight: 500;
+  color: rgba(245, 250, 255, 0.92);
+}
+
+.nova-item span {
+  display: block;
+  margin-top: 2px;
+  font-size: 12px;
+  color: rgba(180, 205, 235, 0.42);
+}
+
+.nova-online {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.nova-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #3ee0a0;
+  box-shadow: 0 0 10px rgba(62, 224, 160, 0.8);
+}
+
+.nova-dot.off {
+  background: #d0764c;
+  box-shadow: 0 0 10px rgba(208, 118, 76, 0.7);
+}
+
+.nova-quote {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.45;
+  color: rgba(236, 244, 255, 0.78);
+}
+
+.nova-quote cite {
+  display: block;
+  margin-top: 10px;
+  font-style: normal;
+  font-size: 10px;
+  letter-spacing: 0.22em;
+  color: rgba(170, 200, 235, 0.45);
+}
+
+.nova-item + .nova-item {
+  border-top: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.nova-item-pip {
+  width: 8px;
+  height: 8px;
+  margin-top: 6px;
+  border-radius: 50%;
+  background: var(--nova-cyan);
+  box-shadow: 0 0 8px rgba(62, 198, 255, 0.7);
+  flex: none;
+}
+
+.nova-item-pip.warm {
+  background: var(--nova-orange);
+  box-shadow: 0 0 8px rgba(227, 154, 78, 0.7);
+}
+
+.nova-empty {
+  margin: 0;
+  font-size: 12px;
+  color: rgba(180, 205, 235, 0.4);
+}
+
+.nova-mobile-bar {
+  display: none;
+}
+
+.nova-scrim {
+  display: none;
+}
+
+@keyframes nova-idle-sway {
+  0%, 100% { transform: translate3d(0, 0, 0) scale(1); }
+  50% { transform: translate3d(0, -5px, 0) scale(1.01); }
+}
+
+@keyframes nova-glow-pulse {
+  0%, 100% { opacity: 0.68; }
+  50% { opacity: 1; }
+}
+
+@keyframes nova-mist-breathe {
+  0%, 100% { opacity: 0.7; transform: scale(1); }
+  50% { opacity: 1; transform: scale(1.04); }
+}
+
+@keyframes nova-ray-drift {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+@keyframes nova-spin-cw {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+@keyframes nova-spin-ccw {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(-360deg); }
+}
+
+@keyframes nova-float {
+  0%, 100% { transform: translate3d(0, 0, 0); opacity: 0.18; }
+  50% { transform: translate3d(6px, -14px, 0); opacity: 0.55; }
+}
+
+@keyframes nova-eye-live {
+  0%, 100% { opacity: 0.55; }
+  50% { opacity: 0.92; }
+}
+
+@keyframes nova-blink {
+  0%, 93%, 100% { opacity: 0; transform: translate(-50%, -50%) scaleY(0.12); }
+  95%, 96.4% { opacity: 0.92; transform: translate(-50%, -50%) scaleY(1); }
+}
+
+@keyframes nova-paths {
+  from { transform: translateX(-18%); }
+  to { transform: translateX(18%); }
+}
+
+@keyframes nova-sweep {
+  0% { transform: translateX(-40%); opacity: 0; }
+  30% { opacity: 0.8; }
+  100% { transform: translateX(40%); opacity: 0; }
+}
+
+@keyframes nova-done-flash {
+  0% { filter: brightness(1); opacity: 0.8; }
+  30% { filter: brightness(1.45); opacity: 1; }
+  100% { filter: brightness(1); opacity: 0.8; }
+}
+
+@keyframes nova-error-pip {
+  0%, 100% { opacity: 0.45; }
+  50% { opacity: 1; }
+}
+
+@keyframes nova-listen-pulse {
+  0% { box-shadow: 0 0 0 0 rgba(90, 200, 255, 0.0); border-color: rgba(120, 210, 255, 0.0); transform: scale(0.92); }
+  40% { border-color: rgba(120, 210, 255, 0.35); }
+  100% { box-shadow: 0 0 40px 8px rgba(90, 200, 255, 0); border-color: rgba(120, 210, 255, 0); transform: scale(1.08); }
+}
+
+@keyframes nova-wave-idle {
+  0%, 100% { transform: scaleY(1); }
+  50% { transform: scaleY(1.6); }
+}
+
+@keyframes nova-wave-listen {
+  0%, 100% { transform: scaleY(0.7); }
+  50% { transform: scaleY(2.8); }
+}
+
+@media (min-width: 1920px) {
+  .nova-shell {
+    grid-template-columns: 268px minmax(0, 1fr) 330px;
+    padding: 22px 28px 18px;
+  }
+  .nova-avatar-stage {
+    width: min(100%, 1020px);
+    height: clamp(520px, 76vh, 1080px);
+  }
+}
+
+@media (min-width: 2560px) {
+  .nova-shell {
+    grid-template-columns: 280px minmax(0, 1fr) 360px;
+  }
+  .nova-avatar-stage {
+    width: min(100%, 1140px);
+    height: clamp(620px, 78vh, 1240px);
+  }
+}
+
+@media (max-width: 1439px) {
+  .nova-shell {
+    grid-template-columns: 86px minmax(0, 1fr) 260px;
+  }
+  .nova-brand span,
+  .nova-nav button span.label,
+  .nova-user div {
+    display: none;
+  }
+  .nova-nav button {
+    justify-content: center;
+    padding: 10px 0;
+  }
+  .nova-hero-copy {
+    display: none;
+  }
+}
+
+@media (max-width: 1100px) {
+  .nova-shell {
+    display: block;
+    padding: 0;
+  }
+  .nova-sidebar,
+  .nova-context {
+    position: fixed;
+    top: 12px;
+    bottom: 12px;
+    z-index: 20;
+    width: min(84vw, 320px);
+    transition: transform 0.28s ease;
+  }
+  .nova-sidebar {
+    left: 12px;
+    transform: translateX(calc(-100% - 24px));
+  }
+  .nova-context {
+    right: 12px;
+    transform: translateX(calc(100% + 24px));
+    overflow: auto;
+  }
+  .nova-sidebar.open,
+  .nova-context.open {
+    transform: translateX(0);
+  }
+  .nova-center {
+    min-height: 100dvh;
+    padding: 64px 12px 18px;
+  }
+  .nova-avatar-stage {
+    width: min(94vw, 640px);
+    height: clamp(340px, 62vh, 720px);
+  }
+  .nova-mobile-bar {
+    display: flex;
+    justify-content: space-between;
+    position: absolute;
+    top: 14px;
+    left: 14px;
+    right: 14px;
+    z-index: 8;
+  }
+  .nova-scrim.show {
+    display: block;
+    position: fixed;
+    inset: 0;
+    z-index: 15;
+    background: rgba(0, 0, 0, 0.45);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .nova-avatar-live,
+  .nova-glow-asset,
+  .nova-hud-ring,
+  .nova-hud-ticks,
+  .nova-hud-dots,
+  .nova-particle,
+  .nova-eye,
+  .nova-eyelid,
+  .nova-brow-node,
+  .nova-lightpaths,
+  .nova-sweep,
+  .nova-mist,
+  .nova-rays,
+  .nova-wave span,
+  .nova-listen-ring,
+  .nova-error-pip {
+    animation: none !important;
+  }
+  .nova-eye {
+    opacity: 0.75;
+  }
+  .nova-avatar-stage[data-speaking="true"] .nova-avatar-live {
+    transform: none;
+  }
+  .nova-mouth-aperture,
+  .nova-jaw-hint {
+    transition: none;
+  }
+}

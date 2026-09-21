@@ -3,6 +3,7 @@ export type OrbState =
   | "LISTENING"
   | "THINKING"
   | "WORKING"
+  | "SPEAKING"
   | "WAITING_FOR_APPROVAL"
   | "DONE"
   | "ERROR";

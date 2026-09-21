@@ -13,6 +13,8 @@ export type ArchiveItem = {
   company?: { name: string } | null;
   communication?: { subject: string; status: string } | null;
   task?: { title: string } | null;
+  project?: { name: string } | null;
+  contact?: { firstName: string; lastName: string; role?: string | null } | null;
 };
 
 const FILTERS = [
@@ -74,7 +76,7 @@ export function ArchivePanel({
 
   return (
     <aside
-      className={`fixed inset-y-0 right-0 z-30 flex w-full max-w-[440px] flex-col border-l border-white/8 bg-[#0b0b10]/92 backdrop-blur-xl transition-transform duration-300 ${
+      className={`fixed inset-y-0 right-0 z-30 flex w-full max-w-[440px] flex-col border-l border-[rgba(140,190,255,0.16)] bg-[rgba(8,14,26,0.92)] backdrop-blur-xl transition-transform duration-300 ${
         open ? "translate-x-0" : "translate-x-full"
       }`}
       aria-hidden={!open}

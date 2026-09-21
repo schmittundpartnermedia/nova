@@ -1,10 +1,11 @@
 @import "tailwindcss";
+@import "./nova-ui.css";
 
 :root {
-  --nova-bg: #07070b;
-  --nova-fg: #e8e6e3;
-  --nova-muted: rgba(232, 230, 227, 0.46);
-  --nova-line: rgba(255, 255, 255, 0.08);
+  --nova-bg: #000;
+  --nova-fg: #f4f7fb;
+  --nova-muted: rgba(210, 224, 245, 0.46);
+  --nova-line: rgba(140, 190, 255, 0.16);
 }
 
 @theme inline {

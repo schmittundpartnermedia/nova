@@ -12,7 +12,8 @@
     "db:migrate": "prisma migrate dev",
     "db:seed": "tsx prisma/seed.ts",
     "db:reset": "prisma migrate reset --force",
-    "verify": "tsx scripts/verify-demo.ts"
+    "verify": "tsx scripts/verify-demo.ts",
+    "verify:voice": "tsx scripts/verify-voice.ts"
   },
   "dependencies": {
     "@prisma/client": "^6.16.3",

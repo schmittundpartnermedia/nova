@@ -14,7 +14,7 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: "NOVA",
-  description: "Persönlicher KI-Business-Assistent",
+  description: "Dein Business. Deine KI.",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {

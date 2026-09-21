@@ -69,4 +69,5 @@ npx prisma studio    # Datenbank ansehen
 - Recherche: kein echter Search Connector; keine erfundenen Live-Treffer
 - Mail/Kalender/Drive: nur Interfaces + Mocks
 - Spracheingabe: vorbereitet (Web Speech API, falls der Browser sie anbietet)
+- Sprachausgabe: OpenAI `gpt-4o-mini-tts`, lokal ein- und ausschaltbar
 - Multi-Tenant: technisch vorbereitet, in der UI unsichtbar
