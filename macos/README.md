@@ -45,19 +45,17 @@ Ergebnis:
 
 Bundle Identifier: `io.elevum.nova`
 
-## Finales App-Icon
+## App-Icon
 
-Der Build erzeugt nur dann ein neutrales Placeholder-Icon, wenn noch keine Icon-Quellen liegen.
+Aktuelles Icon: Navy-Quadrat mit Cyan-Aura und der Schrift **NOVA**, in den Farben der Oberfläche.
 
-**Finales Icon hier einsetzen:**
+**Dateien:**
 
-1. Quelldateien: `macos/launcher/Resources/AppIcon.iconset/`
-   - Pflicht für Retina: `icon_512x512@2x.png` (1024×1024)
-   - zusätzlich die Standardgrößen `icon_16x16.png` bis `icon_512x512.png` samt `@2x`
-2. Danach `npm run macos:build` ausführen.
-3. Die gebaute Datei liegt in `NOVA.app/Contents/Resources/AppIcon.icns`.
+- Generator: `macos/launcher/scripts/generate-app-icon.swift`
+- Quell-PNGs: `macos/launcher/Resources/AppIcon.iconset/`
+- Gebautes Icon: `macos/build/NOVA.app/Contents/Resources/AppIcon.icns`
 
-Kein Fantasie-Logo im Placeholder. Einfach ein graues abgerundetes Quadrat ersetzen.
+Ein späteres finales Artwork einfach als `icon_512x512@2x.png` (1024×1024) plus die übrigen Größen in `AppIcon.iconset/` ablegen und `npm run macos:build` ausführen. Wenn der Generator nicht überschreiben soll, `generate-app-icon.swift` im Build-Skript auskommentieren.
 
 ## Logs
 

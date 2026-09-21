@@ -13,22 +13,11 @@ echo "NOVA.app bauen in $APP"
 
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources" "$ICONSET"
 
-if [[ ! -f "$ICONSET/icon_512x512@2x.png" ]]; then
-  python3 "$ROOT/macos/launcher/scripts/generate-placeholder-icon.py" "$ICONSET"
-fi
-
-if [[ ! -f "$ICONSET/icon_16x16.png" ]]; then
-  sips -z 16 16 "$ICONSET/icon_512x512@2x.png" --out "$ICONSET/icon_16x16.png" >/dev/null
-  sips -z 32 32 "$ICONSET/icon_512x512@2x.png" --out "$ICONSET/icon_16x16@2x.png" >/dev/null
-  sips -z 32 32 "$ICONSET/icon_512x512@2x.png" --out "$ICONSET/icon_32x32.png" >/dev/null
-  sips -z 64 64 "$ICONSET/icon_512x512@2x.png" --out "$ICONSET/icon_32x32@2x.png" >/dev/null
-  sips -z 128 128 "$ICONSET/icon_512x512@2x.png" --out "$ICONSET/icon_128x128.png" >/dev/null
-  sips -z 256 256 "$ICONSET/icon_512x512@2x.png" --out "$ICONSET/icon_128x128@2x.png" >/dev/null
-  sips -z 256 256 "$ICONSET/icon_512x512@2x.png" --out "$ICONSET/icon_256x256.png" >/dev/null
-  sips -z 512 512 "$ICONSET/icon_512x512@2x.png" --out "$ICONSET/icon_256x256@2x.png" >/dev/null
-  sips -z 512 512 "$ICONSET/icon_512x512@2x.png" --out "$ICONSET/icon_512x512.png" >/dev/null
-fi
-
+swift "$ROOT/macos/launcher/scripts/generate-app-icon.swift" "$ICONSET"
+for png in "$ICONSET"/*.png; do
+  sips -s format png "$png" --out "$png" >/dev/null
+done
+xattr -cr "$ICONSET" >/dev/null 2>&1 || true
 iconutil -c icns "$ICONSET" -o "$RES/AppIcon.icns"
 
 SDK="$(xcrun --show-sdk-path)"
