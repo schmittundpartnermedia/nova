@@ -1,4 +1,5 @@
 import { detectHardBlock, isHardBlockedPath } from "@/lib/computer/hard-blocks";
+import { isIrreversibleBrowserAction } from "@/lib/computer/browser-policy";
 import type { ApprovalClass, ComputerRiskClass } from "@/lib/computer/types";
 
 export type RiskDecision = {
@@ -207,8 +208,14 @@ export function classifyComputerAction(input: {
     };
   }
   if (input.tool === "browser") {
-    if (["submit", "purchase", "pay", "post"].includes(input.action)) {
-      return decision("EXTERNAL_SIDE_EFFECT", false, "Browseraktion mit externer Wirkung.");
+    if (isIrreversibleBrowserAction(input.action, input.target)) {
+      return decision("EXTERNAL_SIDE_EFFECT", false, "Browseraktion mit externer irreversibler Wirkung.");
+    }
+    if (input.action === "upload") {
+      return decision("WORKSPACE_WRITE", true, "Datei für Upload vorbereiten, ohne das Formular abzusenden.");
+    }
+    if (input.action === "download") {
+      return decision("READ_ONLY", true, "Download in den kontrollierten NOVA-Workspace.");
     }
     return decision("READ_ONLY", true, "Lesende oder lokale Browseraktion.");
   }

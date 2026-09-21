@@ -58,24 +58,51 @@ export const cursorActionSchema = z.discriminatedUnion("action", [
   z.object({ action: z.literal("status"), jobId: z.string().min(1) }),
 ]);
 
+export const browserLocatorSchema = z.object({
+  role: z.string().min(1).max(80).optional(),
+  name: z.string().min(1).max(500).optional(),
+  label: z.string().min(1).max(500).optional(),
+  text: z.string().min(1).max(500).optional(),
+  testId: z.string().min(1).max(200).optional(),
+  placeholder: z.string().min(1).max(500).optional(),
+  alt: z.string().min(1).max(500).optional(),
+  title: z.string().min(1).max(500).optional(),
+  selector: z.string().min(1).max(500).optional(),
+  exact: z.boolean().optional(),
+});
+
+const browserTargetFields = {
+  selector: z.string().min(1).max(500).optional(),
+  locator: browserLocatorSchema.optional(),
+};
+
 export const browserActionSchema = z.discriminatedUnion("action", [
   z.object({ action: z.literal("open"), url: z.string().min(1).max(2000) }),
   z.object({ action: z.literal("navigate"), url: z.string().min(1).max(2000) }),
   z.object({ action: z.literal("back") }),
   z.object({ action: z.literal("forward") }),
+  z.object({ action: z.literal("reload") }),
   z.object({ action: z.literal("newTab"), url: z.string().max(2000).optional() }),
   z.object({ action: z.literal("closeTab") }),
   z.object({ action: z.literal("listTabs") }),
   z.object({ action: z.literal("switchTab"), index: z.number().int().nonnegative() }),
   z.object({ action: z.literal("read") }),
-  z.object({ action: z.literal("click"), selector: z.string().min(1).max(500) }),
-  z.object({ action: z.literal("type"), selector: z.string().min(1).max(500), text: z.string().max(20_000) }),
-  z.object({ action: z.literal("select"), selector: z.string().min(1).max(500), value: z.string().max(500) }),
-  z.object({ action: z.literal("scroll"), dy: z.number().optional(), dx: z.number().optional() }),
-  z.object({ action: z.literal("waitFor"), selector: z.string().max(500).optional(), url: z.string().max(2000).optional(), timeoutMs: z.number().int().positive().max(60_000).optional() }),
-  z.object({ action: z.literal("screenshot") }),
-  z.object({ action: z.literal("download"), selector: z.string().max(500).optional() }),
-  z.object({ action: z.literal("upload"), selector: z.string().min(1).max(500), filePath: z.string().min(1) }),
+  z.object({ action: z.literal("inspect"), maxItems: z.number().int().positive().max(200).optional() }),
+  z.object({ action: z.literal("click"), ...browserTargetFields }),
+  z.object({ action: z.literal("type"), ...browserTargetFields, text: z.string().max(20_000) }),
+  z.object({ action: z.literal("select"), ...browserTargetFields, value: z.string().max(500) }),
+  z.object({ action: z.literal("check"), ...browserTargetFields, checked: z.boolean().optional() }),
+  z.object({ action: z.literal("scroll"), dy: z.number().optional(), dx: z.number().optional(), ...browserTargetFields }),
+  z.object({
+    action: z.literal("waitFor"),
+    ...browserTargetFields,
+    url: z.string().max(2000).optional(),
+    timeoutMs: z.number().int().positive().max(60_000).optional(),
+  }),
+  z.object({ action: z.literal("screenshot"), persist: z.boolean().optional() }),
+  z.object({ action: z.literal("download"), ...browserTargetFields, timeoutMs: z.number().int().positive().max(60_000).optional() }),
+  z.object({ action: z.literal("upload"), ...browserTargetFields, filePath: z.string().min(1) }),
+  z.object({ action: z.literal("submit"), ...browserTargetFields }),
 ]);
 
 export const applicationActionSchema = z.discriminatedUnion("action", [

@@ -19,6 +19,8 @@
     "validate:avatar": "tsx scripts/validate-nova-avatar.ts",
     "verify:conversation": "tsx scripts/verify-conversation.ts",
     "verify:computer": "tsx scripts/verify-computer.ts",
+    "verify:browser": "tsx scripts/verify-browser.ts",
+    "playwright:install": "PLAYWRIGHT_BROWSERS_PATH=.nova/ms-playwright playwright install chromium",
     "desktop-service": "tsx services/desktop-service/index.ts",
     "macos:build": "bash macos/launcher/scripts/build.sh",
     "generate:dev-rig": "tsx scripts/generate-dev-rig.ts"
@@ -27,6 +29,7 @@
     "@prisma/client": "^6.16.3",
     "next": "16.3.5",
     "openai": "^7.20.0",
+    "playwright": "^1.63.0",
     "react": "19.2.8",
     "react-dom": "19.2.8",
     "three": "^0.186.0",

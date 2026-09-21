@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="de">
+  <head>
+    <meta charset="utf-8" />
+    <title>NOVA Browser Fixture</title>
+  </head>
+  <body>
+    <h1>NOVA Browser Fixture</h1>
+    <p>Öffentliche Testseite für DOM, Formulare und Downloads. Ungefährlich.</p>
+    <nav>
+      <a href="/page-two.html">Zweite Seite</a>
+      <a href="/inject.html">Injection Seite</a>
+      <a href="/download.txt" download>Download sample</a>
+    </nav>
+    <form id="contact" action="/submitted" method="post">
+      <p>
+        <label for="name">Name</label>
+        <input id="name" name="name" data-testid="name" />
+      </p>
+      <p>
+        <label for="email">Email</label>
+        <input id="email" name="email" type="email" data-testid="email" />
+      </p>
+      <p>
+        <label for="color">Color</label>
+        <select id="color" name="color" data-testid="color">
+          <option value="red">Red</option>
+          <option value="blue">Blue</option>
+        </select>
+      </p>
+      <p>
+        <label><input type="checkbox" name="ok" data-testid="agree" /> I agree</label>
+      </p>
+      <p>
+        <label><input type="radio" name="size" value="s" data-testid="size-s" /> S</label>
+        <label><input type="radio" name="size" value="m" data-testid="size-m" /> M</label>
+      </p>
+      <p>
+        <label for="file">File</label>
+        <input id="file" name="file" type="file" data-testid="file" />
+      </p>
+      <button type="submit">Absenden</button>
+    </form>
+  </body>
+</html>

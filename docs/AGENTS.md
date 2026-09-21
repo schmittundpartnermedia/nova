@@ -24,7 +24,7 @@ Der Master wählt Agenten dynamisch anhand dieser Metadaten und eines Plans vom 
 | Communication | Mail-Entwürfe, kein Versand |
 | Task | Folgeaufgaben / Wiedervorlagen |
 | Project | Projektkontext laden |
-| Computer | Lokale Mac-Steuerung über Desktop Service: Git, Dateien, Shell, Prozesse, Browser-Erreichbarkeit, Cursor CLI |
+| Computer | Lokale Mac-Steuerung über Desktop Service: Git, Dateien, Shell, Prozesse, Playwright-Browser, Cursor CLI |
 
 ## Vorbereitet (Registry, nicht vollständig)
 

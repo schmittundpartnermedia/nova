@@ -232,13 +232,10 @@ function decorate(
   if (id.startsWith("filesystem.") || id.startsWith("shell.") || id.startsWith("process.")) {
     return { ...record, status: "AVAILABLE" };
   }
-  if (id === "browser.open" || id === "browser.read") {
-    return { ...record, status: "AVAILABLE", reason: id === "browser.open" ? "macOS open / HTTP-Verify" : "HTTP-Read, Playwright optional" };
-  }
   if (id.startsWith("browser.")) {
     return ctx.playwright
-      ? { ...record, status: "AVAILABLE", reason: "Playwright verfügbar." }
-      : { ...record, status: "UNAVAILABLE", reason: "Playwright ist nicht installiert." };
+      ? { ...record, status: "AVAILABLE", reason: "Playwright-Chromium mit persistenter NOVA-Session." }
+      : { ...record, status: "UNAVAILABLE", reason: "Playwright oder Chromium ist nicht verfügbar." };
   }
   if (id === "macos.app.launch" || id === "macos.app.focus") {
     return { ...record, status: ctx.darwin ? "AVAILABLE" : "UNAVAILABLE" };
