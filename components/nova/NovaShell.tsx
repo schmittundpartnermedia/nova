@@ -520,32 +520,37 @@ export function NovaShell() {
           </div>
 
           <div className={`nova-hero ${commOpen && commLines.length > 0 ? "has-comm" : ""}`}>
-            <p className="nova-hero-copy left">
-              Denken
-              <br />
-              Planen
-              <br />
-              Umsetzen
-            </p>
-            <NovaAvatar
-              state={uiState}
-              performance={performance}
-              onRuntime={(runtime) => {
-                bindFacialSink(runtime ? (frame) => runtime.applyFrame(frame) : null);
-              }}
-            />
-            <NovaCommunicationLayer
-              open={commOpen && commLines.length > 0}
-              lines={commLines}
-              onReopen={() => void reopenConversation()}
-            />
-            <p className="nova-hero-copy right">
-              Dein
-              <br />
-              Business
-              <br />
-              Assistant
-            </p>
+            <div className="nova-comm-rail">
+              <p className="nova-hero-copy left">
+                Denken
+                <br />
+                Planen
+                <br />
+                Umsetzen
+              </p>
+              <NovaCommunicationLayer
+                open={commOpen && commLines.length > 0}
+                lines={commLines}
+                hasHistory={visibleLines.length > 0}
+                onReopen={() => void reopenConversation()}
+              />
+            </div>
+            <div className="nova-hero-stage">
+              <NovaAvatar
+                state={uiState}
+                performance={performance}
+                onRuntime={(runtime) => {
+                  bindFacialSink(runtime ? (frame) => runtime.applyFrame(frame) : null);
+                }}
+              />
+              <p className="nova-hero-copy right">
+                Dein
+                <br />
+                Business
+                <br />
+                Assistant
+              </p>
+            </div>
           </div>
 
           <div className="nova-command-dock">
