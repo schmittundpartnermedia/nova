@@ -1,4 +1,6 @@
 import AppKit
+import AVFoundation
+import Speech
 import WebKit
 
 final class StatusWindowController: NSWindowController {
@@ -58,9 +60,11 @@ final class StatusWindowController: NSWindowController {
 final class NovaWebWindowController: NSWindowController, WKNavigationDelegate, WKUIDelegate {
     private var webView: WKWebView!
     private let startURL: URL
+    private let log: LogWriter?
 
-    init(startURL: URL) {
+    init(startURL: URL, log: LogWriter? = nil) {
         self.startURL = startURL
+        self.log = log
         let window = NSWindow(
             contentRect: NSRect(x: 0, y: 0, width: 1280, height: 820),
             styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView],
@@ -85,8 +89,55 @@ final class NovaWebWindowController: NSWindowController, WKNavigationDelegate, W
     }
 
     func loadUI() {
-        webView.load(URLRequest(url: startURL, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 30))
-        window?.makeKeyAndOrderFront(nil)
+        // Chrome Web Speech ≠ WKWebView: Safari/WebKit needs Apple Speech TCC
+        // before webkitSpeechRecognition can leave not-allowed.
+        ensureSpeechRecognitionAccess { [weak self] in
+            guard let self else { return }
+            self.webView.load(URLRequest(url: self.startURL, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 30))
+            self.window?.makeKeyAndOrderFront(nil)
+        }
+    }
+
+    func startVoiceFromPage() {
+        webView.evaluateJavaScript(
+            """
+            (function() {
+              var start = document.querySelector('[aria-label="Voice Session starten"]');
+              if (start) { start.click(); return "started"; }
+              var stop = document.querySelector('[aria-label="Voice Session beenden"]');
+              if (stop) return "already-active";
+              return "missing";
+            })()
+            """
+        ) { [weak self] result, error in
+            self?.log?.info("Voice-Start", fields: [
+                "result": (result as? String) ?? error?.localizedDescription ?? "nil",
+            ])
+        }
+    }
+
+    func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+        webView.evaluateJavaScript(
+            """
+            (function() {
+              var btn = document.querySelector('[aria-label="Voice Session starten"],[aria-label="Voice Session beenden"]');
+              var text = (document.body && document.body.innerText) || "";
+              return [
+                location.protocol + "//" + location.host,
+                String(window.isSecureContext === true),
+                String(!!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia)),
+                String(!!(window.SpeechRecognition || window.webkitSpeechRecognition)),
+                btn ? btn.getAttribute("aria-label") : "none",
+                btn ? String(btn.getAttribute("aria-pressed")) : "none",
+                text.indexOf("Mikrofonzugriff wurde verweigert") !== -1 ? "denied-text" : "ok"
+              ].join("|");
+            })()
+            """
+        ) { [weak self] result, error in
+            self?.log?.info("WebView-Voice-Status", fields: [
+                "value": (result as? String) ?? error?.localizedDescription ?? "nil",
+            ])
+        }
     }
 
     func webView(
@@ -96,6 +147,79 @@ final class NovaWebWindowController: NSWindowController, WKNavigationDelegate, W
         type: WKMediaCaptureType,
         decisionHandler: @escaping (WKPermissionDecision) -> Void
     ) {
-        decisionHandler(.grant)
+        let host = origin.host
+        let local = host == "127.0.0.1" || host == "localhost" || host == "::1"
+        guard local, type == .microphone || type == .cameraAndMicrophone else {
+            log?.info("WebView-Mikrofon abgelehnt", fields: [
+                "host": host,
+                "type": String(describing: type),
+            ])
+            decisionHandler(.deny)
+            return
+        }
+        requestMicrophoneAccess { [weak self] allowed in
+            DispatchQueue.main.async {
+                self?.log?.info("WebView-Mikrofonentscheidung", fields: [
+                    "host": host,
+                    "allowed": allowed ? "true" : "false",
+                    "tcc": self?.microphoneTccLabel(AVCaptureDevice.authorizationStatus(for: .audio)) ?? "unknown",
+                ])
+                decisionHandler(allowed ? .grant : .deny)
+            }
+        }
+    }
+
+    private func requestMicrophoneAccess(completion: @escaping (Bool) -> Void) {
+        switch AVCaptureDevice.authorizationStatus(for: .audio) {
+        case .authorized:
+            completion(true)
+        case .notDetermined:
+            AVCaptureDevice.requestAccess(for: .audio, completionHandler: completion)
+        case .denied, .restricted:
+            completion(false)
+        @unknown default:
+            completion(false)
+        }
+    }
+
+    private func ensureSpeechRecognitionAccess(then continueLoading: @escaping () -> Void) {
+        let finish: (SFSpeechRecognizerAuthorizationStatus) -> Void = { [weak self] status in
+            self?.log?.info("Spracheingabe-TCC", fields: ["status": self?.speechTccLabel(status) ?? "unknown"])
+            continueLoading()
+        }
+        switch SFSpeechRecognizer.authorizationStatus() {
+        case .authorized:
+            finish(.authorized)
+        case .denied:
+            finish(.denied)
+        case .restricted:
+            finish(.restricted)
+        case .notDetermined:
+            SFSpeechRecognizer.requestAuthorization { status in
+                DispatchQueue.main.async { finish(status) }
+            }
+        @unknown default:
+            finish(SFSpeechRecognizer.authorizationStatus())
+        }
+    }
+
+    private func microphoneTccLabel(_ status: AVAuthorizationStatus) -> String {
+        switch status {
+        case .notDetermined: return "notDetermined"
+        case .restricted: return "restricted"
+        case .denied: return "denied"
+        case .authorized: return "authorized"
+        @unknown default: return "unknown"
+        }
+    }
+
+    private func speechTccLabel(_ status: SFSpeechRecognizerAuthorizationStatus) -> String {
+        switch status {
+        case .notDetermined: return "notDetermined"
+        case .denied: return "denied"
+        case .restricted: return "restricted"
+        case .authorized: return "authorized"
+        @unknown default: return "unknown"
+        }
     }
 }

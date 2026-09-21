@@ -30,6 +30,8 @@
 	<true/>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>NOVA nutzt das Mikrofon für die Spracheingabe in der bestehenden Oberfläche.</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>NOVA erkennt gesprochene Sprache in der bestehenden Oberfläche.</string>
 	<key>NSPrincipalClass</key>
 	<string>NSApplication</string>
 </dict>

@@ -1,4 +1,5 @@
 import AppKit
+import AVFoundation
 import Darwin
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
@@ -32,7 +33,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
             supervisor = ProcessSupervisor(config: config, log: log)
             showStatus("STARTING", "Dependencies prüfen")
-            log.info("NOVA.app gestartet")
+            log.info("NOVA.app gestartet", fields: [
+                "microphoneTcc": microphoneTccLabel(AVCaptureDevice.authorizationStatus(for: .audio)),
+            ])
             workQueue.async { [weak self] in
                 self?.bootstrap()
             }
@@ -111,7 +114,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             NSWorkspace.shared.open(config.webURL)
         case .webview:
             if webWindow == nil {
-                webWindow = NovaWebWindowController(startURL: config.webURL)
+                webWindow = NovaWebWindowController(startURL: config.webURL, log: log)
             }
             webWindow?.loadUI()
             NSApp.activate(ignoringOtherApps: true)
@@ -167,6 +170,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         appMenu.addItem(withTitle: "Über NOVA", action: #selector(NSApplication.orderFrontStandardAboutPanel(_:)), keyEquivalent: "")
         appMenu.addItem(NSMenuItem.separator())
         appMenu.addItem(withTitle: "NOVA ausblenden", action: #selector(NSApplication.hide(_:)), keyEquivalent: "h")
+        appMenu.addItem(withTitle: "Voice Session starten", action: #selector(startVoiceSession), keyEquivalent: "")
         appMenu.addItem(withTitle: "NOVA beenden", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
         appItem.submenu = appMenu
         mainMenu.addItem(appItem)
@@ -181,5 +185,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         mainMenu.addItem(editItem)
 
         NSApp.mainMenu = mainMenu
+    }
+
+    @objc private func startVoiceSession() {
+        webWindow?.startVoiceFromPage()
+    }
+
+    private func microphoneTccLabel(_ status: AVAuthorizationStatus) -> String {
+        switch status {
+        case .notDetermined: return "notDetermined"
+        case .restricted: return "restricted"
+        case .denied: return "denied"
+        case .authorized: return "authorized"
+        @unknown default: return "unknown"
+        }
     }
 }

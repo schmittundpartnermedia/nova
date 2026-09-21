@@ -35,6 +35,8 @@ swiftc -O \
   "$SRC"/main.swift \
   -framework AppKit \
   -framework WebKit \
+  -framework AVFoundation \
+  -framework Speech \
   -framework Foundation
 
 cp "$RES/Info.plist" "$APP/Contents/Info.plist"
