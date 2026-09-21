@@ -15,9 +15,11 @@ Status:
 
 V1 markiert Recherche und Anschreiben als `prepared` / `suggested`. Versandversuche ohne Connector als `failed`. Niemals als `executed`, wenn nichts Externes passiert ist.
 
+Recherche speichert im Archiv die Nutzerfrage über den Job, die Queries, Quellen-IDs und das Ergebnis. Komplette Webseiten werden nicht archiviert.
+
 ## Deep Links
 
-`external_reference` und `external_url` führen später zur Original-Mail, zum Termin, zur Datei. In V1 sind sie leer, weil keine echten Connectoren verbunden sind.
+`external_reference` und `external_url` führen zur Original-Mail, zum Termin, zur Datei oder zur Recherchequelle.
 
 ## UI
 

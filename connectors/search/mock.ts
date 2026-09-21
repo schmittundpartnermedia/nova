@@ -1,18 +1,15 @@
-import type { SearchProvider } from "@/types/connectors";
+import type { SearchProvider, SearchQuery, SearchResponse } from "@/types/connectors";
 
 export class MockSearchProvider implements SearchProvider {
   id = "mock-search";
+  mock = true;
 
-  async search(_organizationId: string, query: string) {
+  async search(input: SearchQuery): Promise<SearchResponse> {
     return {
       mock: true,
-      results: [
-        {
-          title: "Mock-Suchergebnis",
-          snippet: `Keine echte Websuche. Query war: ${query}`,
-          url: null,
-        },
-      ],
+      results: [],
+      queries: [input.query],
+      error: "mock_search",
     };
   }
 }

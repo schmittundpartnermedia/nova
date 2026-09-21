@@ -19,6 +19,8 @@ Jeder Memory-Eintrag trägt:
 
 Memory ist nicht die Conversation. Smalltalk bleibt nur im Conversation Archive.
 
+Suchergebnisse und Rohquellen werden nicht automatisch zu Memory. Nur bestätigte, langlebige Fakten aus der Recherche können als `source_type=research` übernommen werden – immer mit Source-ID/URL.
+
 ## Relationen
 
 Beziehungen liegen in `MemoryRelation`, z. B.:

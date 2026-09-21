@@ -2,6 +2,7 @@ import type { NovaAgent } from "@/types/agents";
 import { prisma } from "@/lib/prisma";
 import { assertOrganizationId } from "@/services/tenant";
 import { isRealConnectorEnabled } from "@/connectors/registry";
+import { runResearchWorkflow } from "@/agents/research/workflow";
 
 const MOCK_SPONSORS = [
   { name: "Nordlicht Industrie GmbH", industry: "Maschinenbau", website: "https://example.invalid/nordlicht", firstName: "Clara", lastName: "Berg", role: "Leiterin Sponsoring" },
@@ -88,11 +89,11 @@ export const researchAgent: NovaAgent = {
   definition: {
     id: "research",
     name: "Research Agent",
-    description: "Webrecherche, Firmen, Personen, Ansprechpartner, Marktinformationen.",
-    capabilities: ["web-research", "companies", "people", "contacts", "market", "sources"],
+    description: "Echte Webrecherche mit Search Provider, Quellenbewertung und Fetch. Keine erfundenen Live-Treffer.",
+    capabilities: ["web-research", "companies", "people", "contacts", "market", "sources", "current-facts"],
     requiredTools: ["search"],
     inputSchema: { query: "string", count: "number", projectId: "string?" },
-    outputSchema: { companies: "Company[]", contacts: "Contact[]", mock: "boolean" },
+    outputSchema: { answer: "string", sourceIds: "string[]", mock: "boolean" },
     riskLevel: "low",
     implemented: true,
   },
@@ -100,6 +101,7 @@ export const researchAgent: NovaAgent = {
     assertOrganizationId(context.organizationId);
     const projectId = typeof input.projectId === "string" ? input.projectId : context.projectId;
     const allowMockCatalog = input.allowMockCatalog === true;
+    const query = String(input.query ?? context.userRequest ?? context.goal ?? "").trim();
 
     if (allowMockCatalog) {
       return runMockCatalog(input, context.organizationId, projectId);
@@ -110,27 +112,65 @@ export const researchAgent: NovaAgent = {
       return {
         ok: true,
         mock: false,
-        summary:
-          "Kein echter Search Connector verbunden. Ich kann keine aktuellen Unternehmen recherchieren und erfinde keine Treffer.",
+        summary: "Kein echter Search Connector verbunden. Ich kann keine aktuellen Informationen prüfen und erfinde keine Treffer.",
         data: {
           companyIds: [],
           contactIds: [],
+          sourceIds: [],
           mock: false,
           searchConnected: false,
           invented: false,
+          answer: "Ich kann die aktuelle Information gerade nicht zuverlässig prüfen.",
         },
       };
     }
 
+    const result = await runResearchWorkflow({
+      context: { ...context, projectId },
+      query,
+      allowLocal: input.allowLocal === true,
+      persistCompanies: input.persistCompanies !== false,
+    });
+
+    const companies = await prisma.company.findMany({
+      where: {
+        organizationId: context.organizationId,
+        sourceId: { in: result.sourceIds.length ? result.sourceIds : ["__none__"] },
+      },
+      select: { id: true },
+    });
+
     return {
-      ok: false,
+      ok: result.ok,
       mock: false,
-      summary: "Ein Search Connector ist markiert, aber noch nicht produktiv angebunden.",
+      summary: result.ok
+        ? result.answer
+        : result.answer || "Ich kann die aktuelle Information gerade nicht zuverlässig prüfen.",
       data: {
-        companyIds: [],
+        companyIds: companies.map((item) => item.id),
         contactIds: [],
-        searchConnected: true,
+        sourceIds: result.sourceIds,
+        mock: false,
+        searchConnected: result.searchConnected,
         invented: false,
+        answer: result.answer,
+        asOf: result.asOf ?? null,
+        confidence: result.confidence,
+        queries: result.queries,
+        sources: result.fetched.map((page) => ({
+          url: page.canonicalUrl,
+          title: page.title,
+          domain: page.domain,
+          publishedAt: page.publishedAt ?? null,
+        })),
+        claims: result.claims,
+        contradictions: result.contradictions,
+        companies: result.companies,
+        memoryCandidates: result.memoryCandidates,
+        injectionSuspected: result.injectionSuspected,
+        usedPlaywright: result.usedPlaywright,
+        failureReason: result.failureReason ?? null,
+        knowledgeKind: result.knowledgeKind,
       },
     };
   },

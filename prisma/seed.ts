@@ -85,13 +85,14 @@ async function main() {
   }
 
   const connectors = [
-    { type: "mail", provider: "mock" },
-    { type: "calendar", provider: "mock" },
-    { type: "search", provider: "mock" },
-    { type: "storage", provider: "mock" },
-    { type: "tasks", provider: "mock" },
-    { type: "contacts", provider: "mock" },
-    { type: "browser", provider: "mock" },
+    { type: "mail", provider: "mock", enabled: false },
+    { type: "calendar", provider: "mock", enabled: false },
+    { type: "search", provider: "mock", enabled: false },
+    { type: "search", provider: "openai", enabled: true },
+    { type: "storage", provider: "mock", enabled: false },
+    { type: "tasks", provider: "mock", enabled: false },
+    { type: "contacts", provider: "mock", enabled: false },
+    { type: "browser", provider: "mock", enabled: false },
   ] as const;
 
   for (const connector of connectors) {
@@ -103,14 +104,17 @@ async function main() {
           provider: connector.provider,
         },
       },
-      update: { enabled: false },
+      update: { enabled: connector.enabled },
       create: {
         organizationId: organization.id,
         type: connector.type,
         provider: connector.provider,
-        enabled: false,
+        enabled: connector.enabled,
         config: JSON.stringify({
-          note: "Nur Interface/Mock. Keine echte externe Verbindung.",
+          note:
+            connector.provider === "openai"
+              ? "Websuche über OpenAI Web Search. Der API-Key liegt nur in OPENAI_API_KEY."
+              : "Nur Interface/Mock. Keine echte externe Verbindung.",
         }),
       },
     });

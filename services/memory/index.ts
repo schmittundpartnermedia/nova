@@ -103,6 +103,17 @@ export async function createSource(input: {
   reference?: string;
   url?: string;
   label?: string;
+  jobId?: string;
+  canonicalUrl?: string;
+  title?: string;
+  domain?: string;
+  publishedAt?: Date | string | null;
+  retrievedAt?: Date | string | null;
+  provider?: string;
+  excerpt?: string;
+  trustTier?: string;
+  trustScore?: number;
+  metadata?: Record<string, unknown> | string | null;
 }) {
   assertOrganizationId(input.organizationId);
   return prisma.source.create({
@@ -112,6 +123,17 @@ export async function createSource(input: {
       reference: input.reference,
       url: input.url,
       label: input.label,
+      jobId: input.jobId,
+      canonicalUrl: input.canonicalUrl,
+      title: input.title,
+      domain: input.domain,
+      publishedAt: input.publishedAt ? new Date(input.publishedAt) : undefined,
+      retrievedAt: input.retrievedAt ? new Date(input.retrievedAt) : undefined,
+      provider: input.provider,
+      excerpt: input.excerpt,
+      trustTier: input.trustTier,
+      trustScore: input.trustScore,
+      metadata: typeof input.metadata === "string" ? input.metadata : input.metadata ? JSON.stringify(input.metadata) : undefined,
     },
   });
 }

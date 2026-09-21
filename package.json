@@ -21,6 +21,7 @@
     "verify:computer": "tsx scripts/verify-computer.ts",
     "verify:coding": "tsx scripts/verify-coding.ts",
     "verify:browser": "tsx scripts/verify-browser.ts",
+    "verify:research": "tsx scripts/verify-research.ts",
     "playwright:install": "PLAYWRIGHT_BROWSERS_PATH=.nova/ms-playwright playwright install chromium",
     "desktop-service": "tsx services/desktop-service/index.ts",
     "macos:build": "bash macos/launcher/scripts/build.sh",

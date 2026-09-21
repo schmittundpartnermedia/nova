@@ -202,6 +202,7 @@ model Job {
   computerJobs     ComputerJob[]
   computerActions  ComputerAction[]
   cursorSessions   CursorSession[]
+  sources          Source[]
 
   @@index([organizationId])
   @@index([organizationId, status])
@@ -496,18 +497,32 @@ model ConversationMessage {
 }
 
 model Source {
-  id             String   @id @default(cuid())
-  organizationId String   @map("organization_id")
+  id             String    @id @default(cuid())
+  organizationId String    @map("organization_id")
+  jobId          String?   @map("job_id")
   type           String
   reference      String?
   url            String?
+  canonicalUrl   String?   @map("canonical_url")
+  title          String?
+  domain         String?
+  publishedAt    DateTime? @map("published_at")
+  retrievedAt    DateTime? @map("retrieved_at")
+  provider       String?
+  excerpt        String?
+  trustTier      String?   @map("trust_tier")
+  trustScore     Int?      @map("trust_score")
+  metadata       String?
   label          String?
-  createdAt      DateTime @default(now()) @map("created_at")
+  createdAt      DateTime  @default(now()) @map("created_at")
 
   organization  Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  job           Job?          @relation(fields: [jobId], references: [id], onDelete: SetNull)
   memoryEntries MemoryEntry[]
 
   @@index([organizationId])
+  @@index([organizationId, jobId])
+  @@index([organizationId, url])
   @@map("sources")
 }
 

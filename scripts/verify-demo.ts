@@ -58,7 +58,10 @@ async function main() {
     reply.includes("search") ||
     reply.includes("connector") ||
     reply.includes("recherche") ||
-    reply.includes("nicht verbunden");
+    reply.includes("quelle") ||
+    reply.includes("nicht zuverlässig") ||
+    reply.includes("nicht verbunden") ||
+    /https?:\/\//i.test(result.reply);
 
   const checks = {
     jobCreated: Boolean(job),

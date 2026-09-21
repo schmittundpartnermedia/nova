@@ -17,6 +17,8 @@ Master Agent
         ↓
 Agent Registry  →  Research, Communication, Task, Project, … 
         ↓
+Search Provider (Web finden) / Browser (Seiten untersuchen)
+        ↓
 Services (Memory, Jobs, Approvals, Archive, Retrieval, Import, Avatar Animation)
         ↓
 Providers / Connectors

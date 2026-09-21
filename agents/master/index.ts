@@ -3,6 +3,7 @@ import { detectComputerIntent } from "@/agents/computer/intent";
 import { runComputerAgent } from "@/agents/computer";
 import { detectCodingIntent } from "@/agents/coding/intent";
 import { runCodingAgent } from "@/agents/coding";
+import { needsLiveResearch } from "@/lib/research/intent";
 import { getDefaultProject, runAgentStep } from "@/agents/runtime";
 import { resolveAIProvider } from "@/providers/ai/registry";
 import { createJob, updateJobStatus } from "@/services/jobs";
@@ -36,6 +37,8 @@ type MemoryItem = {
   type: string;
   title: string;
   content: string;
+  sourceId?: string;
+  sourceUrl?: string;
 };
 
 type MasterPlan = {
@@ -129,9 +132,10 @@ async function persistDurableMemory(input: {
       title: redactSecrets(title),
       content: redactSecrets(content),
       projectId: input.projectId,
-      sourceId: input.sourceId,
-      sourceType: input.conversationMessageId ? "conversation_message" : "nova",
+      sourceId: item.sourceId ?? input.sourceId,
+      sourceType: item.sourceId ? "research" : input.conversationMessageId ? "conversation_message" : "nova",
       sourceReference: input.conversationMessageId ?? input.jobId,
+      sourceUrl: item.sourceUrl,
       conversationMessageId: input.conversationMessageId,
     });
     if (entry) saved.push(entry);
@@ -215,7 +219,8 @@ Regeln:
 - coding für Softwareentwicklung, Website-Bau und Cursor-Umsetzung. Der Master schreibt keinen Projektcode selbst.
 - remember=true nur bei langlebigen Fakten (Entscheidungen, Projekte, Firmen, Kontakte, Aufgaben, Präferenzen, Deadlines, Zusagen). Kein Smalltalk speichern.
 - Erfinde keine Fakten, Firmen oder Kontakte.
-- searchRequired=true wenn aktuelle Webrecherche nötig wäre.
+- searchRequired=true wenn aktuelle Webrecherche nötig ist (aktuell, heute, Preis, Version, News, wer ist derzeit, gibt es inzwischen).
+- Ohne echte Recherche keine aktuellen Fakten behaupten.
 
 Kontext dieser Organization (Retrieval, nicht die ganze Datenbank):
 ${contextPack.promptBlock}
@@ -226,6 +231,9 @@ ${input.userRequest}`,
 
   const goal = plan.goal?.trim() || input.userRequest;
   const requestedAgents = (plan.agents ?? []).filter((id) => available.includes(id));
+  if (needsLiveResearch(input.userRequest) && !requestedAgents.includes("research")) {
+    requestedAgents.push("research");
+  }
   const allowMockCatalog = provider.id === "mock" && plan.mock === true;
 
   const job = await createJob({
@@ -261,6 +269,9 @@ ${input.userRequest}`,
   const communicationIds: string[] = [];
   const contactIds: string[] = [];
   let researchBlocked = false;
+  let researchFailed = false;
+  let researchAnswer = "";
+  const researchMemory: MemoryItem[] = [];
 
   const shouldRun = (id: string) => requestedAgents.includes(id);
 
@@ -350,21 +361,81 @@ ${input.userRequest}`,
       agentNotes.push(`Research Agent: ${result.result.summary}`);
       const ids = (result.result.data.contactIds as string[]) ?? [];
       contactIds.push(...ids);
+      const sourcePreview = Array.isArray(result.result.data.sources)
+        ? (result.result.data.sources as Array<{ title?: string; url?: string; domain?: string }>)
+            .slice(0, 8)
+            .map((item) => `${item.title ?? item.domain ?? "Quelle"} (${item.url ?? ""})`)
+            .join("; ")
+        : "";
+      const contradictions = Array.isArray(result.result.data.contradictions)
+        ? JSON.stringify(result.result.data.contradictions).slice(0, 800)
+        : "";
       if (result.result.data.searchConnected === false && result.result.data.mock !== true) {
         researchBlocked = true;
+      } else if (result.result.ok === false || result.result.data.confidence === "none") {
+        researchFailed = true;
+      } else if (typeof result.result.data.answer === "string" && result.result.data.answer.trim()) {
+        researchAnswer = result.result.data.answer
+          .trim()
+          .replace(/\s*\(?SOURCE_ID=[a-z0-9_-]+\)?/gi, "")
+          .replace(/[ \t]+\n/g, "\n")
+          .trim();
+        const asOf = String(result.result.data.asOf ?? "").trim();
+        const firstSource = Array.isArray(result.result.data.sources)
+          ? (result.result.data.sources as Array<{ title?: string; url?: string; domain?: string }>)[0]
+          : undefined;
+        if (asOf && !/stand/i.test(researchAnswer)) {
+          researchAnswer += ` Stand: ${asOf}.`;
+        }
+        if (firstSource?.domain && !new RegExp(firstSource.domain.replace(/\./g, "\\."), "i").test(researchAnswer)) {
+          researchAnswer += ` Quelle: ${firstSource.title || firstSource.domain}.`;
+        }
+        agentNotes.push(
+          `Rechercheergebnis (Stand ${asOf}): ${researchAnswer}\nQuellen: ${sourcePreview}${
+            contradictions && contradictions !== "[]" ? `\nWidersprüche: ${contradictions}` : ""
+          }`,
+        );
+      }
+      const candidates = Array.isArray(result.result.data.memoryCandidates)
+        ? (result.result.data.memoryCandidates as Array<{ type?: string; title?: string; content?: string; sourceId?: string }>)
+        : [];
+      for (const item of candidates) {
+        if (!item.title || !item.content || !item.sourceId) continue;
+        const webSource = await prisma.source.findFirst({
+          where: { id: item.sourceId, organizationId: input.organizationId },
+        });
+        researchMemory.push({
+          type: item.type ?? "fact",
+          title: item.title,
+          content: item.content,
+          sourceId: item.sourceId,
+          sourceUrl: webSource?.url ?? undefined,
+        });
       }
       await recordActivity({
         organizationId: input.organizationId,
         type: "research",
-        title: result.result.mock ? "Recherche vorbereitet (Mock)" : "Recherche nicht ausgeführt",
+        title: result.result.mock
+          ? "Recherche vorbereitet (Mock)"
+          : result.result.ok
+            ? "Recherche abgeschlossen"
+            : "Recherche nicht zuverlässig möglich",
         description: result.result.summary,
         status: "prepared",
         jobId: job.id,
         projectId: project?.id,
+        externalUrl: Array.isArray(result.result.data.sources)
+          ? ((result.result.data.sources as Array<{ url?: string }>)[0]?.url ?? undefined)
+          : undefined,
         metadata: {
           mock: Boolean(result.result.mock),
           searchConnected: result.result.data.searchConnected === true,
           invented: false,
+          queries: result.result.data.queries ?? [],
+          sourceIds: result.result.data.sourceIds ?? [],
+          asOf: result.result.data.asOf ?? null,
+          confidence: result.result.data.confidence ?? null,
+          injectionSuspected: result.result.data.injectionSuspected === true,
         },
       });
     }
@@ -428,13 +499,16 @@ ${input.userRequest}`,
   }
 
   let memoryItems = (plan.memoryItems ?? []).filter((item) => item.title && item.content);
+  if (researchMemory.length > 0) {
+    memoryItems = [...memoryItems, ...researchMemory];
+  }
   if (memoryItems.length === 0) {
     const extracted = await provider.structuredOutput<{ persist?: boolean; items?: MemoryItem[] }>({
       model: decision.model,
       schemaName: "durable-memory",
       schemaDescription:
-        'JSON {persist:boolean, items:[{type,title,content}]}. persist=true nur bei langlebigen Business-Fakten (Entscheidungen, Projekte, Firmen, Kontakte, Aufgaben, Präferenzen, Deadlines, Zusagen). Kein Smalltalk, keine Secrets, nichts erfinden.',
-      prompt: `Anfrage: ${input.userRequest}\nKontext:\n${contextPack.promptBlock}\nWelche langlebigen Fakten sollen im Business Memory gespeichert werden?`,
+        'JSON {persist:boolean, items:[{type,title,content}]}. persist=true nur bei langlebigen Business-Fakten (Entscheidungen, Projekte, Firmen, Kontakte, Aufgaben, Präferenzen, Deadlines, Zusagen). Kein Smalltalk, keine Secrets, nichts erfinden. Keine aktuellen Preise, News oder unbestätigte Web-Snippets speichern.',
+      prompt: `Anfrage: ${input.userRequest}\nKontext:\n${contextPack.promptBlock}\nRecherche speichert eigene Kandidaten separat. Welche zusätzlichen langlebigen Fakten sollen ins Business Memory?`,
     });
     if (extracted.persist && Array.isArray(extracted.items)) {
       memoryItems = extracted.items.filter((item) => item.title && item.content);
@@ -509,21 +583,34 @@ ${input.userRequest}`,
       })
     : [];
 
-  const reply = await collectStream({
-    provider,
-    generateInput: {
-      model: decision.model,
-      temperature: 0.4,
-      system: `Du bist NOVA, der persönliche KI-Business-Assistent von ${contextPack.organizationName}.
+  const researchUnavailable = researchBlocked || researchFailed;
+  const researchOnly = Boolean(researchAnswer) && communicationIds.length === 0 && !wantsExternal;
+  let reply = "";
+  if (researchUnavailable && communicationIds.length === 0) {
+    reply = "Ich kann die aktuelle Information gerade nicht zuverlässig prüfen.";
+    await emit(input.onEvent, { type: "delta", delta: reply });
+  } else if (researchOnly) {
+    reply = researchAnswer;
+    await emit(input.onEvent, { type: "delta", delta: reply });
+  } else {
+    reply = await collectStream({
+      provider,
+      generateInput: {
+        model: decision.model,
+        temperature: 0.4,
+        system: `Du bist NOVA, der persönliche KI-Business-Assistent von ${contextPack.organizationName}.
 Du bist nicht rankPilot und nicht SURI.
 Antworte auf Deutsch, klar und knapp.
 Erfinde keine Fakten. Wenn Memory nichts enthält, sage das ehrlich.
-Behaupte niemals, E-Mails seien gesendet, Recherche sei live erfolgt oder Connectoren seien verbunden, wenn das nicht der Fall ist.
+Behaupte niemals, E-Mails seien gesendet, wenn das nicht der Fall ist.
 Conversation Archive ist die vollständige Kommunikation. Business Memory ist extrahiertes Wissen mit Quelle.
 Wenn du auf gespeichertes Wissen antwortest, bleibt die Quelle (Gesprächsnachricht) nachvollziehbar.
-${researchBlocked ? "Es ist kein echter Search Connector verbunden. Nenne keine erfundenen aktuellen Unternehmen als Rechercheergebnis." : ""}
+Aktuelle Fakten nur aus der Recherche mit Quellen. Nenne Standdatum und Quelle, nicht den gesamten Rechercheprozess.
+${researchAnswer ? "Eine echte Webrecherche ist erfolgt. Verwende deren Ergebnis. Behaupte nicht, dass kein Search Connector verbunden ist." : ""}
+${researchBlocked ? "Es ist kein echter Search Connector verbunden. Sage klar, dass aktuelle Informationen gerade nicht zuverlässig prüfbar sind. Erfinde keine Treffer." : ""}
+${researchFailed ? "Die Webrecherche konnte die aktuelle Information nicht zuverlässig prüfen. Sage genau das. Erfinde keine Ergebnisse." : ""}
 ${provider.id === "mock" ? "Du bist im Mock-Modus. Kennzeichne das, täusche keine echte Modellantwort vor." : ""}`,
-      prompt: `Benutzer: ${input.userRequest}
+        prompt: `Benutzer: ${input.userRequest}
 
 Kontext:
 ${contextPack.promptBlock}
@@ -539,12 +626,21 @@ ${
     : ""
 }
 
-Formuliere die Nutzerantwort. Wenn ein Entwurf erzeugt wurde, zeige ihn. Wenn Recherche unmöglich war, sage klar, dass kein Search Connector verbunden ist.`,
-    },
-    onDelta: (delta) => {
-      void emit(input.onEvent, { type: "delta", delta });
-    },
-  });
+${researchAnswer ? `Kurzfassung der Recherche:\n${researchAnswer}\n` : ""}
+
+Formuliere die Nutzerantwort. Wenn ein Entwurf erzeugt wurde, zeige ihn.${
+          researchUnavailable
+            ? " Sage: „Ich kann die aktuelle Information gerade nicht zuverlässig prüfen.“"
+            : researchAnswer
+              ? " Die Recherche ist erfolgt; verwende sie."
+              : ""
+        }`,
+      },
+      onDelta: (delta) => {
+        void emit(input.onEvent, { type: "delta", delta });
+      },
+    });
+  }
 
   if (!wantsExternal || communicationIds.length === 0) {
     await updateJobStatus(input.organizationId, job.id, "completed", { completedAt: new Date() });
