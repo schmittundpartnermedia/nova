@@ -2,7 +2,7 @@
  * Zentrale NOVA-Stimme. Werte kommen aus der Umgebung, nicht von Aufrufstellen.
  *
  * NOVA_VOICE=marin
- * NOVA_VOICE_SPEED=1.2
+ * NOVA_VOICE_SPEED=1.1
  */
 
 export const NOVA_VOICE_NAMES = [
@@ -28,7 +28,7 @@ export const NOVA_VOICE_DEFAULTS = {
   model: "gpt-4o-mini-tts",
   voice: "marin" as NovaVoiceName,
   language: "de-DE",
-  speed: 1.2,
+  speed: 1.1,
   minSpeed: 0.85,
   maxSpeed: 1.5,
   responseFormat: "wav" as const,

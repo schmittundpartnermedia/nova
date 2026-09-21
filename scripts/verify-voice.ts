@@ -95,10 +95,10 @@ function main() {
   assert((NOVA_VOICE_NAMES as readonly string[]).includes(config.voice), `Unbekannte Stimme: ${config.voice}`);
   assert(config.model.includes("tts"), "TTS-Modell zentral");
   assert(config.speed >= 0.85 && config.speed <= 1.5, `Speed in Range, war ${config.speed}`);
-  assert(NOVA_VOICE_DEFAULTS.speed >= 1.15 && NOVA_VOICE_DEFAULTS.speed <= 1.25, "Default Speed conversational");
+  assert(NOVA_VOICE_DEFAULTS.speed === 1.1, "Default Speed conversational");
   assert(resolveVoiceName("coral") === "coral", "Voice Override");
   assert(resolveVoiceName("not-a-voice") === config.voice || resolveVoiceName("not-a-voice") === "marin", "Ungültige Stimme fällt auf Default");
-  assert(resolveVoiceSpeed(1.2) === 1.2, "Speed 1.2");
+  assert(resolveVoiceSpeed(1.1) === 1.1, "Speed 1.1");
   assert(resolveVoiceSpeed(9) <= 1.5, "Speed Clamp oben");
   assert(resolveVoiceSpeed(0.1) >= 0.85, "Speed Clamp unten");
 

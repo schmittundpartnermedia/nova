@@ -31,7 +31,7 @@ type SpeechMeta = {
 export function VoiceLab() {
   const [meta, setMeta] = useState<SpeechMeta | null>(null);
   const [voice, setVoice] = useState("marin");
-  const [speed, setSpeed] = useState(1.2);
+  const [speed, setSpeed] = useState(1.1);
   const [text, setText] = useState(TEST_LINE);
   const [status, setStatus] = useState("Bereit.");
   const [busy, setBusy] = useState(false);
