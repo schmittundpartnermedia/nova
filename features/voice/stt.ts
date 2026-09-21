@@ -68,6 +68,16 @@ export function isSpeechRecognitionSupported(): boolean {
 
 const FATAL_STT_ERRORS = new Set(["not-allowed", "service-not-allowed", "audio-capture"]);
 
+function recognitionResult(
+  results: SpeechRecognitionEventLike["results"],
+  index: number,
+): SpeechRecognitionResultLike | undefined {
+  const list = results as SpeechRecognitionEventLike["results"] & {
+    item?: (i: number) => SpeechRecognitionResultLike | undefined;
+  };
+  return list.item?.(index) ?? list[index];
+}
+
 export class WebSpeechStt implements SpeechToText {
   readonly supported: boolean;
   readonly engine = "web-speech";
@@ -79,6 +89,10 @@ export class WebSpeechStt implements SpeechToText {
   private wanted = false;
   private paused = false;
   private restartTimer: unknown = null;
+  private booting = false;
+  private resultCursor = 0;
+  private committed = "";
+  private interim = "";
 
   constructor(config: VoiceSessionConfig = VOICE_SESSION_CONFIG, clock: VoiceClock = browserClock) {
     this.config = config;
@@ -91,31 +105,42 @@ export class WebSpeechStt implements SpeechToText {
     this.listener = listener;
     this.wanted = true;
     this.paused = false;
-    this.boot();
+    this.resetBuffer();
+    if (this.rec) this.kickStart();
+    else this.boot();
   }
 
   stop() {
     this.wanted = false;
     this.paused = false;
     this.clearRestart();
+    this.resetBuffer();
     this.tearDown();
   }
 
   pause() {
     this.paused = true;
-    this.clearRestart();
-    this.tearDown();
+    this.resetBuffer();
   }
 
   resume() {
     if (!this.wanted) return;
     this.paused = false;
-    this.boot();
+    this.resetBuffer();
+    if (!this.rec) this.boot();
+    else this.kickStart();
+  }
+
+  private resetBuffer() {
+    this.committed = "";
+    this.interim = "";
   }
 
   private boot() {
-    if (!this.wanted || this.paused || !this.Ctor) return;
+    if (!this.wanted || !this.Ctor || this.booting) return;
+    this.booting = true;
     this.tearDown();
+    this.resultCursor = 0;
     const rec = new this.Ctor();
     rec.lang = this.config.sttLang;
     rec.interimResults = true;
@@ -125,56 +150,108 @@ export class WebSpeechStt implements SpeechToText {
       const code = event.error ?? "unknown";
       if (code === "aborted" || code === "no-speech") return;
       const fatal = FATAL_STT_ERRORS.has(code);
-      this.listener.onError?.(sttErrorMessage(code), fatal);
+      if (!this.paused) this.listener.onError?.(sttErrorMessage(code), fatal);
       if (fatal) {
         this.wanted = false;
         this.tearDown();
       }
     };
     rec.onend = () => {
-      if (!this.wanted || this.paused) return;
-      this.scheduleRestart();
+      if (this.rec !== rec) return;
+      this.commitInterim();
+      this.resultCursor = 0;
+      if (!this.wanted) return;
+      // WKWebView continues recognition only if start() runs from onend on
+      // the same instance. A new SpeechRecognition from a timer has no
+      // user-gesture and will not restart after TTS.
+      this.kickStart();
     };
     this.rec = rec;
+    this.kickStart();
+    this.booting = false;
+  }
+
+  private kickStart() {
+    if (!this.wanted || !this.rec) return;
+    this.clearRestart();
     try {
-      rec.start();
-    } catch {
+      this.rec.start();
+    } catch (error) {
+      if (isBenignStartError(error)) return;
       this.scheduleRestart();
     }
   }
 
   private handleResult(event: SpeechRecognitionEventLike) {
-    if (!this.wanted || this.paused) return;
-    let finals = "";
-    let interim = "";
-    let confidenceSum = 0;
-    let confidenceCount = 0;
-    for (let i = 0; i < event.results.length; i += 1) {
-      const result = event.results[i];
+    const length = event.results.length;
+    if (this.paused) {
+      this.resultCursor = length;
+      return;
+    }
+    const start = Math.max(
+      typeof event.resultIndex === "number" ? event.resultIndex : 0,
+      this.resultCursor,
+    );
+    let sawInterim = false;
+    for (let i = start; i < length; i += 1) {
+      const result = recognitionResult(event.results, i);
       const alt = result?.[0];
       const text = alt?.transcript ?? "";
       if (!text) continue;
-      if (typeof alt?.confidence === "number" && Number.isFinite(alt.confidence)) {
-        confidenceSum += alt.confidence;
-        confidenceCount += 1;
+      const isFinal = result?.isFinal === true;
+      if (isFinal) {
+        this.committed = `${this.committed} ${text}`.replace(/\s+/g, " ").trim();
+        this.interim = "";
+      } else {
+        this.interim = text.trim();
+        sawInterim = true;
       }
-      if (result.isFinal) finals += `${text} `;
-      else interim += `${text} `;
     }
-    const transcript = `${finals}${interim}`.replace(/\s+/g, " ").trim();
+    if (!sawInterim && start < length) {
+      const last = recognitionResult(event.results, length - 1);
+      if (last && last.isFinal !== true) {
+        this.interim = last[0]?.transcript?.trim() ?? this.interim;
+      }
+    }
+    this.resultCursor = length;
+    this.emitCurrent(event);
+  }
+
+  private emitCurrent(event?: SpeechRecognitionEventLike) {
+    const transcript = `${this.committed} ${this.interim}`.replace(/\s+/g, " ").trim();
     if (!transcript) return;
+    let confidenceSum = 0;
+    let confidenceCount = 0;
+    if (event) {
+      for (let i = 0; i < event.results.length; i += 1) {
+        const alt = recognitionResult(event.results, i)?.[0];
+        if (typeof alt?.confidence === "number" && Number.isFinite(alt.confidence)) {
+          confidenceSum += alt.confidence;
+          confidenceCount += 1;
+        }
+      }
+    }
     this.listener.onTranscript?.({
       transcript,
       confidence: confidenceCount ? confidenceSum / confidenceCount : undefined,
-      isFinal: Boolean(finals.trim()) && !interim.trim(),
+      isFinal: Boolean(this.committed) && !this.interim,
     });
+  }
+
+  private commitInterim() {
+    if (this.paused || !this.interim) return;
+    this.committed = `${this.committed} ${this.interim}`.replace(/\s+/g, " ").trim();
+    this.interim = "";
+    this.emitCurrent();
   }
 
   private scheduleRestart() {
     this.clearRestart();
     this.restartTimer = this.clock.setTimeout(() => {
       this.restartTimer = null;
-      if (this.wanted && !this.paused) this.boot();
+      if (!this.wanted) return;
+      if (this.rec) this.kickStart();
+      else this.boot();
     }, this.config.sttRestartDelayMs);
   }
 
@@ -202,6 +279,12 @@ export class WebSpeechStt implements SpeechToText {
       }
     }
   }
+}
+
+function isBenignStartError(error: unknown): boolean {
+  const name = error instanceof Error ? error.name : "";
+  const message = error instanceof Error ? error.message : String(error);
+  return name === "InvalidStateError" || message.toLowerCase().includes("invalid state");
 }
 
 function sttErrorMessage(code: string): string {

@@ -54,7 +54,7 @@ export function reduceVoiceSession(model: VoiceSessionModel, event: VoiceSession
       if (model.state !== "USER_SPEAKING") return model;
       return { ...model, state: "SILENCE_WAIT", lastVoiceEndAt: event.at };
     case "SILENCE_TIMEOUT":
-      if (model.state !== "SILENCE_WAIT") return model;
+      if (model.state !== "SILENCE_WAIT" && model.state !== "USER_SPEAKING") return model;
       if (!event.hasTranscript) {
         return { ...model, state: "LISTENING", turnStartedAt: null, lastVoiceEndAt: null };
       }

@@ -58,6 +58,8 @@ export class VoiceSessionController {
   private lastError: string | null = null;
   private generation = 0;
   private supported = false;
+  private lastTurnActivityAt: number | null = null;
+  private tentativeResumeAt: number | null = null;
 
   constructor(deps: VoiceSessionDeps = {}) {
     this.config = deps.config ?? VOICE_SESSION_CONFIG;
@@ -141,6 +143,8 @@ export class VoiceSessionController {
     this.pending = null;
     this.confidence = undefined;
     this.level = 0;
+    this.lastTurnActivityAt = null;
+    this.tentativeResumeAt = null;
     this.lastError = this.model.state === "ERROR" ? this.lastError : null;
     this.dispatch({ type: "STOP" });
   }
@@ -174,9 +178,11 @@ export class VoiceSessionController {
       }
       this.transcript = "";
       this.pending = null;
+      this.lastTurnActivityAt = null;
+      this.tentativeResumeAt = null;
       this.vad.releaseUtterance();
       this.dispatch({ type: "NOVA_IDLE" });
-      this.armStt();
+      this.stt?.resume();
     }, this.config.postTtsGuardMs);
   }
 
@@ -223,6 +229,10 @@ export class VoiceSessionController {
       return;
     }
 
+    if (this.model.state === "USER_SPEAKING" && status.speechLikely) {
+      this.noteSpeechProgress(frame.timestampMs);
+    }
+
     if (status.event === "VOICE_START" || (status.event === "VOICE_ACTIVE" && this.model.state === "LISTENING")) {
       this.beginSpeech(frame.timestampMs);
       return;
@@ -233,29 +243,70 @@ export class VoiceSessionController {
   }
 
   private beginSpeech(at: number) {
-    this.clearSilence();
+    if (this.model.state === "SILENCE_WAIT") {
+      this.tentativeResumeAt = at;
+    } else {
+      this.markTurnActivity(at);
+    }
     if (this.pending && at - this.pending.at <= this.config.earlySttWindowMs && !this.transcript) {
       this.transcript = this.pending.text;
       this.confidence = this.pending.confidence;
     }
     this.pending = null;
     this.dispatch({ type: "VOICE_START", at });
+    this.scheduleTurnWatchdog();
+  }
+
+  private noteSpeechProgress(at: number) {
+    if (this.tentativeResumeAt != null) {
+      if (at - this.tentativeResumeAt >= this.config.silenceResumeConfirmMs) {
+        this.markTurnActivity(at);
+      }
+      return;
+    }
+    this.markTurnActivity(at);
   }
 
   private endSpeech(at: number) {
     if (this.model.state !== "USER_SPEAKING") return;
+    if (this.tentativeResumeAt != null) {
+      this.tentativeResumeAt = null;
+    }
     this.dispatch({ type: "VOICE_END", at });
-    this.startSilenceTimer();
+    this.scheduleTurnWatchdog();
   }
 
-  private startSilenceTimer() {
+  private markTurnActivity(at: number) {
+    this.lastTurnActivityAt = at;
+    this.tentativeResumeAt = null;
+    if (this.model.state === "USER_SPEAKING" || this.model.state === "SILENCE_WAIT") {
+      this.scheduleTurnWatchdog();
+    }
+  }
+
+  private scheduleTurnWatchdog() {
     this.clearSilence();
+    if (this.model.state !== "USER_SPEAKING" && this.model.state !== "SILENCE_WAIT") return;
+    const origin = this.lastTurnActivityAt;
+    if (origin == null) return;
+    const remaining = this.config.silenceTimeoutMs - (this.clock.now() - origin);
     this.silenceTimer = this.clock.setTimeout(() => {
       this.silenceTimer = null;
-      this.finalizeTurn();
-    }, this.config.silenceTimeoutMs);
+      this.onTurnWatchdog();
+    }, Math.max(0, remaining));
     this.silenceTick = this.clock.setTimeout(() => this.tickSilence(), this.config.silenceUiTickMs);
     this.emit();
+  }
+
+  private onTurnWatchdog() {
+    if (this.model.state !== "SILENCE_WAIT" && this.model.state !== "USER_SPEAKING") return;
+    const origin = this.lastTurnActivityAt;
+    if (origin == null) return;
+    if (this.clock.now() - origin < this.config.silenceTimeoutMs) {
+      this.scheduleTurnWatchdog();
+      return;
+    }
+    this.finalizeTurn();
   }
 
   private tickSilence() {
@@ -272,6 +323,8 @@ export class VoiceSessionController {
     if (!transcript || this.model.state !== "PROCESSING") {
       this.transcript = "";
       this.pending = null;
+      this.lastTurnActivityAt = null;
+      this.tentativeResumeAt = null;
       this.emit();
       return;
     }
@@ -291,6 +344,8 @@ export class VoiceSessionController {
     this.transcript = "";
     this.pending = null;
     this.confidence = undefined;
+    this.lastTurnActivityAt = null;
+    this.tentativeResumeAt = null;
     this.emit();
     this.listener.onTurn?.(turn);
   }
@@ -304,8 +359,11 @@ export class VoiceSessionController {
       return;
     }
     if (this.model.state === "USER_SPEAKING" || this.model.state === "SILENCE_WAIT" || this.model.state === "INTERRUPTED") {
-      this.transcript = mergeTranscript(this.transcript, text);
+      const merged = mergeTranscript(this.transcript, text);
+      const grew = merged !== this.transcript;
+      this.transcript = merged;
       if (typeof input.confidence === "number") this.confidence = input.confidence;
+      if (grew) this.markTurnActivity(now);
       this.emit();
     }
   }
@@ -322,12 +380,13 @@ export class VoiceSessionController {
 
   private pauseInput() {
     this.clearSilence();
+    this.tentativeResumeAt = null;
     this.stt?.pause();
   }
 
   private silenceRemaining(): number | null {
-    if (this.model.state !== "SILENCE_WAIT" || this.model.lastVoiceEndAt == null) return null;
-    return Math.max(0, this.config.silenceTimeoutMs - (this.clock.now() - this.model.lastVoiceEndAt));
+    if (this.model.state !== "SILENCE_WAIT" || this.lastTurnActivityAt == null) return null;
+    return Math.max(0, this.config.silenceTimeoutMs - (this.clock.now() - this.lastTurnActivityAt));
   }
 
   private dispatch(event: Parameters<typeof reduceVoiceSession>[1]) {

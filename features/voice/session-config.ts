@@ -28,6 +28,7 @@ export const VOICE_SESSION_CONFIG = {
   bargeInEnabled: false,
   sttLang: "de-DE",
   earlySttWindowMs: 900,
+  silenceResumeConfirmMs: 400,
   silenceUiTickMs: 100,
   sttRestartDelayMs: 80,
   speechBandLowHz: 300,

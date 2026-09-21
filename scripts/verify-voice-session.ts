@@ -5,7 +5,7 @@ import {
   reduceVoiceSession,
 } from "@/features/voice/session-machine";
 import type { VoiceClock, VoiceTurn } from "@/features/voice/session-types";
-import type { SpeechToText, SpeechToTextListener } from "@/features/voice/stt";
+import { isSpeechRecognitionSupported, WebSpeechStt, type SpeechToText, type SpeechToTextListener } from "@/features/voice/stt";
 import type { VoiceCapture } from "@/features/voice/capture";
 import {
   makeNoiseFrame,
@@ -89,6 +89,7 @@ class FakeStt implements SpeechToText {
   paused = false;
   started = false;
   stopped = false;
+  startCalls = 0;
   listener: SpeechToTextListener = {};
 
   start(listener: SpeechToTextListener) {
@@ -96,6 +97,7 @@ class FakeStt implements SpeechToText {
     this.started = true;
     this.stopped = false;
     this.paused = false;
+    this.startCalls += 1;
   }
 
   stop() {
@@ -148,6 +150,8 @@ export async function runVoiceSessionChecks() {
   assert(empty.state === "LISTENING", "Leerer Silence-Timeout bleibt LISTENING.");
   const waitingFull = reduceVoiceSession(waitingAgain, { type: "SILENCE_TIMEOUT", hasTranscript: true });
   assert(waitingFull.state === "PROCESSING", "Silence mit Transcript → PROCESSING");
+  const fromSpeaking = reduceVoiceSession(speaking, { type: "SILENCE_TIMEOUT", hasTranscript: true });
+  assert(fromSpeaking.state === "PROCESSING", "5s-Timeout darf auch aus USER_SPEAKING finalisieren.");
   const novaTalks = reduceVoiceSession(waitingFull, { type: "NOVA_SPEAKING" });
   assert(novaTalks.state === "NOVA_SPEAKING", "NOVA_SPEAKING");
   const listenAgain = reduceVoiceSession(novaTalks, { type: "NOVA_IDLE" });
@@ -204,6 +208,7 @@ export async function runVoiceSessionChecks() {
   assert(controller.getSnapshot().state === "LISTENING", `Start muss LISTENING sein, war ${controller.getSnapshot().state}`);
   assert(capture.started, "Capture muss laufen.");
   assert(stt.started, "STT muss laufen.");
+  assert(stt.startCalls === 1, "STT startet einmal mit User-Geste.");
 
   pump(capture, clock, 350, (at) => makeNoiseFrame(at));
   assert(controller.getSnapshot().state === "LISTENING", "Vor der ersten Sprache bleibt LISTENING.");
@@ -243,6 +248,7 @@ export async function runVoiceSessionChecks() {
   clock.advance(VOICE_SESSION_CONFIG.postTtsGuardMs);
   assert(controller.getSnapshot().state === "LISTENING", `Auto Re-Listen, war ${controller.getSnapshot().state}`);
   assert(!stt.paused && stt.started, "STT nach Guard wieder aktiv.");
+  assert(stt.startCalls === 1, "WKWebView: STT nach TTS per resume, ohne neuen start().");
 
   pump(capture, clock, 400, (at) => makeSpeechFrame(at));
   stt.emit("Nächster Beitrag ohne Klick.");
@@ -251,11 +257,68 @@ export async function runVoiceSessionChecks() {
   assert(turns.length === 2, "Zweiter Turn ohne erneutes Aktivieren.");
   assert(turns[1]?.transcript.includes("Nächster Beitrag"), turns[1]?.transcript);
 
+  controller.notifyNovaSpeaking();
+  controller.notifyNovaIdle();
+  clock.advance(VOICE_SESSION_CONFIG.postTtsGuardMs);
+  pump(capture, clock, 400, (at) => makeSpeechFrame(at));
+  stt.emit("Dritter Beitrag ohne Klick.");
+  pump(capture, clock, 400, (at) => makeNoiseFrame(at));
+  clock.advance(VOICE_SESSION_CONFIG.silenceTimeoutMs);
+  assert(turns.length === 3, "Dritter Turn ohne erneutes Aktivieren.");
+  assert(stt.startCalls === 1, "Drei Turns teilen denselben STT-Start.");
+
   controller.stop();
   assert(controller.getSnapshot().state === "OFF", "Manuelles Ende → OFF");
   assert(capture.stopped, "MediaStream/Capture geschlossen.");
   assert(stt.stopped, "STT gestoppt.");
   assert(clock.timers.size === 0, "Timer müssen geleert sein.");
+
+  const blipClock = new FakeClock();
+  const blipCapture = new FakeCapture();
+  const blipStt = new FakeStt();
+  const blipTurns: VoiceTurn[] = [];
+  const blipController = new VoiceSessionController({
+    clock: blipClock,
+    createCapture: () => blipCapture,
+    createStt: () => blipStt,
+  });
+  blipController.setListener({ onTurn: (turn) => blipTurns.push(turn) });
+  await blipController.start();
+  pump(blipCapture, blipClock, 350, (at) => makeNoiseFrame(at));
+  pump(blipCapture, blipClock, 400, (at) => makeSpeechFrame(at));
+  blipStt.emit("Nur ein Satz.");
+  pump(blipCapture, blipClock, 400, (at) => makeNoiseFrame(at));
+  blipClock.advance(2100);
+  assert(blipTurns.length === 0, "2.1s Pause ist noch kein Turn.");
+  pump(blipCapture, blipClock, 200, (at) => makeSpeechFrame(at));
+  pump(blipCapture, blipClock, 400, (at) => makeNoiseFrame(at));
+  blipClock.advance(2600);
+  assert(blipTurns.length === 1, `VAD-Blip darf den 5s-Timer nicht neu starten, war ${blipTurns.length}`);
+  blipController.stop();
+
+  const repeatClock = new FakeClock();
+  const repeatCapture = new FakeCapture();
+  const repeatStt = new FakeStt();
+  const repeatTurns: VoiceTurn[] = [];
+  const repeatController = new VoiceSessionController({
+    clock: repeatClock,
+    createCapture: () => repeatCapture,
+    createStt: () => repeatStt,
+  });
+  repeatController.setListener({ onTurn: (turn) => repeatTurns.push(turn) });
+  await repeatController.start();
+  pump(repeatCapture, repeatClock, 350, (at) => makeNoiseFrame(at));
+  pump(repeatCapture, repeatClock, 400, (at) => makeSpeechFrame(at));
+  repeatStt.emit("Hallo NOVA");
+  pump(repeatCapture, repeatClock, 400, (at) => makeNoiseFrame(at));
+  repeatClock.advance(1000);
+  repeatStt.emit("Hallo NOVA");
+  repeatClock.advance(3700);
+  assert(repeatTurns.length === 1, `STT-onend-Duplikat darf den 5s-Timer nicht neu starten, war ${repeatTurns.length}`);
+  assert(repeatTurns[0]?.transcript === "Hallo NOVA", repeatTurns[0]?.transcript ?? "kein Turn");
+  repeatController.stop();
+
+  await runWebSpeechOnendChecks();
 
   return {
     ok: true,
@@ -263,6 +326,68 @@ export async function runVoiceSessionChecks() {
     bargeInEnabled: VOICE_SESSION_CONFIG.bargeInEnabled,
     turns: turns.map((turn) => turn.transcript),
   };
+}
+
+async function runWebSpeechOnendChecks() {
+  class FakeRecognition {
+    static starts = 0;
+    static constructs = 0;
+    static last: FakeRecognition | null = null;
+    lang = "";
+    interimResults = false;
+    continuous = false;
+    onresult: ((event: { resultIndex?: number; results: ArrayLike<{ 0?: { transcript?: string; confidence?: number }; isFinal?: boolean }> }) => void) | null = null;
+    onend: (() => void) | null = null;
+    onerror: ((event: { error?: string }) => void) | null = null;
+
+    constructor() {
+      FakeRecognition.constructs += 1;
+      FakeRecognition.last = this;
+    }
+
+    start() {
+      FakeRecognition.starts += 1;
+    }
+
+    stop() {}
+    abort() {}
+  }
+
+  const g = globalThis as typeof globalThis & { SpeechRecognition?: new () => FakeRecognition };
+  const previous = g.SpeechRecognition;
+  g.SpeechRecognition = FakeRecognition;
+  assert(isSpeechRecognitionSupported(), "Fake SpeechRecognition muss erkannt werden.");
+
+  const clock = new FakeClock();
+  const texts: string[] = [];
+  const stt = new WebSpeechStt(VOICE_SESSION_CONFIG, clock);
+  stt.start({
+    onTranscript: (input) => texts.push(input.transcript),
+  });
+  assert(FakeRecognition.starts === 1, "STT bootet einmal.");
+  const rec = FakeRecognition.last;
+  if (!rec) throw new Error("SpeechRecognition-Instanz fehlt.");
+  rec.onresult?.({
+    resultIndex: 0,
+    results: Object.assign([{ 0: { transcript: "Hallo NOVA", confidence: 0.9 }, isFinal: false, length: 1 }], { length: 1 }),
+  });
+  rec.onend?.();
+  assert(FakeRecognition.constructs === 1, "onend muss dieselbe SpeechRecognition-Instanz weiterverwenden.");
+  assert(FakeRecognition.starts === 2, "onend muss STT sofort neu starten, ohne den Turn zu beenden.");
+  assert(texts.some((text) => text.includes("Hallo NOVA")), "Interim muss beim onend committed werden.");
+
+  stt.pause();
+  const startsAfterPause = FakeRecognition.starts;
+  FakeRecognition.last?.onresult?.({
+    resultIndex: 0,
+    results: Object.assign([{ 0: { transcript: "NOVA spricht", confidence: 0.9 }, isFinal: true, length: 1 }], { length: 1 }),
+  });
+  assert(texts.every((text) => !text.includes("NOVA spricht")), "Pausiertes STT darf TTS nicht als User-Text übernehmen.");
+  FakeRecognition.last?.onend?.();
+  assert(FakeRecognition.starts > startsAfterPause, "Auch während pause bleibt die Engine am Leben.");
+  stt.resume();
+  stt.stop();
+  g.SpeechRecognition = previous;
 }
 
 if (process.argv[1]?.endsWith("verify-voice-session.ts")) {
