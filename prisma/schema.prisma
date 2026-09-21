@@ -1,0 +1,508 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Organization {
+  id        String   @id @default(cuid())
+  name      String
+  slug      String   @unique
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  members           OrganizationMember[]
+  projects          Project[]
+  companies         Company[]
+  contacts          Contact[]
+  tasks             Task[]
+  jobs              Job[]
+  jobSteps          JobStep[]
+  activities        Activity[]
+  memoryEntries     MemoryEntry[]
+  memoryRelations   MemoryRelation[]
+  meetings          Meeting[]
+  memos             Memo[]
+  documents         Document[]
+  communications    Communication[]
+  approvalRequests  ApprovalRequest[]
+  approvalPolicies  ApprovalPolicy[]
+  conversations     Conversation[]
+  conversationMsgs  ConversationMessage[]
+  sources           Source[]
+  connectorConfigs  ConnectorConfig[]
+  aiProviderConfigs AiProviderConfig[]
+
+  @@map("organizations")
+}
+
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  name      String
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  memberships OrganizationMember[]
+
+  @@map("users")
+}
+
+model OrganizationMember {
+  id             String   @id @default(cuid())
+  organizationId String   @map("organization_id")
+  userId         String   @map("user_id")
+  role           String
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user         User         @relation(fields: [userId], references: [id], onDelete: Restrict)
+
+  @@unique([organizationId, userId])
+  @@index([organizationId])
+  @@index([userId])
+  @@map("organization_members")
+}
+
+model Project {
+  id             String   @id @default(cuid())
+  organizationId String   @map("organization_id")
+  name           String
+  description    String?
+  status         String   @default("active")
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  organization   Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  companies      Company[]
+  contacts       Contact[]
+  tasks          Task[]
+  jobs           Job[]
+  activities     Activity[]
+  meetings       Meeting[]
+  memos          Memo[]
+  documents      Document[]
+  communications Communication[]
+  memoryEntries  MemoryEntry[]
+
+  @@index([organizationId])
+  @@map("projects")
+}
+
+model Company {
+  id             String   @id @default(cuid())
+  organizationId String   @map("organization_id")
+  projectId      String?  @map("project_id")
+  name           String
+  industry       String?
+  website        String?
+  notes          String?
+  sourceId       String?  @map("source_id")
+  isMock         Boolean  @default(false) @map("is_mock")
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  organization   Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  project        Project?        @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  contacts       Contact[]
+  communications Communication[]
+  activities     Activity[]
+  memoryEntries  MemoryEntry[]
+  tasks          Task[]
+
+  @@index([organizationId])
+  @@index([organizationId, name])
+  @@map("companies")
+}
+
+model Contact {
+  id             String   @id @default(cuid())
+  organizationId String   @map("organization_id")
+  companyId      String?  @map("company_id")
+  projectId      String?  @map("project_id")
+  firstName      String   @map("first_name")
+  lastName       String   @map("last_name")
+  role           String?
+  email          String?
+  phone          String?
+  notes          String?
+  sourceId       String?  @map("source_id")
+  isMock         Boolean  @default(false) @map("is_mock")
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  organization   Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  company        Company?        @relation(fields: [companyId], references: [id], onDelete: SetNull)
+  project        Project?        @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  communications Communication[]
+  activities     Activity[]
+  memoryEntries  MemoryEntry[]
+  tasks          Task[]
+
+  @@index([organizationId])
+  @@index([companyId])
+  @@map("contacts")
+}
+
+model Task {
+  id             String    @id @default(cuid())
+  organizationId String    @map("organization_id")
+  projectId      String?   @map("project_id")
+  companyId      String?   @map("company_id")
+  contactId      String?   @map("contact_id")
+  title          String
+  description    String?
+  status         String    @default("open")
+  priority       String    @default("medium")
+  dueAt          DateTime? @map("due_at")
+  followUpAt     DateTime? @map("follow_up_at")
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  project      Project?     @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  company      Company?     @relation(fields: [companyId], references: [id], onDelete: SetNull)
+  contact      Contact?     @relation(fields: [contactId], references: [id], onDelete: SetNull)
+  activities   Activity[]
+
+  @@index([organizationId])
+  @@index([organizationId, status])
+  @@map("tasks")
+}
+
+model Job {
+  id             String    @id @default(cuid())
+  organizationId String    @map("organization_id")
+  projectId      String?   @map("project_id")
+  userRequest    String    @map("user_request")
+  goal           String
+  status         String    @default("pending")
+  createdAt      DateTime  @default(now()) @map("created_at")
+  startedAt      DateTime? @map("started_at")
+  completedAt    DateTime? @map("completed_at")
+
+  organization     Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  project          Project?          @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  steps            JobStep[]
+  approvalRequests ApprovalRequest[]
+  activities       Activity[]
+
+  @@index([organizationId])
+  @@index([organizationId, status])
+  @@map("jobs")
+}
+
+model JobStep {
+  id             String    @id @default(cuid())
+  organizationId String    @map("organization_id")
+  jobId          String    @map("job_id")
+  agent          String
+  action         String
+  status         String    @default("pending")
+  input          String
+  output         String?
+  startedAt      DateTime? @map("started_at")
+  completedAt    DateTime? @map("completed_at")
+  error          String?
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  job          Job          @relation(fields: [jobId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId])
+  @@index([jobId])
+  @@map("job_steps")
+}
+
+model Activity {
+  id                String   @id @default(cuid())
+  organizationId    String   @map("organization_id")
+  timestamp         DateTime
+  type              String
+  title             String
+  description       String?
+  status            String
+  projectId         String?  @map("project_id")
+  companyId         String?  @map("company_id")
+  contactId         String?  @map("contact_id")
+  taskId            String?  @map("task_id")
+  communicationId   String?  @map("communication_id")
+  jobId             String?  @map("job_id")
+  externalReference String?  @map("external_reference")
+  externalUrl       String?  @map("external_url")
+  metadata          String?
+  createdAt         DateTime @default(now()) @map("created_at")
+
+  organization  Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  project       Project?       @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  company       Company?       @relation(fields: [companyId], references: [id], onDelete: SetNull)
+  contact       Contact?       @relation(fields: [contactId], references: [id], onDelete: SetNull)
+  task          Task?          @relation(fields: [taskId], references: [id], onDelete: SetNull)
+  communication Communication? @relation(fields: [communicationId], references: [id], onDelete: SetNull)
+  job           Job?           @relation(fields: [jobId], references: [id], onDelete: SetNull)
+
+  @@index([organizationId, timestamp])
+  @@index([organizationId, type])
+  @@map("activities")
+}
+
+model MemoryEntry {
+  id              String   @id @default(cuid())
+  organizationId  String   @map("organization_id")
+  type            String
+  title           String
+  content         String
+  projectId       String?  @map("project_id")
+  companyId       String?  @map("company_id")
+  contactId       String?  @map("contact_id")
+  sourceId        String?  @map("source_id")
+  sourceType      String   @map("source_type")
+  sourceReference String?  @map("source_reference")
+  sourceUrl       String?  @map("source_url")
+  fulltext        String
+  embeddingRef    String?  @map("embedding_ref")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  organization Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  project      Project?         @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  company      Company?         @relation(fields: [companyId], references: [id], onDelete: SetNull)
+  contact      Contact?         @relation(fields: [contactId], references: [id], onDelete: SetNull)
+  source       Source?          @relation(fields: [sourceId], references: [id], onDelete: SetNull)
+  fromRelations MemoryRelation[] @relation("RelationFrom")
+  toRelations   MemoryRelation[] @relation("RelationTo")
+
+  @@index([organizationId])
+  @@index([organizationId, type])
+  @@index([organizationId, fulltext])
+  @@map("memory_entries")
+}
+
+model MemoryRelation {
+  id             String   @id @default(cuid())
+  organizationId String   @map("organization_id")
+  fromId         String   @map("from_id")
+  toId           String   @map("to_id")
+  relationType   String   @map("relation_type")
+  metadata       String?
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  from         MemoryEntry  @relation("RelationFrom", fields: [fromId], references: [id], onDelete: Cascade)
+  to           MemoryEntry  @relation("RelationTo", fields: [toId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId])
+  @@index([fromId])
+  @@index([toId])
+  @@map("memory_relations")
+}
+
+model Meeting {
+  id                String    @id @default(cuid())
+  organizationId    String    @map("organization_id")
+  projectId         String?   @map("project_id")
+  title             String
+  startsAt          DateTime  @map("starts_at")
+  endsAt            DateTime? @map("ends_at")
+  location          String?
+  notes             String?
+  externalReference String?   @map("external_reference")
+  externalUrl       String?   @map("external_url")
+  createdAt         DateTime  @default(now()) @map("created_at")
+  updatedAt         DateTime  @updatedAt @map("updated_at")
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  project      Project?     @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  memos        Memo[]
+
+  @@index([organizationId])
+  @@map("meetings")
+}
+
+model Memo {
+  id             String   @id @default(cuid())
+  organizationId String   @map("organization_id")
+  meetingId      String?  @map("meeting_id")
+  projectId      String?  @map("project_id")
+  title          String
+  content        String
+  decisions      String?
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  meeting      Meeting?     @relation(fields: [meetingId], references: [id], onDelete: SetNull)
+  project      Project?     @relation(fields: [projectId], references: [id], onDelete: SetNull)
+
+  @@index([organizationId])
+  @@map("memos")
+}
+
+model Document {
+  id                String   @id @default(cuid())
+  organizationId    String   @map("organization_id")
+  projectId         String?  @map("project_id")
+  title             String
+  path              String?
+  mimeType          String?  @map("mime_type")
+  content           String?
+  externalReference String?  @map("external_reference")
+  externalUrl       String?  @map("external_url")
+  createdAt         DateTime @default(now()) @map("created_at")
+  updatedAt         DateTime @updatedAt @map("updated_at")
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  project      Project?     @relation(fields: [projectId], references: [id], onDelete: SetNull)
+
+  @@index([organizationId])
+  @@map("documents")
+}
+
+model Communication {
+  id                String    @id @default(cuid())
+  organizationId    String    @map("organization_id")
+  projectId         String?   @map("project_id")
+  companyId         String?   @map("company_id")
+  contactId         String?   @map("contact_id")
+  channel           String
+  direction         String
+  subject           String
+  body              String
+  status            String    @default("draft")
+  isMock            Boolean   @default(false) @map("is_mock")
+  externalReference String?   @map("external_reference")
+  externalUrl       String?   @map("external_url")
+  sentAt            DateTime? @map("sent_at")
+  createdAt         DateTime  @default(now()) @map("created_at")
+  updatedAt         DateTime  @updatedAt @map("updated_at")
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  project      Project?     @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  company      Company?     @relation(fields: [companyId], references: [id], onDelete: SetNull)
+  contact      Contact?     @relation(fields: [contactId], references: [id], onDelete: SetNull)
+  activities   Activity[]
+
+  @@index([organizationId])
+  @@index([organizationId, status])
+  @@map("communications")
+}
+
+model ApprovalRequest {
+  id             String    @id @default(cuid())
+  organizationId String    @map("organization_id")
+  jobId          String?   @map("job_id")
+  actionType     String    @map("action_type")
+  description    String
+  payload        String
+  status         String    @default("pending")
+  createdAt      DateTime  @default(now()) @map("created_at")
+  approvedAt     DateTime? @map("approved_at")
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  job          Job?         @relation(fields: [jobId], references: [id], onDelete: SetNull)
+
+  @@index([organizationId])
+  @@index([organizationId, status])
+  @@map("approval_requests")
+}
+
+model ApprovalPolicy {
+  id             String    @id @default(cuid())
+  organizationId String    @map("organization_id")
+  name           String
+  actionType     String    @map("action_type")
+  scope          String
+  conditions     String
+  limits         String
+  createdAt      DateTime  @default(now()) @map("created_at")
+  revokedAt      DateTime? @map("revoked_at")
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId])
+  @@map("approval_policies")
+}
+
+model Conversation {
+  id             String   @id @default(cuid())
+  organizationId String   @map("organization_id")
+  title          String?
+  origin         String
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  organization Organization          @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  messages     ConversationMessage[]
+
+  @@index([organizationId])
+  @@map("conversations")
+}
+
+model ConversationMessage {
+  id             String   @id @default(cuid())
+  organizationId String   @map("organization_id")
+  conversationId String   @map("conversation_id")
+  role           String
+  content        String
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId])
+  @@index([conversationId])
+  @@map("conversation_messages")
+}
+
+model Source {
+  id             String   @id @default(cuid())
+  organizationId String   @map("organization_id")
+  type           String
+  reference      String?
+  url            String?
+  label          String?
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  organization  Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  memoryEntries MemoryEntry[]
+
+  @@index([organizationId])
+  @@map("sources")
+}
+
+model ConnectorConfig {
+  id             String   @id @default(cuid())
+  organizationId String   @map("organization_id")
+  type           String
+  provider       String
+  enabled        Boolean  @default(false)
+  config         String
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, type, provider])
+  @@index([organizationId])
+  @@map("connector_configs")
+}
+
+model AiProviderConfig {
+  id             String   @id @default(cuid())
+  organizationId String   @map("organization_id")
+  provider       String
+  role           String
+  model          String?
+  enabled        Boolean  @default(true)
+  config         String?
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, role])
+  @@index([organizationId])
+  @@map("ai_provider_configs")
+}

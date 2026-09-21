@@ -1,0 +1,83 @@
+export type OrbState =
+  | "IDLE"
+  | "LISTENING"
+  | "THINKING"
+  | "WORKING"
+  | "WAITING_FOR_APPROVAL"
+  | "DONE"
+  | "ERROR";
+
+export type JobStatus =
+  | "pending"
+  | "planning"
+  | "running"
+  | "waiting_for_approval"
+  | "completed"
+  | "failed"
+  | "cancelled";
+
+export type JobStepStatus = "pending" | "running" | "completed" | "failed" | "skipped";
+
+export type ActivityStatus = "suggested" | "prepared" | "executed" | "failed";
+
+export type ActivityType =
+  | "research"
+  | "communication"
+  | "meeting"
+  | "task"
+  | "document"
+  | "calendar"
+  | "job"
+  | "memory"
+  | "approval";
+
+export type ApprovalStatus = "pending" | "approved" | "rejected";
+
+export type MemberRole = "owner" | "admin" | "member";
+
+export type SourceType =
+  | "chatgpt"
+  | "nova"
+  | "email"
+  | "meeting"
+  | "document"
+  | "manual"
+  | "research"
+  | "calendar";
+
+export type MemoryType =
+  | "person"
+  | "company"
+  | "project"
+  | "decision"
+  | "preference"
+  | "summary"
+  | "fact"
+  | "conversation_insight"
+  | "research"
+  | "communication"
+  | "task";
+
+export type RelationType =
+  | "works_at"
+  | "belongs_to"
+  | "contacted"
+  | "replied"
+  | "meeting"
+  | "memo"
+  | "offer_requested"
+  | "follow_up"
+  | "related"
+  | "candidate_for"
+  | "drafted_for";
+
+export type RiskLevel = "low" | "medium" | "high";
+
+export type TenantContext = {
+  organizationId: string;
+  organizationSlug: string;
+  organizationName: string;
+  userId: string;
+  userName: string;
+  role: MemberRole;
+};
