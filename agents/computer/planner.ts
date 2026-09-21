@@ -131,6 +131,9 @@ export function planComputerTask(input: {
 }
 
 function guessFilename(request: string): string {
-  const match = request.match(/datei\s+([a-zA-Z0-9._-]+)/i);
-  return match?.[1] ?? (request.replace(/such(?:e| mir)?|die datei|finde/gi, "").trim().slice(0, 40) || "nova");
+  const named = request.match(/datei\s+([a-zA-Z0-9._-]+)/i)?.[1];
+  if (named) return named;
+  const cleaned = request.replace(/such(?:e| mir)?|die datei|finde/gi, "").trim().slice(0, 40);
+  if (cleaned) return cleaned;
+  return "nova";
 }
