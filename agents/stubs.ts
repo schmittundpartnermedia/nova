@@ -63,14 +63,6 @@ export const contactAgent = stub(
   "low",
 );
 
-export const browserAgent = stub(
-  "browser",
-  "Browser/Computer Agent",
-  "Später: Webseiten bedienen, Systeme ohne API bedienen.",
-  ["browser", "computer-use"],
-  "high",
-);
-
 export const qualityAgent = stub(
   "quality",
   "Quality Agent",

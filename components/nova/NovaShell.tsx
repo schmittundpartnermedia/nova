@@ -446,7 +446,9 @@ export function NovaShell() {
         if (pending) {
           setApproval({ id: pending.id, description: pending.description, status: pending.status });
           setOrbState("WAITING_FOR_APPROVAL");
-          setStatus("Ich brauche deine Freigabe, bevor etwas versendet werden könnte.");
+          setStatus(/computer|löschen|freigabe/i.test(String(pending.description ?? ""))
+            ? "Freigabe erforderlich"
+            : "Ich brauche deine Freigabe, bevor etwas versendet werden könnte.");
         }
         if (data.latestJob) {
           setJob({
@@ -497,6 +499,7 @@ export function NovaShell() {
   const stopSpeech = useCallback(() => {
     interruptedRef.current = true;
     stopVoice("idle");
+    void fetch("/api/computer/cancel", { method: "POST" });
     if (sessionActiveRef.current) {
       notifyNovaIdle();
       setOrbState("LISTENING");

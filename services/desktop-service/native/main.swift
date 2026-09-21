@@ -1,0 +1,255 @@
+import ImageIO
+import UniformTypeIdentifiers
+import Foundation
+import AppKit
+import ApplicationServices
+import CoreGraphics
+import ScreenCaptureKit
+
+struct Command: Decodable {
+    let cmd: String
+    let app: String?
+    let identifier: String?
+    let value: String?
+    let maxDepth: Int?
+    let persist: Bool?
+}
+
+func writeJSON(_ object: [String: Any]) {
+    guard let data = try? JSONSerialization.data(withJSONObject: object, options: []) else {
+        fputs("{\"ok\":false,\"error\":\"json_encode_failed\"}\n", stdout)
+        return
+    }
+    FileHandle.standardOutput.write(data)
+    fputs("\n", stdout)
+}
+
+func axTrusted() -> Bool {
+    return AXIsProcessTrusted()
+}
+
+func screenTrusted() -> Bool {
+    if #available(macOS 11.0, *) {
+        return CGPreflightScreenCaptureAccess()
+    }
+    return false
+}
+
+func listApps() -> [[String: Any]] {
+    NSWorkspace.shared.runningApplications.compactMap { app in
+        guard let name = app.localizedName else { return nil }
+        return [
+            "name": name,
+            "bundleId": app.bundleIdentifier ?? "",
+            "pid": app.processIdentifier,
+            "active": app.isActive,
+            "hidden": app.isHidden,
+        ]
+    }
+}
+
+func listInstalled() -> [String] {
+    let fm = FileManager.default
+    let dir = "/Applications"
+    let items = (try? fm.contentsOfDirectory(atPath: dir)) ?? []
+    return items.filter { $0.hasSuffix(".app") }.map { String($0.dropLast(4)) }.sorted()
+}
+
+func attribute(_ element: AXUIElement, _ name: CFString) -> Any? {
+    var value: AnyObject?
+    let result = AXUIElementCopyAttributeValue(element, name, &value)
+    guard result == .success else { return nil }
+    return value
+}
+
+func inspectElement(_ element: AXUIElement, depth: Int, maxDepth: Int) -> [String: Any] {
+    let role = attribute(element, kAXRoleAttribute as CFString) as? String ?? ""
+    let title = attribute(element, kAXTitleAttribute as CFString) as? String ?? ""
+    let identifier = attribute(element, kAXIdentifierAttribute as CFString) as? String ?? ""
+    let description = attribute(element, kAXDescriptionAttribute as CFString) as? String ?? ""
+    var node: [String: Any] = [
+        "role": role,
+        "title": title,
+        "identifier": identifier,
+        "description": description,
+    ]
+    if depth >= maxDepth { return node }
+    guard let children = attribute(element, kAXChildrenAttribute as CFString) as? [AXUIElement] else {
+        return node
+    }
+    node["children"] = children.prefix(40).map { inspectElement($0, depth: depth + 1, maxDepth: maxDepth) }
+    return node
+}
+
+func systemWideInspect(maxDepth: Int, appName: String?) -> [String: Any] {
+    if let appName, !appName.isEmpty {
+        let match = NSWorkspace.shared.runningApplications.first {
+            $0.localizedName?.localizedCaseInsensitiveCompare(appName) == .orderedSame
+        }
+        if let match {
+            let appEl = AXUIElementCreateApplication(match.processIdentifier)
+            return inspectElement(appEl, depth: 0, maxDepth: maxDepth)
+        }
+    }
+    return inspectElement(AXUIElementCreateSystemWide(), depth: 0, maxDepth: maxDepth)
+}
+
+func performAction(_ identifier: String, action: String, value: String?) -> [String: Any] {
+    // Foundation-only: identifier matching across the tree is Phase B depth.
+    return [
+        "ok": false,
+        "error": "ax_action_foundation",
+        "identifier": identifier,
+        "requestedAction": action,
+        "value": value ?? "",
+        "status": "NOT_IMPLEMENTED",
+    ]
+}
+
+func captureScreen() -> [String: Any] {
+    guard screenTrusted() else {
+        return ["ok": false, "permission": "screen_recording", "error": "PERMISSION_REQUIRED"]
+    }
+    var result: [String: Any] = ["ok": false, "error": "capture_timeout"]
+    let sem = DispatchSemaphore(value: 0)
+    Task {
+        do {
+            let content = try await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: true)
+            guard let display = content.displays.first else {
+                result = ["ok": false, "error": "no_display"]
+                sem.signal()
+                return
+            }
+            let filter = SCContentFilter(display: display, excludingApplications: [], exceptingWindows: [])
+            let config = SCStreamConfiguration()
+            config.width = display.width
+            config.height = display.height
+            config.showsCursor = false
+            let image = try await SCScreenshotManager.captureImage(contentFilter: filter, configuration: config)
+            let dir = NSTemporaryDirectory() + "nova-desktop-ephemeral/"
+            try FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
+            let path = dir + "capture-\(Int(Date().timeIntervalSince1970 * 1000)).png"
+            let url = URL(fileURLWithPath: path)
+            let uti = UTType.png.identifier as CFString
+            guard let dest = CGImageDestinationCreateWithURL(url as CFURL, uti, 1, nil) else {
+                result = ["ok": false, "error": "encode_failed"]
+                sem.signal()
+                return
+            }
+            CGImageDestinationAddImage(dest, image, nil)
+            if !CGImageDestinationFinalize(dest) {
+                result = ["ok": false, "error": "write_failed"]
+                sem.signal()
+                return
+            }
+            result = ["ok": true, "path": path, "ephemeral": true]
+        } catch {
+            let message = error.localizedDescription
+            if message.lowercased().contains("not authorized") || message.lowercased().contains("denied") {
+                result = ["ok": false, "permission": "screen_recording", "error": "PERMISSION_REQUIRED"]
+            } else {
+                result = ["ok": false, "error": message]
+            }
+        }
+        sem.signal()
+    }
+    _ = sem.wait(timeout: .now() + 8)
+    return result
+}
+
+func launchApp(_ name: String) -> [String: Any] {
+    let appURL =
+        NSWorkspace.shared.urlForApplication(withBundleIdentifier: name)
+        ?? URL(fileURLWithPath: "/Applications/\(name).app")
+    guard FileManager.default.fileExists(atPath: appURL.path) else {
+        return ["ok": false, "error": "app_not_found", "name": name]
+    }
+    let configuration = NSWorkspace.OpenConfiguration()
+    var launchError: String?
+    let sem = DispatchSemaphore(value: 0)
+    NSWorkspace.shared.openApplication(at: appURL, configuration: configuration) { _, error in
+        launchError = error?.localizedDescription
+        sem.signal()
+    }
+    _ = sem.wait(timeout: .now() + 6)
+    return ["ok": launchError == nil, "name": name, "error": launchError ?? ""]
+}
+
+func focusApp(_ name: String) -> [String: Any] {
+    let app = NSWorkspace.shared.runningApplications.first {
+        $0.localizedName?.localizedCaseInsensitiveCompare(name) == .orderedSame
+    }
+    guard let app else { return ["ok": false, "error": "app_not_running", "name": name] }
+    let ok = app.activate()
+    return ["ok": ok, "name": name, "pid": app.processIdentifier]
+}
+
+func quitApp(_ name: String) -> [String: Any] {
+    let app = NSWorkspace.shared.runningApplications.first {
+        $0.localizedName?.localizedCaseInsensitiveCompare(name) == .orderedSame
+    }
+    guard let app else { return ["ok": false, "error": "app_not_running", "name": name] }
+    let ok = app.terminate()
+    return ["ok": ok, "name": name]
+}
+
+func windows() -> [[String: Any]] {
+    let options = CGWindowListOption(arrayLiteral: .optionOnScreenOnly, .excludeDesktopElements)
+    guard let info = CGWindowListCopyWindowInfo(options, kCGNullWindowID) as? [[String: Any]] else {
+        return []
+    }
+    return info.prefix(80).map { item in
+        [
+            "name": item[kCGWindowName as String] ?? "",
+            "owner": item[kCGWindowOwnerName as String] ?? "",
+            "pid": item[kCGWindowOwnerPID as String] ?? 0,
+            "layer": item[kCGWindowLayer as String] ?? 0,
+            "bounds": item[kCGWindowBounds as String] ?? [:],
+        ]
+    }
+}
+
+let raw = CommandLine.arguments.dropFirst().joined(separator: " ")
+guard let data = raw.data(using: .utf8), let command = try? JSONDecoder().decode(Command.self, from: data) else {
+    writeJSON(["ok": false, "error": "invalid_command"])
+    exit(1)
+}
+
+switch command.cmd {
+case "permissions":
+    writeJSON([
+        "ok": true,
+        "data": [
+            "accessibility": axTrusted(),
+            "screenRecording": screenTrusted(),
+            "automation": false,
+        ],
+    ])
+case "apps":
+    writeJSON(["ok": true, "data": ["running": listApps(), "installed": listInstalled()]])
+case "windows":
+    writeJSON(["ok": true, "data": ["windows": windows()]])
+case "capture":
+    writeJSON(captureScreen())
+case "ax.inspect":
+    if !axTrusted() {
+        writeJSON(["ok": false, "permission": "accessibility", "error": "PERMISSION_REQUIRED"])
+    } else {
+        writeJSON(["ok": true, "data": systemWideInspect(maxDepth: command.maxDepth ?? 3, appName: command.app)])
+    }
+case "ax.press", "ax.focus", "ax.setValue", "ax.select", "ax.expand", "ax.collapse", "ax.scroll":
+    if !axTrusted() {
+        writeJSON(["ok": false, "permission": "accessibility", "error": "PERMISSION_REQUIRED"])
+    } else {
+        writeJSON(performAction(command.identifier ?? "", action: command.cmd, value: command.value))
+    }
+case "app.launch":
+    writeJSON(launchApp(command.app ?? ""))
+case "app.focus":
+    writeJSON(focusApp(command.app ?? ""))
+case "app.quit":
+    writeJSON(quitApp(command.app ?? ""))
+default:
+    writeJSON(["ok": false, "error": "unknown_cmd", "cmd": command.cmd])
+    exit(1)
+}

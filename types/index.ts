@@ -34,7 +34,8 @@ export type ActivityType =
   | "conversation"
   | "decision"
   | "project_activity"
-  | "execution";
+  | "execution"
+  | "computer";
 
 export type ApprovalStatus = "pending" | "approved" | "rejected";
 

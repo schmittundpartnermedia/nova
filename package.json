@@ -18,6 +18,8 @@
     "verify:avatar": "tsx scripts/verify-avatar.ts",
     "validate:avatar": "tsx scripts/validate-nova-avatar.ts",
     "verify:conversation": "tsx scripts/verify-conversation.ts",
+    "verify:computer": "tsx scripts/verify-computer.ts",
+    "desktop-service": "tsx services/desktop-service/index.ts",
     "generate:dev-rig": "tsx scripts/generate-dev-rig.ts"
   },
   "dependencies": {

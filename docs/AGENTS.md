@@ -24,10 +24,13 @@ Der Master wählt Agenten dynamisch anhand dieser Metadaten und eines Plans vom 
 | Communication | Mail-Entwürfe, kein Versand |
 | Task | Folgeaufgaben / Wiedervorlagen |
 | Project | Projektkontext laden |
+| Computer | Lokale Mac-Steuerung über Desktop Service: Git, Dateien, Shell, Prozesse, Browser-Erreichbarkeit, Cursor CLI |
 
 ## Vorbereitet (Registry, nicht vollständig)
 
-Calendar, Document, Meeting, Watch, Contact, Browser/Computer, Quality.
+Calendar, Document, Meeting, Watch, Contact, Quality.
+
+Accessibility- und Screen-Capture-Steuerung sind als Native Helper vorbereitet und brauchen macOS-Permissions.
 
 Quality läuft im Sponsoren-Demo als interne Prüfung (keine fälschlich „versendeten“ Mails).
 

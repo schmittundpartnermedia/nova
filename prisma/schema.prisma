@@ -35,6 +35,8 @@ model Organization {
   sources           Source[]
   connectorConfigs  ConnectorConfig[]
   aiProviderConfigs AiProviderConfig[]
+  computerJobs      ComputerJob[]
+  computerActions   ComputerAction[]
 
   @@map("organizations")
 }
@@ -193,6 +195,8 @@ model Job {
   approvalRequests ApprovalRequest[]
   activities       Activity[]
   conversations    Conversation[]
+  computerJobs     ComputerJob[]
+  computerActions  ComputerAction[]
 
   @@index([organizationId])
   @@index([organizationId, status])
@@ -535,4 +539,52 @@ model AiProviderConfig {
   @@unique([organizationId, role])
   @@index([organizationId])
   @@map("ai_provider_configs")
+}
+
+model ComputerJob {
+  id              String    @id @default(cuid())
+  organizationId  String    @map("organization_id")
+  jobId           String?   @map("job_id")
+  goal            String
+  userRequest     String    @map("user_request")
+  status          String
+  cancelRequested Boolean   @default(false) @map("cancel_requested")
+  plan            String?
+  result          String?
+  error           String?
+  startedAt       DateTime  @default(now()) @map("started_at")
+  finishedAt      DateTime? @map("finished_at")
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  job          Job?         @relation(fields: [jobId], references: [id], onDelete: SetNull)
+
+  @@index([organizationId, status])
+  @@index([organizationId, startedAt])
+  @@map("computer_jobs")
+}
+
+model ComputerAction {
+  id             String    @id @default(cuid())
+  organizationId String    @map("organization_id")
+  jobId          String?   @map("job_id")
+  stepId         String?   @map("step_id")
+  tool           String
+  action         String
+  target         String?
+  riskLevel      String    @map("risk_level")
+  approvalId     String?   @map("approval_id")
+  status         String
+  startedAt      DateTime  @map("started_at")
+  finishedAt     DateTime? @map("finished_at")
+  verification   String?
+  error          String?
+  metadata       String?
+  createdAt      DateTime  @default(now()) @map("created_at")
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  job          Job?         @relation(fields: [jobId], references: [id], onDelete: SetNull)
+
+  @@index([organizationId, startedAt])
+  @@index([organizationId, jobId])
+  @@map("computer_actions")
 }

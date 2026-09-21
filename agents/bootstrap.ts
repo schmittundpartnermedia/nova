@@ -1,4 +1,5 @@
 import { registerAgent, getAgent, listAgents } from "@/agents/registry";
+import { computerAgent } from "@/agents/computer";
 import { researchAgent } from "@/agents/research";
 import { communicationAgent } from "@/agents/communication";
 import { taskAgent } from "@/agents/tasks";
@@ -9,7 +10,6 @@ import {
   meetingAgent,
   watchAgent,
   contactAgent,
-  browserAgent,
   qualityAgent,
 } from "@/agents/stubs";
 
@@ -26,7 +26,7 @@ export function bootstrapAgents(): void {
   registerAgent(meetingAgent);
   registerAgent(watchAgent);
   registerAgent(contactAgent);
-  registerAgent(browserAgent);
+  registerAgent(computerAgent);
   registerAgent(qualityAgent);
   bootstrapped = true;
 }

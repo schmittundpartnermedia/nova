@@ -40,6 +40,10 @@ prisma/*.db-journal
 prisma/*.db-wal
 prisma/*.db-shm
 
+# local desktop service
+.nova/
+services/desktop-service/native/bin/
+
 # vercel
 .vercel
 

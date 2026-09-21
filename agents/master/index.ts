@@ -1,4 +1,6 @@
 import { bootstrapAgents, getAgent, listAgents } from "@/agents/bootstrap";
+import { detectComputerIntent } from "@/agents/computer/intent";
+import { runComputerAgent } from "@/agents/computer";
 import { getDefaultProject, runAgentStep } from "@/agents/runtime";
 import { resolveAIProvider } from "@/providers/ai/registry";
 import { createJob, updateJobStatus } from "@/services/jobs";
@@ -144,6 +146,11 @@ export async function runMaster(input: {
 }): Promise<MasterRunResult> {
   bootstrapAgents();
   await emit(input.onEvent, { type: "status", orbState: "THINKING", statusMessage: "Ich denke nach …" });
+
+  const computerIntent = detectComputerIntent(input.userRequest);
+  if (computerIntent.kind !== "none") {
+    return runComputerMasterPath(input, computerIntent.statusMessage);
+  }
 
   const { provider, decision } = await resolveAIProvider(input.organizationId, "master");
   const mode = providerModeOf(decision);
@@ -506,6 +513,71 @@ Formuliere die Nutzerantwort. Wenn ein Entwurf erzeugt wurde, zeige ihn. Wenn Re
     await updateJobStatus(input.organizationId, job.id, "failed", { completedAt: new Date() });
     throw error;
   }
+}
+
+async function runComputerMasterPath(
+  input: {
+    organizationId: string;
+    userRequest: string;
+    conversationId?: string;
+    sourceMessageId?: string;
+    onEvent?: (event: MasterEvent) => void;
+  },
+  statusMessage: string,
+): Promise<MasterRunResult> {
+  const project = await getDefaultProject(input.organizationId);
+  const job = await createJob({
+    organizationId: input.organizationId,
+    userRequest: input.userRequest,
+    goal: statusMessage || input.userRequest,
+    projectId: project?.id,
+  });
+  await updateJobStatus(input.organizationId, job.id, "running", { startedAt: new Date() });
+  await emit(input.onEvent, { type: "status", orbState: "WORKING", statusMessage });
+
+  const result = await runComputerAgent({
+    organizationId: input.organizationId,
+    jobId: job.id,
+    userRequest: input.userRequest,
+    onStatus: (message) => {
+      void emit(input.onEvent, { type: "status", orbState: "WORKING", statusMessage: message });
+    },
+  });
+
+  if (result.reply) {
+    await emit(input.onEvent, { type: "delta", delta: result.reply });
+  }
+
+  const orbState: OrbState =
+    result.status === "WAITING_FOR_APPROVAL"
+      ? "WAITING_FOR_APPROVAL"
+      : result.status === "FAILED"
+        ? "ERROR"
+        : "DONE";
+
+  const jobStatus =
+    result.status === "WAITING_FOR_APPROVAL"
+      ? "waiting_for_approval"
+      : result.status === "CANCELLED_BY_USER" || result.status === "CANCELLED"
+        ? "cancelled"
+        : result.status === "FAILED"
+          ? "failed"
+          : "completed";
+
+  await updateJobStatus(input.organizationId, job.id, jobStatus, { completedAt: new Date() });
+
+  return {
+    jobId: job.id,
+    status: jobStatus,
+    orbState,
+    statusMessage: result.statusMessage,
+    reply: result.reply,
+    approvalId: result.approvalId,
+    mock: false,
+    providerMode: "fallback",
+    providerId: "computer",
+    model: "nova-desktop",
+  };
 }
 
 export async function runQualityCheck(context: AgentRunContext, communicationIds: string[]): Promise<AgentRunResult> {

@@ -12,6 +12,11 @@ export const envSchema = z.object({
   NOVA_VOICE_SPEED: z.string().optional(),
   NOVA_A2F_GRPC_URL: z.string().optional(),
   NOVA_A2F_SERVICE_URL: z.string().optional(),
+  NOVA_DESKTOP_HOST: z.string().optional(),
+  NOVA_DESKTOP_PORT: z.string().optional(),
+  NOVA_DESKTOP_TOKEN: z.string().optional(),
+  NOVA_WORKSPACE_ROOTS: z.string().optional(),
+  NOVA_CURSOR_AGENT_BIN: z.string().optional(),
 });
 
 export type Env = z.infer<typeof envSchema>;
@@ -29,5 +34,10 @@ export function getEnv(): Env {
     NOVA_VOICE_SPEED: process.env.NOVA_VOICE_SPEED,
     NOVA_A2F_GRPC_URL: process.env.NOVA_A2F_GRPC_URL,
     NOVA_A2F_SERVICE_URL: process.env.NOVA_A2F_SERVICE_URL,
+    NOVA_DESKTOP_HOST: process.env.NOVA_DESKTOP_HOST,
+    NOVA_DESKTOP_PORT: process.env.NOVA_DESKTOP_PORT,
+    NOVA_DESKTOP_TOKEN: process.env.NOVA_DESKTOP_TOKEN,
+    NOVA_WORKSPACE_ROOTS: process.env.NOVA_WORKSPACE_ROOTS,
+    NOVA_CURSOR_AGENT_BIN: process.env.NOVA_CURSOR_AGENT_BIN,
   });
 }
