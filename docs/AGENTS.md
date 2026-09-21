@@ -20,7 +20,7 @@ Der Master wählt Agenten dynamisch anhand dieser Metadaten und eines Plans vom 
 | Agent | Aufgabe |
 | --- | --- |
 | Master | Intent, Plan, Orchestrierung, Memory, Archiv, Approval |
-| Research | Mock-Firmen und Mock-Ansprechpartner |
+| Research | Interne Recherche; ohne Search Connector keine erfundenen Live-Treffer |
 | Communication | Mail-Entwürfe, kein Versand |
 | Task | Folgeaufgaben / Wiedervorlagen |
 | Project | Projektkontext laden |

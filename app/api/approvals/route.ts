@@ -61,7 +61,7 @@ export async function POST(request: Request) {
     await recordActivity({
       organizationId: tenant.organizationId,
       type: "communication",
-      title: "Versand nicht ausgeführt",
+      title: "Freigegeben – Connector noch nicht verbunden",
       description: sendResult.reason,
       status: "failed",
       jobId: approval.jobId ?? undefined,
@@ -88,7 +88,7 @@ export async function POST(request: Request) {
       ok: true,
       executed: false,
       mock: true,
-      message: sendResult.reason,
+      message: "Freigegeben, aber Connector noch nicht verbunden. Es wurde nichts versendet.",
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unbekannter Fehler";

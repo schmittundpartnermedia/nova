@@ -17,8 +17,8 @@ NOVA darf nicht fest an OpenAI oder einen anderen einzelnen Anbieter gebunden se
 
 | Provider | Status |
 | --- | --- |
-| MockAIProvider | V1 aktiv |
-| OpenAIProvider | Interface, nicht angebunden |
+| MockAIProvider | Tests, Fallback, Demo, Offline |
+| OpenAIProvider | Aktiv für die Organization Joachim, Key nur über `OPENAI_API_KEY` |
 | AnthropicProvider | Interface, nicht angebunden |
 | LocalAIProvider | Interface für Ollama / LM Studio, nicht angebunden |
 
@@ -28,9 +28,18 @@ NOVA darf nicht fest an OpenAI oder einen anderen einzelnen Anbieter gebunden se
 
 Rollen: `master`, `simple`, `sensitive`, `fallback`.
 
-Wenn ein konfigurierter Provider nicht gesund ist, wird der Fallback der Organization verwendet.
+Default-Modelle liegen zentral in `providers/ai/models.ts` und können pro Organization überschrieben werden.
 
-Secrets ausschließlich über Environment Variables (`OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `LOCAL_AI_BASE_URL`).
+Aktuell (Joachim):
+
+- `master` → OpenAI `gpt-4o`
+- `simple` → OpenAI `gpt-4o-mini`
+- `sensitive` → OpenAI `gpt-4o-mini`
+- `fallback` → Mock
+
+Wenn ein konfigurierter Provider nicht gesund ist, wird der Fallback der Organization verwendet. Eine Fallback-Antwort darf keine echte Modellantwort vortäuschen. Die UI unterscheidet `openai`, `mock`, `fallback` und `error`.
+
+Secrets ausschließlich über Environment Variables (`OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `LOCAL_AI_BASE_URL`). Niemals `NEXT_PUBLIC_OPENAI_API_KEY`.
 
 ## Wechsel
 

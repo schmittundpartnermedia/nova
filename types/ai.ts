@@ -2,6 +2,7 @@ export type GenerateInput = {
   system?: string;
   prompt: string;
   temperature?: number;
+  model?: string;
 };
 
 export type GenerateOutput = {
@@ -14,6 +15,7 @@ export type ReasonInput = {
   goal: string;
   context: string;
   constraints?: string[];
+  model?: string;
 };
 
 export type ReasonOutput = {
@@ -26,11 +28,13 @@ export type StructuredInput = {
   prompt: string;
   schemaName: string;
   schemaDescription: string;
+  model?: string;
 };
 
 export type ToolCallInput = {
   prompt: string;
   tools: Array<{ name: string; description: string }>;
+  model?: string;
 };
 
 export type ToolCallOutput = {
@@ -63,8 +67,13 @@ export interface AIProvider {
 
 export type AIRole = "master" | "simple" | "sensitive" | "fallback";
 
+export type ProviderMode = "openai" | "mock" | "fallback" | "error";
+
 export type AIRoutingDecision = {
   role: AIRole;
   providerId: string;
+  requestedProviderId: string;
+  model: string;
+  fallback: boolean;
   reason: string;
 };

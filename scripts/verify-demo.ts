@@ -1,6 +1,5 @@
 import { PrismaClient } from "@prisma/client";
 import { runMaster } from "@/agents/master";
-import { listActivities } from "@/services/archive";
 import { searchMemory } from "@/services/retrieval";
 
 const prisma = new PrismaClient();
@@ -17,9 +16,13 @@ async function main() {
     create: { name: "Verify Isolation", slug: "verify-isolation" },
   });
 
+  const leakedBefore = await prisma.memoryEntry.count({
+    where: { organizationId: isolation.id },
+  });
+
   const result = await runMaster({
     organizationId: organization.id,
-    userRequest: "Finde 10 potenzielle Sponsoren und bereite die Ansprache vor.",
+    userRequest: "Finde aktuelle Unternehmen, die als Sponsor passen.",
   });
 
   const job = await prisma.job.findFirst({
@@ -27,41 +30,48 @@ async function main() {
     include: { steps: true, approvalRequests: true },
   });
 
-  const companies = await prisma.company.findMany({ where: { organizationId: organization.id, isMock: true } });
-  const contacts = await prisma.contact.findMany({ where: { organizationId: organization.id, isMock: true } });
-  const drafts = await prisma.communication.findMany({
-    where: { organizationId: organization.id, status: "prepared" },
-  });
   const sent = await prisma.communication.count({
     where: { organizationId: organization.id, status: "sent" },
   });
   const executed = await prisma.activity.count({
     where: { organizationId: organization.id, status: "executed" },
   });
-  const activities = await listActivities({ organizationId: organization.id });
-  const memory = await searchMemory({ organizationId: organization.id, query: "sponsor", limit: 50 });
-  const relations = await prisma.memoryRelation.count({ where: { organizationId: organization.id } });
-  const leaked = await prisma.memoryEntry.count({
-    where: { organizationId: isolation.id, title: { contains: "Nordlicht" } },
+  const inventedReal = await prisma.company.count({
+    where: {
+      organizationId: organization.id,
+      isMock: false,
+      notes: { contains: "echte Recherche" },
+    },
   });
+  const leaked = await prisma.memoryEntry.count({
+    where: { organizationId: isolation.id },
+  });
+  const memoryScoped = await searchMemory({
+    organizationId: organization.id,
+    query: "sponsor",
+    limit: 5,
+  });
+  const cross = memoryScoped.filter((item) => item.organizationId !== organization.id);
+
+  const reply = result.reply.toLowerCase();
+  const honestResearch =
+    reply.includes("search") ||
+    reply.includes("connector") ||
+    reply.includes("recherche") ||
+    reply.includes("nicht verbunden");
 
   const checks = {
     jobCreated: Boolean(job),
-    stepsCreated: (job?.steps.length ?? 0) >= 4,
-    mockCompanies: companies.length >= 10,
-    mockContacts: contacts.length >= 10,
-    drafts: drafts.length >= 10,
-    approval: (job?.approvalRequests.length ?? 0) >= 1,
-    activities: activities.length >= 4,
-    memory: memory.length >= 10,
-    relations: relations >= 10,
+    openaiOrMockVisible: result.providerMode === "openai" || result.providerMode === "mock" || result.providerMode === "error",
     noSentMails: sent === 0,
     noFakeExecuted: executed === 0,
-    tenantIsolation: leaked === 0,
+    noInventedRealResearch: inventedReal === 0,
+    honestResearch,
+    tenantIsolation: leaked === leakedBefore && cross.length === 0,
   };
 
   const failed = Object.entries(checks).filter(([, ok]) => !ok);
-  console.log(JSON.stringify({ result, checks, failed: failed.map(([k]) => k) }, null, 2));
+  console.log(JSON.stringify({ result: { ...result, reply: result.reply.slice(0, 400) }, checks, failed: failed.map(([k]) => k) }, null, 2));
 
   if (failed.length > 0) {
     throw new Error(`Demo-Verifikation fehlgeschlagen: ${failed.map(([k]) => k).join(", ")}`);

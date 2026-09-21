@@ -75,19 +75,38 @@ export class MockAIProvider implements AIProvider {
     if (input.schemaName === "master-plan") {
       const sponsor = detectSponsorIntent(input.prompt);
       const count = extractCount(input.prompt);
+      const lower = input.prompt.toLowerCase();
+      const remember = lower.includes("merk dir") || lower.includes("merke dir");
+      const mail = lower.includes("mail") || lower.includes("anschreiben");
+      const task = lower.includes("aufgabe");
+      const agents: string[] = [];
+      if (sponsor) agents.push("research", "communication", "task", "project");
+      else {
+        if (mail) agents.push("communication");
+        if (task) agents.push("task");
+        if (lower.includes("projekt")) agents.push("project");
+      }
       const result = {
-        intent: sponsor ? "sponsor_acquisition" : "general",
+        intent: sponsor ? "sponsor_acquisition" : remember ? "remember" : mail ? "communication" : task ? "task" : "direct_answer",
         goal: sponsor
           ? `${count} potenzielle Sponsoren finden und Ansprache vorbereiten`
           : "Anfrage verstehen und mit verfügbaren Agenten beantworten",
         count,
-        agents: sponsor
-          ? ["research", "communication", "task", "project"]
-          : ["project"],
-        needsApproval: sponsor,
+        agents,
+        needsApproval: sponsor || mail,
+        remember,
+        searchRequired: sponsor || lower.includes("finde aktuelle"),
+        externalAction: sponsor || mail ? "mail.send" : "none",
         mock: true,
+        memoryItems: remember
+          ? [{ type: "fact", title: "Merkhilfe", content: input.prompt }]
+          : [],
       };
       return result as T;
+    }
+
+    if (input.schemaName === "durable-memory") {
+      return { persist: false, items: [] } as T;
     }
 
     return { mock: true } as T;

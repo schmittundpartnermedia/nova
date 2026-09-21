@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { assertOrganizationId } from "@/services/tenant";
 import type { AIProvider, AIRole, AIRoutingDecision } from "@/types/ai";
+import { defaultModelFor } from "@/providers/ai/models";
 import { MockAIProvider } from "@/providers/ai/mock";
 import { OpenAIProvider } from "@/providers/ai/openai";
 import { AnthropicProvider } from "@/providers/ai/anthropic";
@@ -41,6 +42,7 @@ export async function resolveAIProvider(
   });
 
   let provider = providers[requested] ?? providers.mock;
+  let fallback = false;
   let reason = `Organization-Konfiguration: Rolle ${role} → ${provider.id}`;
 
   if (requested !== "mock") {
@@ -48,15 +50,25 @@ export async function resolveAIProvider(
     if (!health.ok) {
       const fallbackId = fallbackConfig?.provider ?? "mock";
       provider = providers[fallbackId] ?? providers.mock;
+      fallback = true;
       reason = `Provider ${requested} nicht einsatzbereit, Fallback auf ${provider.id}`;
     }
   }
+
+  const model = defaultModelFor(
+    provider.id,
+    fallback ? "fallback" : role,
+    fallback ? fallbackConfig?.model : config?.model,
+  );
 
   return {
     provider,
     decision: {
       role,
       providerId: provider.id,
+      requestedProviderId: requested,
+      model,
+      fallback,
       reason,
     },
   };

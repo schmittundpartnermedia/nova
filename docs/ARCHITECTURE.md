@@ -40,7 +40,7 @@ Die normale Oberfläche zeigt **keine** Mandantenwahl.
 
 Jobs, Steps, Memory, Aktivitäten, Entwürfe und Freigaben liegen in SQLite. Ein Neustart löscht sie nicht.
 
-## Hybrid AI (vorbereitet)
+## Hybrid AI
 
 Pro Organization können Rollen konfiguriert werden:
 
@@ -59,7 +59,7 @@ Vorbereitete Aktionen werden als `prepared` oder `suggested` gespeichert.
 
 ## Roadmap (nicht in V1)
 
-- Echte OpenAI- / Anthropic- / Local-AI-Anbindung
+- Echte Anthropic- / Local-AI-Anbindung
 - Echte Mail- und Kalender-Connectoren
 - Semantische Suche / Embeddings
 - ChatGPT-Export-Extraktion (Personen, Firmen, Entscheidungen)

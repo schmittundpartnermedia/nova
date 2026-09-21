@@ -5,22 +5,56 @@ import { createJob, updateJobStatus } from "@/services/jobs";
 import { createApprovalRequest } from "@/services/approvals";
 import { recordActivity } from "@/services/archive";
 import { createSource, saveMemory } from "@/services/memory";
-import { relateMemory } from "@/services/memory/relations";
-import { searchMemory } from "@/services/retrieval";
+import { loadRelevantBusinessContext } from "@/services/retrieval";
 import { prisma } from "@/lib/prisma";
-import type { AgentRunContext } from "@/types/agents";
-import type { OrbState } from "@/types";
+import { looksLikeSecret, redactSecrets } from "@/lib/secrets";
+import type { AgentRunContext, AgentRunResult } from "@/types/agents";
+import type { GenerateInput, ProviderMode } from "@/types/ai";
+import type { MemoryType, OrbState } from "@/types";
 
 bootstrapAgents();
 
-type MasterPlan = {
-  intent: string;
-  goal: string;
-  count?: number;
-  agents: string[];
-  needsApproval: boolean;
-  mock: boolean;
+const MEMORY_TYPES: MemoryType[] = [
+  "person",
+  "company",
+  "project",
+  "decision",
+  "preference",
+  "summary",
+  "fact",
+  "conversation_insight",
+  "research",
+  "communication",
+  "task",
+];
+
+type MemoryItem = {
+  type: string;
+  title: string;
+  content: string;
 };
+
+type MasterPlan = {
+  intent?: string;
+  goal?: string;
+  count?: number;
+  agents?: string[];
+  needsApproval?: boolean;
+  remember?: boolean;
+  searchRequired?: boolean;
+  externalAction?: string;
+  mock?: boolean;
+  replyHint?: string;
+  communicationBrief?: string | null;
+  taskDraft?: { title?: string; description?: string; dueDays?: number; dueAt?: string } | null;
+  projectDraft?: { create?: boolean; name?: string; description?: string; list?: boolean } | null;
+  memoryItems?: MemoryItem[];
+};
+
+export type MasterEvent =
+  | { type: "status"; orbState: OrbState; statusMessage: string }
+  | { type: "provider"; providerMode: ProviderMode; providerId: string; model: string; fallback: boolean }
+  | { type: "delta"; delta: string };
 
 export type MasterRunResult = {
   jobId: string;
@@ -30,70 +64,173 @@ export type MasterRunResult = {
   reply: string;
   approvalId?: string;
   mock: boolean;
+  providerMode: ProviderMode;
+  providerId: string;
+  model: string;
 };
 
-async function runQualityCheck(context: AgentRunContext, communicationIds: string[]) {
-  const drafts = await prisma.communication.findMany({
-    where: {
-      organizationId: context.organizationId,
-      id: { in: communicationIds },
-    },
-  });
+async function emit(onEvent: ((event: MasterEvent) => void) | undefined, event: MasterEvent) {
+  onEvent?.(event);
+}
 
-  const issues: string[] = [];
-  for (const draft of drafts) {
-    if (!draft.body.includes("kein")) {
-      // soft check: drafts should disclose mock/no-send
-    }
-    if (draft.status === "sent") {
-      issues.push(`Kommunikation ${draft.id} ist als sent markiert, obwohl kein MailProvider verbunden ist.`);
-    }
-    if (draft.isMock !== true) {
-      issues.push(`Kommunikation ${draft.id} ist nicht als Mock gekennzeichnet.`);
+async function collectStream(input: {
+  provider: { stream: (value: GenerateInput) => AsyncIterable<{ delta: string; done: boolean }> };
+  generateInput: GenerateInput;
+  onDelta?: (delta: string) => void;
+}): Promise<string> {
+  let text = "";
+  for await (const chunk of input.provider.stream(input.generateInput)) {
+    if (chunk.delta) {
+      text += chunk.delta;
+      input.onDelta?.(chunk.delta);
     }
   }
+  return text.trim();
+}
 
-  return {
-    ok: issues.length === 0,
-    issues,
-    checked: drafts.length,
-  };
+function implementedAgentIds(): string[] {
+  return listAgents()
+    .filter((agent) => agent.definition.implemented)
+    .map((agent) => agent.definition.id);
+}
+
+function providerModeOf(input: { providerId: string; fallback: boolean; requestedProviderId: string }): ProviderMode {
+  if (input.fallback) return "fallback";
+  if (input.providerId === "openai") return "openai";
+  if (input.providerId === "mock") return "mock";
+  return "error";
+}
+
+function asMemoryType(value: string): MemoryType {
+  return MEMORY_TYPES.includes(value as MemoryType) ? (value as MemoryType) : "fact";
+}
+
+async function persistDurableMemory(input: {
+  organizationId: string;
+  items: MemoryItem[];
+  projectId?: string;
+  sourceId: string;
+  jobId: string;
+}) {
+  const saved = [];
+  for (const item of input.items) {
+    const title = item.title?.trim();
+    const content = item.content?.trim();
+    if (!title || !content) continue;
+    if (looksLikeSecret(title) || looksLikeSecret(content)) continue;
+    const existing = await prisma.memoryEntry.findFirst({
+      where: {
+        organizationId: input.organizationId,
+        title: redactSecrets(title),
+        content: redactSecrets(content),
+      },
+    });
+    if (existing) continue;
+    const entry = await saveMemory({
+      organizationId: input.organizationId,
+      type: asMemoryType(item.type),
+      title: redactSecrets(title),
+      content: redactSecrets(content),
+      projectId: input.projectId,
+      sourceId: input.sourceId,
+      sourceType: "nova",
+      sourceReference: input.jobId,
+    });
+    saved.push(entry);
+  }
+  return saved;
 }
 
 export async function runMaster(input: {
   organizationId: string;
   userRequest: string;
+  conversationId?: string;
+  onEvent?: (event: MasterEvent) => void;
 }): Promise<MasterRunResult> {
   bootstrapAgents();
-  const { provider } = await resolveAIProvider(input.organizationId, "master");
+  await emit(input.onEvent, { type: "status", orbState: "THINKING", statusMessage: "Ich denke nach …" });
+
+  const { provider, decision } = await resolveAIProvider(input.organizationId, "master");
+  const mode = providerModeOf(decision);
+  await emit(input.onEvent, {
+    type: "provider",
+    providerMode: mode,
+    providerId: provider.id,
+    model: decision.model,
+    fallback: decision.fallback,
+  });
+
+  if (decision.requestedProviderId === "openai" && (decision.fallback || provider.id !== "openai")) {
+    return {
+      jobId: "",
+      status: "failed",
+      orbState: "ERROR",
+      statusMessage: "Der KI-Anbieter ist gerade nicht erreichbar.",
+      reply:
+        "OpenAI ist gerade nicht erreichbar. Ich gebe deshalb keine Mock-Antwort als echte Antwort aus. Bitte später erneut versuchen.",
+      mock: true,
+      providerMode: "error",
+      providerId: provider.id,
+      model: decision.model,
+    };
+  }
+
   const project = await getDefaultProject(input.organizationId);
+  const contextPack = await loadRelevantBusinessContext({
+    organizationId: input.organizationId,
+    query: input.userRequest,
+    conversationId: input.conversationId,
+  });
 
+  const available = implementedAgentIds();
   const plan = await provider.structuredOutput<MasterPlan>({
-    prompt: input.userRequest,
+    model: decision.model,
     schemaName: "master-plan",
-    schemaDescription: "Intent, Ziel, benötigte Agenten, Approval-Bedarf",
+    schemaDescription:
+      'JSON mit intent, goal, agents (Teilmenge von research|communication|task|project), needsApproval, remember, searchRequired, externalAction (none|mail.send|calendar|other), replyHint, communicationBrief, taskDraft, projectDraft {create,name,description,list}, memoryItems [{type,title,content}], mock=false wenn echter Provider.',
+    prompt: `Du bist NOVA, persönlicher Business-Assistent der Organization ${contextPack.organizationName}.
+Entscheide anhand von Intent und Kontext, nicht anhand einzelner Keywords, ob du direkt antwortest oder interne Agenten nutzt.
+
+Verfügbare implementierte Agenten: ${available.join(", ")}
+
+Regeln:
+- Direkt antworten, wenn vorhandenes Memory/Projektwissen reicht.
+- research nur bei Bedarf an externer Recherche.
+- communication für Mail-/Anschreiben-Entwürfe, niemals Versand.
+- task für Aufgaben/Deadlines.
+- project für Projektübersicht, Status oder neues Projekt.
+- remember=true nur bei langlebigen Fakten (Entscheidungen, Projekte, Firmen, Kontakte, Aufgaben, Präferenzen, Deadlines, Zusagen). Kein Smalltalk speichern.
+- Erfinde keine Fakten, Firmen oder Kontakte.
+- searchRequired=true wenn aktuelle Webrecherche nötig wäre.
+
+Kontext dieser Organization (Retrieval, nicht die ganze Datenbank):
+${contextPack.promptBlock}
+
+Benutzeranfrage:
+${input.userRequest}`,
   });
 
-  const reasoning = await provider.reason({
-    goal: plan.goal,
-    context: input.userRequest,
-  });
+  const goal = plan.goal?.trim() || input.userRequest;
+  const requestedAgents = (plan.agents ?? []).filter((id) => available.includes(id));
+  const allowMockCatalog = provider.id === "mock" && plan.mock === true;
 
   const job = await createJob({
     organizationId: input.organizationId,
     userRequest: input.userRequest,
-    goal: plan.goal,
+    goal,
     projectId: project?.id,
   });
 
+  try {
   await updateJobStatus(input.organizationId, job.id, "planning", { startedAt: new Date() });
 
   const context: AgentRunContext = {
     organizationId: input.organizationId,
     jobId: job.id,
     userRequest: input.userRequest,
-    goal: plan.goal,
+    goal,
     projectId: project?.id,
+    aiModel: decision.model,
   };
 
   const source = await createSource({
@@ -103,292 +240,281 @@ export async function runMaster(input: {
     reference: job.id,
   });
 
-  const priorMemory = await searchMemory({
-    organizationId: input.organizationId,
-    query: plan.intent === "sponsor_acquisition" ? "sponsor" : input.userRequest,
-    limit: 8,
-  });
+  await emit(input.onEvent, { type: "status", orbState: "WORKING", statusMessage: "Ich arbeite …" });
+  await updateJobStatus(input.organizationId, job.id, "running");
 
-  const projectAgent = getAgent("project");
-  if (projectAgent) {
-    await updateJobStatus(input.organizationId, job.id, "running");
-    await runAgentStep({
-      agent: projectAgent,
-      action: "load-context",
-      payload: { projectId: project?.id },
-      context,
-    });
+  const agentNotes: string[] = [];
+  const communicationIds: string[] = [];
+  const contactIds: string[] = [];
+  let researchBlocked = false;
+
+  const shouldRun = (id: string) => requestedAgents.includes(id);
+
+  if (shouldRun("project") || plan.projectDraft?.list || plan.projectDraft?.create) {
+    const projectAgent = getAgent("project");
+    if (projectAgent) {
+      const result = await runAgentStep({
+        agent: projectAgent,
+        action: plan.projectDraft?.create ? "create" : plan.projectDraft?.list ? "list" : "load-context",
+        payload: {
+          projectId: project?.id,
+          list: plan.projectDraft?.list === true || !plan.projectDraft?.create,
+          create: plan.projectDraft?.create === true,
+          name: plan.projectDraft?.name,
+          description: plan.projectDraft?.description,
+        },
+        context,
+      });
+      agentNotes.push(`Project Agent: ${result.result.summary}`);
+    }
   }
 
-  if (plan.intent !== "sponsor_acquisition") {
-    const available = listAgents()
-      .filter((agent) => agent.definition.implemented)
-      .map((agent) => agent.definition.id);
+  if (shouldRun("research") || plan.searchRequired) {
+    const research = getAgent("research");
+    if (research) {
+      const result = await runAgentStep({
+        agent: research,
+        action: "research",
+        payload: {
+          count: plan.count ?? 10,
+          projectId: project?.id,
+          query: input.userRequest,
+          allowMockCatalog,
+        },
+        context,
+      });
+      agentNotes.push(`Research Agent: ${result.result.summary}`);
+      const ids = (result.result.data.contactIds as string[]) ?? [];
+      contactIds.push(...ids);
+      if (result.result.data.searchConnected === false && result.result.data.mock !== true) {
+        researchBlocked = true;
+      }
+      await recordActivity({
+        organizationId: input.organizationId,
+        type: "research",
+        title: result.result.mock ? "Recherche vorbereitet (Mock)" : "Recherche nicht ausgeführt",
+        description: result.result.summary,
+        status: "prepared",
+        jobId: job.id,
+        projectId: project?.id,
+        metadata: {
+          mock: Boolean(result.result.mock),
+          searchConnected: result.result.data.searchConnected === true,
+          invented: false,
+        },
+      });
+    }
+  }
 
+  if (shouldRun("communication")) {
+    const communication = getAgent("communication");
+    if (communication) {
+      const result = await runAgentStep({
+        agent: communication,
+        action: "prepare-outreach",
+        payload: {
+          contactIds,
+          projectName: project?.name ?? "Projekt X",
+          brief: plan.communicationBrief ?? input.userRequest,
+        },
+        context,
+      });
+      agentNotes.push(`Communication Agent: ${result.result.summary}`);
+      communicationIds.push(...((result.result.data.communicationIds as string[]) ?? []));
+      await recordActivity({
+        organizationId: input.organizationId,
+        type: "communication",
+        title: `${communicationIds.length} Anschreiben vorbereitet`,
+        description: "Entwurf gespeichert. Es wurde keine E-Mail versendet. Mail-Connector nicht verbunden.",
+        status: "prepared",
+        jobId: job.id,
+        projectId: project?.id,
+        communicationId: communicationIds[0],
+        metadata: { sent: false, communicationIds, status: "prepared" },
+      });
+    }
+  }
+
+  if (shouldRun("task") || plan.taskDraft?.title) {
+    const task = getAgent("task");
+    if (task) {
+      const result = await runAgentStep({
+        agent: task,
+        action: "create-task",
+        payload: {
+          title: plan.taskDraft?.title ?? "Aufgabe",
+          description: plan.taskDraft?.description ?? input.userRequest,
+          dueDays: plan.taskDraft?.dueDays ?? 1,
+          dueAt: plan.taskDraft?.dueAt,
+        },
+        context,
+      });
+      agentNotes.push(`Task Agent: ${result.result.summary}`);
+      await recordActivity({
+        organizationId: input.organizationId,
+        type: "task",
+        title: result.result.summary,
+        description: String(plan.taskDraft?.description ?? "Interne Aufgabe. Keine externe Aktion."),
+        status: "prepared",
+        jobId: job.id,
+        projectId: project?.id,
+        taskId: String(result.result.data.taskId ?? ""),
+      });
+    }
+  }
+
+  let memoryItems = (plan.memoryItems ?? []).filter((item) => item.title && item.content);
+  if (memoryItems.length === 0) {
+    const extracted = await provider.structuredOutput<{ persist?: boolean; items?: MemoryItem[] }>({
+      model: decision.model,
+      schemaName: "durable-memory",
+      schemaDescription:
+        'JSON {persist:boolean, items:[{type,title,content}]}. persist=true nur bei langlebigen Business-Fakten (Entscheidungen, Projekte, Firmen, Kontakte, Aufgaben, Präferenzen, Deadlines, Zusagen). Kein Smalltalk, keine Secrets, nichts erfinden.',
+      prompt: `Anfrage: ${input.userRequest}\nKontext:\n${contextPack.promptBlock}\nWelche langlebigen Fakten sollen im Business Memory gespeichert werden?`,
+    });
+    if (extracted.persist && Array.isArray(extracted.items)) {
+      memoryItems = extracted.items.filter((item) => item.title && item.content);
+    }
+  }
+  if (memoryItems.length > 0) {
+    const saved = await persistDurableMemory({
+      organizationId: input.organizationId,
+      items: memoryItems,
+      projectId: project?.id,
+      sourceId: source.id,
+      jobId: job.id,
+    });
+    if (saved.length > 0) {
+      agentNotes.push(`Memory: ${saved.length} langlebige Einträge gespeichert.`);
+      await recordActivity({
+        organizationId: input.organizationId,
+        type: "memory",
+        title: "Business Memory aktualisiert",
+        description: saved.map((item) => item.title).join(", "),
+        status: "prepared",
+        jobId: job.id,
+        projectId: project?.id,
+      });
+    }
+  }
+
+  let approvalId: string | undefined;
+  let orbState: OrbState = "DONE";
+  let statusMessage = "Erledigt.";
+  const wantsExternal = plan.needsApproval === true || plan.externalAction === "mail.send";
+
+  if (wantsExternal && communicationIds.length > 0) {
+    const approval = await createApprovalRequest({
+      organizationId: input.organizationId,
+      jobId: job.id,
+      actionType: "mail.send.batch",
+      description:
+        `${communicationIds.length} Entwurf(e) liegen vor. Versand würde Freigabe brauchen. Derzeit ist kein Mail-Connector verbunden. Auch nach Freigabe wird nichts versendet.`,
+      payload: {
+        communicationIds,
+        mock: provider.id === "mock",
+        wouldSend: false,
+        status: "prepared",
+      },
+    });
+    approvalId = approval.id;
+    orbState = "WAITING_FOR_APPROVAL";
+    statusMessage = "Entwurf vorbereitet. Für einen Versand wäre Freigabe nötig – Connector noch nicht verbunden.";
     await recordActivity({
       organizationId: input.organizationId,
-      type: "job",
-      title: "Anfrage aufgenommen",
-      description: `Verfügbare V1-Agenten: ${available.join(", ")}. Für diese Anfrage gibt es noch keinen vollständigen Workflow.`,
-      status: "prepared",
+      type: "approval",
+      title: "Freigabe vorbereitet – Versand nicht möglich",
+      description: approval.description,
+      status: "suggested",
       jobId: job.id,
       projectId: project?.id,
+      metadata: { approvalId: approval.id, executed: false },
     });
+    await updateJobStatus(input.organizationId, job.id, "waiting_for_approval");
+  }
 
+  const drafts = communicationIds.length
+    ? await prisma.communication.findMany({
+        where: { organizationId: input.organizationId, id: { in: communicationIds } },
+      })
+    : [];
+
+  const reply = await collectStream({
+    provider,
+    generateInput: {
+      model: decision.model,
+      temperature: 0.4,
+      system: `Du bist NOVA, der persönliche KI-Business-Assistent von ${contextPack.organizationName}.
+Du bist nicht rankPilot und nicht SURI.
+Antworte auf Deutsch, klar und knapp.
+Erfinde keine Fakten. Wenn Memory nichts enthält, sage das ehrlich.
+Behaupte niemals, E-Mails seien gesendet, Recherche sei live erfolgt oder Connectoren seien verbunden, wenn das nicht der Fall ist.
+Conversation ist nicht dasselbe wie persistentes Business Memory.
+${researchBlocked ? "Es ist kein echter Search Connector verbunden. Nenne keine erfundenen aktuellen Unternehmen als Rechercheergebnis." : ""}
+${provider.id === "mock" ? "Du bist im Mock-Modus. Kennzeichne das, täusche keine echte Modellantwort vor." : ""}`,
+      prompt: `Benutzer: ${input.userRequest}
+
+Kontext:
+${contextPack.promptBlock}
+
+Plan: intent=${plan.intent ?? "direct_answer"}; hint=${plan.replyHint ?? ""}
+
+Interne Agentenergebnisse:
+${agentNotes.length ? agentNotes.join("\n") : "Keine Spezialagenten nötig, direkt antworten."}
+
+${
+  drafts.length
+    ? `Mail-Entwürfe (nicht gesendet):\n${drafts.map((draft) => `Betreff: ${draft.subject}\n${draft.body}`).join("\n\n")}`
+    : ""
+}
+
+Formuliere die Nutzerantwort. Wenn ein Entwurf erzeugt wurde, zeige ihn. Wenn Recherche unmöglich war, sage klar, dass kein Search Connector verbunden ist.`,
+    },
+    onDelta: (delta) => {
+      void emit(input.onEvent, { type: "delta", delta });
+    },
+  });
+
+  if (!wantsExternal || communicationIds.length === 0) {
     await updateJobStatus(input.organizationId, job.id, "completed", { completedAt: new Date() });
-
-    return {
-      jobId: job.id,
-      status: "completed",
-      orbState: "DONE",
-      statusMessage: "Erledigt.",
-      mock: true,
-      reply:
-        "Ich habe die Anfrage verstanden. In V1 kann ich den Sponsoren-Demo-Workflow wirklich ausführen: „Finde 10 potenzielle Sponsoren und bereite die Ansprache vor.“ Andere Abläufe sind architektonisch vorbereitet, aber noch nicht vollständig implementiert.",
-    };
   }
-
-  const count = plan.count ?? 10;
-  const research = getAgent("research");
-  const communication = getAgent("communication");
-  const task = getAgent("task");
-
-  if (!research || !communication || !task) {
-    throw new Error("V1-Agenten nicht registriert.");
-  }
-
-  const researchResult = await runAgentStep({
-    agent: research,
-    action: "find-sponsors",
-    payload: { count, projectId: project?.id, query: input.userRequest },
-    context,
-  });
-
-  const companyIds = (researchResult.result.data.companyIds as string[]) ?? [];
-  const contactIds = (researchResult.result.data.contactIds as string[]) ?? [];
-  const mockCompanies = await prisma.company.findMany({
-    where: { id: { in: companyIds }, organizationId: input.organizationId },
-  });
-  const companyNames = mockCompanies.map((item) => item.name).join(", ");
-
-  await recordActivity({
-    organizationId: input.organizationId,
-    type: "research",
-    title: `${companyIds.length} Sponsoren recherchiert (Mock)`,
-    description: `Fiktive Demounternehmen: ${companyNames}. Keine echte Webrecherche, keine echten Firmendaten.`,
-    status: "prepared",
-    jobId: job.id,
-    projectId: project?.id,
-    companyId: companyIds[0],
-    metadata: { mock: true, companyIds },
-  });
-
-  await recordActivity({
-    organizationId: input.organizationId,
-    type: "research",
-    title: `${contactIds.length} Ansprechpartner gefunden (Mock)`,
-    description: "Fiktive Kontakte mit example.invalid-Adressen. Keine echten Personen recherchiert.",
-    status: "prepared",
-    jobId: job.id,
-    projectId: project?.id,
-    metadata: { mock: true, contactIds },
-  });
-
-  const commResult = await runAgentStep({
-    agent: communication,
-    action: "prepare-outreach",
-    payload: {
-      contactIds,
-      projectName: project?.name ?? "Projekt X",
-    },
-    context,
-  });
-
-  const communicationIds = (commResult.result.data.communicationIds as string[]) ?? [];
-
-  await recordActivity({
-    organizationId: input.organizationId,
-    type: "communication",
-    title: `${communicationIds.length} Anschreiben vorbereitet`,
-    description: "Entwürfe gespeichert. Es wurde keine E-Mail versendet.",
-    status: "prepared",
-    jobId: job.id,
-    projectId: project?.id,
-    communicationId: communicationIds[0],
-    metadata: { mock: true, sent: false, communicationIds },
-  });
-
-  const quality = await runQualityCheck(context, communicationIds);
-  await runAgentStep({
-    agent: {
-      definition: {
-        id: "quality",
-        name: "Quality Agent",
-        description: "Prüft Ergebnisse auf Ehrlichkeit und Konsistenz.",
-        capabilities: ["quality"],
-        requiredTools: [],
-        inputSchema: {},
-        outputSchema: {},
-        riskLevel: "low",
-        implemented: true,
-      },
-      async run() {
-        return {
-          ok: quality.ok,
-          summary: quality.ok
-            ? `${quality.checked} Entwürfe geprüft. Keine fälschlich ausgeführten Aktionen.`
-            : quality.issues.join("; "),
-          data: quality,
-        };
-      },
-    },
-    action: "review-drafts",
-    payload: { communicationIds },
-    context,
-  });
-
-  const followUp = await runAgentStep({
-    agent: task,
-    action: "create-follow-up",
-    payload: {
-      title: "Sponsoren-Ansprache nachfassen (nach Freigabe/Versand)",
-      description:
-        "Wiedervorlage. Versand ist noch nicht erfolgt, da kein echter Mail-Connector verbunden ist.",
-      dueDays: 5,
-    },
-    context,
-  });
-
-  await recordActivity({
-    organizationId: input.organizationId,
-    type: "task",
-    title: 'Aufgabe "Sponsoren-Ansprache nachfassen" erstellt',
-    description: "Interne Folgeaufgabe. Noch kein Versand.",
-    status: "prepared",
-    jobId: job.id,
-    projectId: project?.id,
-    taskId: String(followUp.result.data.taskId),
-  });
-
-  const projectMemory = await saveMemory({
-    organizationId: input.organizationId,
-    type: "project",
-    title: project?.name ?? "Projekt X",
-    content: project?.description ?? "Aktives Projekt für Sponsorenakquise.",
-    projectId: project?.id,
-    sourceId: source.id,
-    sourceType: "nova",
-    sourceReference: job.id,
-  });
-
-  for (const companyId of companyIds) {
-    const company = await prisma.company.findFirst({
-      where: { id: companyId, organizationId: input.organizationId },
-    });
-    if (!company) continue;
-    const companyMemory = await saveMemory({
-      organizationId: input.organizationId,
-      type: "company",
-      title: company.name,
-      content: `Mock-Sponsorenkandidat (${company.industry ?? "Branche unbekannt"}). Keine echte Recherche.`,
-      projectId: project?.id,
-      companyId: company.id,
-      sourceId: source.id,
-      sourceType: "research",
-      sourceReference: job.id,
-    });
-    await relateMemory({
-      organizationId: input.organizationId,
-      fromId: companyMemory.id,
-      toId: projectMemory.id,
-      relationType: "candidate_for",
-    });
-
-    const contact = await prisma.contact.findFirst({
-      where: { organizationId: input.organizationId, companyId: company.id },
-    });
-    if (!contact) continue;
-    const personMemory = await saveMemory({
-      organizationId: input.organizationId,
-      type: "person",
-      title: `${contact.firstName} ${contact.lastName}`,
-      content: `Mock-Ansprechpartner, Rolle: ${contact.role ?? "unbekannt"}.`,
-      projectId: project?.id,
-      companyId: company.id,
-      contactId: contact.id,
-      sourceId: source.id,
-      sourceType: "research",
-      sourceReference: job.id,
-    });
-    await relateMemory({
-      organizationId: input.organizationId,
-      fromId: personMemory.id,
-      toId: companyMemory.id,
-      relationType: "works_at",
-    });
-
-    const draft = await prisma.communication.findFirst({
-      where: { organizationId: input.organizationId, contactId: contact.id, status: "prepared" },
-      orderBy: { createdAt: "desc" },
-    });
-    if (!draft) continue;
-    const draftMemory = await saveMemory({
-      organizationId: input.organizationId,
-      type: "communication",
-      title: `Anschreiben an ${contact.firstName} ${contact.lastName} (Entwurf)`,
-      content: "Vorbereitet, nicht versendet.",
-      projectId: project?.id,
-      companyId: company.id,
-      contactId: contact.id,
-      sourceId: source.id,
-      sourceType: "nova",
-      sourceReference: draft.id,
-    });
-    await relateMemory({
-      organizationId: input.organizationId,
-      fromId: draftMemory.id,
-      toId: personMemory.id,
-      relationType: "drafted_for",
-    });
-  }
-
-  const approval = await createApprovalRequest({
-    organizationId: input.organizationId,
-    jobId: job.id,
-    actionType: "mail.send.batch",
-    description: `${communicationIds.length} Mock-Anschreiben später versenden? Derzeit ist kein echter Mail-Connector verbunden. Eine Freigabe führt daher nicht zum Versand.`,
-    payload: {
-      communicationIds,
-      mock: true,
-      wouldSend: false,
-    },
-  });
-
-  await recordActivity({
-    organizationId: input.organizationId,
-    type: "approval",
-    title: "Freigabe für Versand angefordert",
-    description: approval.description,
-    status: "suggested",
-    jobId: job.id,
-    projectId: project?.id,
-    metadata: { approvalId: approval.id, mock: true },
-  });
-
-  await updateJobStatus(input.organizationId, job.id, "waiting_for_approval");
-
-  const memoryNote =
-    priorMemory.length > 0
-      ? ` ${priorMemory.length} bestehende Memory-Einträge wurden berücksichtigt.`
-      : "";
 
   return {
     jobId: job.id,
-    status: "waiting_for_approval",
-    orbState: "WAITING_FOR_APPROVAL",
-    statusMessage: "Ich brauche deine Freigabe, bevor etwas versendet werden könnte.",
-    approvalId: approval.id,
-    mock: true,
-    reply: `${reasoning.plan.join(" → ")}. ${count} Mock-Sponsoren und Anschreiben sind vorbereitet.${memoryNote} Es wurde nichts recherchiert und nichts versendet.`,
+    status: orbState === "WAITING_FOR_APPROVAL" ? "waiting_for_approval" : "completed",
+    orbState,
+    statusMessage,
+    reply,
+    approvalId,
+    mock: provider.id === "mock",
+    providerMode: mode,
+    providerId: provider.id,
+    model: decision.model,
+  };
+  } catch (error) {
+    await updateJobStatus(input.organizationId, job.id, "failed", { completedAt: new Date() });
+    throw error;
+  }
+}
+
+export async function runQualityCheck(context: AgentRunContext, communicationIds: string[]): Promise<AgentRunResult> {
+  const drafts = await prisma.communication.findMany({
+    where: {
+      organizationId: context.organizationId,
+      id: { in: communicationIds },
+    },
+  });
+  const issues: string[] = [];
+  for (const draft of drafts) {
+    if (draft.status === "sent" || draft.status === "executed") {
+      issues.push(`Kommunikation ${draft.id} darf ohne Connector nicht als gesendet gelten.`);
+    }
+  }
+  return {
+    ok: issues.length === 0,
+    summary: issues.length === 0
+      ? `${drafts.length} Entwürfe geprüft. Keine fälschlich ausgeführten Aktionen.`
+      : issues.join("; "),
+    data: { issues, checked: drafts.length },
   };
 }

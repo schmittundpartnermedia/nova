@@ -16,9 +16,13 @@ export const taskAgent: NovaAgent = {
   },
   async run(input, context) {
     assertOrganizationId(context.organizationId);
-    const dueDays = Number(input.dueDays ?? 5);
     const dueAt = new Date();
-    dueAt.setDate(dueAt.getDate() + dueDays);
+    if (typeof input.dueAt === "string" && !Number.isNaN(Date.parse(input.dueAt))) {
+      dueAt.setTime(Date.parse(String(input.dueAt)));
+    } else {
+      const dueDays = Number(input.dueDays ?? 5);
+      dueAt.setDate(dueAt.getDate() + dueDays);
+    }
 
     const task = await prisma.task.create({
       data: {
@@ -37,8 +41,8 @@ export const taskAgent: NovaAgent = {
 
     return {
       ok: true,
-      summary: `Aufgabe erstellt: ${task.title}`,
-      data: { taskId: task.id },
+      summary: `Aufgabe erstellt: ${task.title}${task.dueAt ? ` (fällig ${task.dueAt.toISOString().slice(0, 10)})` : ""}`,
+      data: { taskId: task.id, title: task.title, dueAt: task.dueAt },
     };
   },
 };

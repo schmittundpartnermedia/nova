@@ -1,3 +1,4 @@
+import OpenAI from "openai";
 import type {
   AIProvider,
   GenerateInput,
@@ -10,40 +11,211 @@ import type {
   ToolCallInput,
   ToolCallOutput,
 } from "@/types/ai";
+import { OPENAI_DEFAULT_MODEL } from "@/providers/ai/models";
+import { hasOpenAIApiKey, publicErrorMessage, redactSecrets } from "@/lib/secrets";
 
-function notConfigured(name: string): Error {
-  return new Error(
-    `${name} ist vorbereitet, aber nicht konfiguriert. In V1 ist MockAIProvider aktiv. API-Keys gehören ausschließlich in Environment Variables.`,
-  );
+const HEALTH_TTL_MS = 30_000;
+
+type CachedHealth = {
+  at: number;
+  result: HealthCheckResult;
+};
+
+function resolveModel(input?: { model?: string }): string {
+  return input?.model?.trim() || OPENAI_DEFAULT_MODEL;
+}
+
+function buildMessages(input: GenerateInput): OpenAI.Chat.ChatCompletionMessageParam[] {
+  const messages: OpenAI.Chat.ChatCompletionMessageParam[] = [];
+  if (input.system) {
+    messages.push({ role: "system", content: input.system });
+  }
+  messages.push({ role: "user", content: input.prompt });
+  return messages;
 }
 
 export class OpenAIProvider implements AIProvider {
   id = "openai";
   name = "OpenAIProvider";
+  private client: OpenAI | null | undefined;
+  private healthCache: CachedHealth | null = null;
 
-  async generate(_input: GenerateInput): Promise<GenerateOutput> {
-    throw notConfigured(this.name);
+  private getClient(): OpenAI {
+    if (this.client) return this.client;
+    if (!hasOpenAIApiKey()) {
+      throw new Error("Kein OPENAI_API_KEY gesetzt.");
+    }
+    this.client = new OpenAI({
+      apiKey: process.env.OPENAI_API_KEY,
+    });
+    return this.client;
   }
-  async reason(_input: ReasonInput): Promise<ReasonOutput> {
-    throw notConfigured(this.name);
+
+  async generate(input: GenerateInput): Promise<GenerateOutput> {
+    const model = resolveModel(input);
+    try {
+      const completion = await this.getClient().chat.completions.create({
+        model,
+        temperature: input.temperature ?? 0.3,
+        messages: buildMessages(input),
+      });
+      const text = completion.choices[0]?.message?.content?.trim() ?? "";
+      return {
+        text,
+        provider: this.id,
+        model: completion.model ?? model,
+      };
+    } catch (error) {
+      throw new Error(publicErrorMessage(error));
+    }
   }
-  async structuredOutput<T>(_input: StructuredInput): Promise<T> {
-    throw notConfigured(this.name);
+
+  async reason(input: ReasonInput): Promise<ReasonOutput> {
+    const model = resolveModel(input);
+    const constraints = (input.constraints ?? []).join("\n- ");
+    const generated = await this.generate({
+      model,
+      temperature: 0.2,
+      system:
+        "Du bist der Planungsanteil von NOVA. Antworte ausschließlich mit JSON: {\"reasoning\":\"...\",\"plan\":[\"...\"]}. Keine Secrets ausgeben.",
+      prompt: `Ziel: ${input.goal}\n\nKontext:\n${input.context}${
+        constraints ? `\n\nEinschränkungen:\n- ${constraints}` : ""
+      }`,
+    });
+    try {
+      const parsed = JSON.parse(generated.text) as { reasoning?: string; plan?: string[] };
+      return {
+        reasoning: parsed.reasoning ?? generated.text,
+        plan: Array.isArray(parsed.plan) ? parsed.plan.map(String) : [],
+        provider: this.id,
+      };
+    } catch {
+      return {
+        reasoning: generated.text,
+        plan: [],
+        provider: this.id,
+      };
+    }
   }
-  async toolCall(_input: ToolCallInput): Promise<ToolCallOutput> {
-    throw notConfigured(this.name);
+
+  async structuredOutput<T>(input: StructuredInput): Promise<T> {
+    const model = resolveModel(input);
+    try {
+      const completion = await this.getClient().chat.completions.create({
+        model,
+        temperature: 0.1,
+        response_format: { type: "json_object" },
+        messages: [
+          {
+            role: "system",
+            content: `Du antwortest ausschließlich mit gültigem JSON-Objekt. Schema: ${input.schemaName}. ${input.schemaDescription} Keine Markdown-Zäune, keine Secrets.`,
+          },
+          { role: "user", content: input.prompt },
+        ],
+      });
+      const raw = completion.choices[0]?.message?.content ?? "{}";
+      return JSON.parse(redactSecrets(raw)) as T;
+    } catch (error) {
+      if (error instanceof SyntaxError) {
+        throw new Error("Die Modellantwort war kein gültiges JSON.");
+      }
+      throw new Error(publicErrorMessage(error));
+    }
   }
-  async *stream(_input: GenerateInput): AsyncIterable<StreamChunk> {
-    throw notConfigured(this.name);
+
+  async toolCall(input: ToolCallInput): Promise<ToolCallOutput> {
+    const model = resolveModel(input);
+    try {
+      const completion = await this.getClient().chat.completions.create({
+        model,
+        temperature: 0.1,
+        messages: [{ role: "user", content: input.prompt }],
+        tools: input.tools.map((tool) => ({
+          type: "function" as const,
+          function: {
+            name: tool.name,
+            description: tool.description,
+            parameters: {
+              type: "object",
+              properties: {},
+              additionalProperties: true,
+            },
+          },
+        })),
+      });
+      const message = completion.choices[0]?.message;
+      const call = message?.tool_calls?.[0];
+      if (call && call.type === "function") {
+        let args: Record<string, unknown> = {};
+        try {
+          args = JSON.parse(call.function.arguments || "{}") as Record<string, unknown>;
+        } catch {
+          args = {};
+        }
+        return { tool: call.function.name, arguments: args, text: message?.content ?? undefined };
+      }
+      return { text: message?.content ?? undefined };
+    } catch (error) {
+      throw new Error(publicErrorMessage(error));
+    }
   }
+
+  async *stream(input: GenerateInput): AsyncIterable<StreamChunk> {
+    const model = resolveModel(input);
+    try {
+      const streamed = await this.getClient().chat.completions.create({
+        model,
+        temperature: input.temperature ?? 0.3,
+        stream: true,
+        messages: buildMessages(input),
+      });
+      for await (const chunk of streamed) {
+        const delta = chunk.choices[0]?.delta?.content ?? "";
+        if (delta) {
+          yield { delta, done: false };
+        }
+      }
+      yield { delta: "", done: true };
+    } catch (error) {
+      throw new Error(publicErrorMessage(error));
+    }
+  }
+
   async healthCheck(): Promise<HealthCheckResult> {
-    const key = process.env.OPENAI_API_KEY;
-    return {
-      ok: false,
-      provider: this.id,
-      message: key
-        ? "OpenAI-Key vorhanden, Provider-Implementierung in V1 noch nicht angebunden."
-        : "Kein OPENAI_API_KEY gesetzt. Interface vorbereitet.",
-    };
+    if (this.healthCache && Date.now() - this.healthCache.at < HEALTH_TTL_MS) {
+      return this.healthCache.result;
+    }
+
+    if (!hasOpenAIApiKey()) {
+      const result = {
+        ok: false,
+        provider: this.id,
+        message: "Kein OPENAI_API_KEY gesetzt.",
+      };
+      this.healthCache = { at: Date.now(), result };
+      return result;
+    }
+
+    try {
+      const models = await this.getClient().models.list();
+      const first = models.data[0]?.id;
+      const result = {
+        ok: true,
+        provider: this.id,
+        message: first
+          ? `OpenAI erreichbar. Konfiguriertes Modell: ${OPENAI_DEFAULT_MODEL}.`
+          : "OpenAI erreichbar.",
+      };
+      this.healthCache = { at: Date.now(), result };
+      return result;
+    } catch (error) {
+      const result = {
+        ok: false,
+        provider: this.id,
+        message: publicErrorMessage(error),
+      };
+      this.healthCache = { at: Date.now(), result };
+      return result;
+    }
   }
 }

@@ -1,6 +1,7 @@
 import type { NovaAgent } from "@/types/agents";
 import { prisma } from "@/lib/prisma";
 import { assertOrganizationId } from "@/services/tenant";
+import { isRealConnectorEnabled } from "@/connectors/registry";
 
 const MOCK_SPONSORS = [
   { name: "Nordlicht Industrie GmbH", industry: "Maschinenbau", website: "https://example.invalid/nordlicht", firstName: "Clara", lastName: "Berg", role: "Leiterin Sponsoring" },
@@ -17,6 +18,72 @@ const MOCK_SPONSORS = [
   { name: "Nordstern Bau", industry: "Bau", website: "https://example.invalid/nordstern", firstName: "Paul", lastName: "Richter", role: "Unternehmenskommunikation" },
 ];
 
+async function runMockCatalog(input: Record<string, unknown>, organizationId: string, projectId?: string) {
+  const count = Math.min(Number(input.count ?? 10), MOCK_SPONSORS.length);
+  const selected = MOCK_SPONSORS.slice(0, count);
+  const companies = [];
+  const contacts = [];
+
+  for (const item of selected) {
+    const existing = await prisma.company.findFirst({
+      where: { organizationId, name: item.name },
+    });
+    const company =
+      existing ??
+      (await prisma.company.create({
+        data: {
+          organizationId,
+          projectId,
+          name: item.name,
+          industry: item.industry,
+          website: item.website,
+          notes: "MOCK: Keine echte Recherche. Fiktives Demounternehmen.",
+          isMock: true,
+        },
+      }));
+
+    const contactExisting = await prisma.contact.findFirst({
+      where: {
+        organizationId,
+        companyId: company.id,
+        firstName: item.firstName,
+        lastName: item.lastName,
+      },
+    });
+    const contact =
+      contactExisting ??
+      (await prisma.contact.create({
+        data: {
+          organizationId,
+          companyId: company.id,
+          projectId,
+          firstName: item.firstName,
+          lastName: item.lastName,
+          role: item.role,
+          email: `${item.firstName.toLowerCase()}.${item.lastName.toLowerCase()}@example.invalid`,
+          notes: "MOCK: Kein echter Ansprechpartner. Fiktive Kontaktdaten.",
+          isMock: true,
+        },
+      }));
+
+    companies.push(company);
+    contacts.push(contact);
+  }
+
+  return {
+    ok: true,
+    mock: true,
+    summary: `${companies.length} Mock-Unternehmen und ${contacts.length} Mock-Ansprechpartner vorbereitet. Keine echte Recherche.`,
+    data: {
+      companyIds: companies.map((c) => c.id),
+      contactIds: contacts.map((c) => c.id),
+      mock: true,
+      searchConnected: false,
+      invented: false,
+    },
+  };
+}
+
 export const researchAgent: NovaAgent = {
   definition: {
     id: "research",
@@ -31,72 +98,39 @@ export const researchAgent: NovaAgent = {
   },
   async run(input, context) {
     assertOrganizationId(context.organizationId);
-    const count = Math.min(Number(input.count ?? 10), MOCK_SPONSORS.length);
-    const selected = MOCK_SPONSORS.slice(0, count);
     const projectId = typeof input.projectId === "string" ? input.projectId : context.projectId;
+    const allowMockCatalog = input.allowMockCatalog === true;
 
-    const companies = [];
-    const contacts = [];
+    if (allowMockCatalog) {
+      return runMockCatalog(input, context.organizationId, projectId);
+    }
 
-    for (const item of selected) {
-      const existing = await prisma.company.findFirst({
-        where: {
-          organizationId: context.organizationId,
-          name: item.name,
+    const searchConnected = await isRealConnectorEnabled(context.organizationId, "search");
+    if (!searchConnected) {
+      return {
+        ok: true,
+        mock: false,
+        summary:
+          "Kein echter Search Connector verbunden. Ich kann keine aktuellen Unternehmen recherchieren und erfinde keine Treffer.",
+        data: {
+          companyIds: [],
+          contactIds: [],
+          mock: false,
+          searchConnected: false,
+          invented: false,
         },
-      });
-
-      const company =
-        existing ??
-        (await prisma.company.create({
-          data: {
-            organizationId: context.organizationId,
-            projectId,
-            name: item.name,
-            industry: item.industry,
-            website: item.website,
-            notes: "MOCK: Keine echte Recherche. Fiktives Demounternehmen.",
-            isMock: true,
-          },
-        }));
-
-      const contactExisting = await prisma.contact.findFirst({
-        where: {
-          organizationId: context.organizationId,
-          companyId: company.id,
-          firstName: item.firstName,
-          lastName: item.lastName,
-        },
-      });
-
-      const contact =
-        contactExisting ??
-        (await prisma.contact.create({
-          data: {
-            organizationId: context.organizationId,
-            companyId: company.id,
-            projectId,
-            firstName: item.firstName,
-            lastName: item.lastName,
-            role: item.role,
-            email: `${item.firstName.toLowerCase()}.${item.lastName.toLowerCase()}@example.invalid`,
-            notes: "MOCK: Kein echter Ansprechpartner. Fiktive Kontaktdaten.",
-            isMock: true,
-          },
-        }));
-
-      companies.push(company);
-      contacts.push(contact);
+      };
     }
 
     return {
-      ok: true,
-      mock: true,
-      summary: `${companies.length} Mock-Unternehmen und ${contacts.length} Mock-Ansprechpartner vorbereitet. Keine echte Recherche.`,
+      ok: false,
+      mock: false,
+      summary: "Ein Search Connector ist markiert, aber noch nicht produktiv angebunden.",
       data: {
-        companyIds: companies.map((c) => c.id),
-        contactIds: contacts.map((c) => c.id),
-        mock: true,
+        companyIds: [],
+        contactIds: [],
+        searchConnected: true,
+        invented: false,
       },
     };
   },

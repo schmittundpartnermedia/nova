@@ -1,6 +1,10 @@
 import type { NovaAgent } from "@/types/agents";
 import { prisma } from "@/lib/prisma";
 import { assertOrganizationId } from "@/services/tenant";
+import { resolveAIProvider } from "@/providers/ai/registry";
+
+const NO_SEND_FOOTER =
+  "\n\n---\nDies ist ein NOVA-Entwurf. Es wurde keine E-Mail versendet. Es ist kein Mail-Connector verbunden.";
 
 function draftBody(input: {
   firstName: string;
@@ -16,10 +20,7 @@ Ich würde das gern kurz und konkret vorstellen – ohne langen Pitch.
 Wäre ein kurzes Gespräch in den nächsten zwei Wochen denkbar?
 
 Freundliche Grüße
-Joachim
-
----
-Dies ist ein NOVA-Entwurf. Es wurde keine E-Mail versendet. Die Firmendaten stammen aus einem Mock-Datensatz.`;
+Joachim${NO_SEND_FOOTER}`;
 }
 
 export const communicationAgent: NovaAgent = {
@@ -38,7 +39,50 @@ export const communicationAgent: NovaAgent = {
     assertOrganizationId(context.organizationId);
     const contactIds = Array.isArray(input.contactIds) ? (input.contactIds as string[]) : [];
     const projectName = String(input.projectName ?? "Projekt X");
+    const brief = String(input.brief ?? context.userRequest);
+    const { provider, decision } = await resolveAIProvider(context.organizationId, "simple");
+    const useRealDraft = provider.id !== "mock";
     const drafts = [];
+
+    async function generateBody(target: string) {
+      if (!useRealDraft) {
+        return null;
+      }
+      const generated = await provider.generate({
+        model: decision.model,
+        temperature: 0.4,
+        system:
+          "Du schreibst kurze, professionelle deutschsprachige E-Mail-Entwürfe für NOVA. Keine Secrets. Behaupte niemals, die Mail sei gesendet. Keine erfundenen Firmendaten als Fakten ausgeben.",
+        prompt: `Briefing: ${brief}\nEmpfänger-Kontext: ${target}\nProjekt: ${projectName}\nSchreibe nur den Mailtext mit Anrede und Gruß, ohne Betreff.`,
+      });
+      const body = generated.text.trim();
+      return body.includes("keine E-Mail versendet") ? body : `${body}${NO_SEND_FOOTER}`;
+    }
+
+    if (contactIds.length === 0) {
+      const body =
+        (await generateBody("möglicher Sponsor / Partner, kein konkreter Kontakt zugeordnet")) ??
+        `Guten Tag,
+
+kurz und konkret: Wir prüfen eine mögliche Partnerschaft im Rahmen von ${projectName}.
+
+Freundliche Grüße
+Joachim${NO_SEND_FOOTER}`;
+
+      const draft = await prisma.communication.create({
+        data: {
+          organizationId: context.organizationId,
+          projectId: context.projectId,
+          channel: "email",
+          direction: "outbound",
+          subject: `Idee für eine Partnerschaft – ${projectName}`,
+          body,
+          status: "prepared",
+          isMock: !useRealDraft,
+        },
+      });
+      drafts.push(draft);
+    }
 
     for (const contactId of contactIds) {
       const contact = await prisma.contact.findFirst({
@@ -56,6 +100,16 @@ export const communicationAgent: NovaAgent = {
         },
       });
 
+      const body =
+        (await generateBody(
+          `${contact.firstName} ${contact.lastName}, ${contact.company?.name ?? "Unternehmen"}, Rolle: ${contact.role ?? "unbekannt"}`,
+        )) ??
+        draftBody({
+          firstName: contact.firstName,
+          company: contact.company?.name ?? "Ihr Unternehmen",
+          projectName,
+        });
+
       const draft =
         existing ??
         (await prisma.communication.create({
@@ -67,13 +121,9 @@ export const communicationAgent: NovaAgent = {
             channel: "email",
             direction: "outbound",
             subject: `Idee für eine Partnerschaft – ${projectName}`,
-            body: draftBody({
-              firstName: contact.firstName,
-              company: contact.company?.name ?? "Ihr Unternehmen",
-              projectName,
-            }),
+            body,
             status: "prepared",
-            isMock: true,
+            isMock: contact.isMock || !useRealDraft,
           },
         }));
 
@@ -82,12 +132,15 @@ export const communicationAgent: NovaAgent = {
 
     return {
       ok: true,
-      mock: true,
-      summary: `${drafts.length} Anschreiben als Entwurf vorbereitet. Kein Versand.`,
+      mock: !useRealDraft,
+      summary: `${drafts.length} Anschreiben als Entwurf vorbereitet. Kein Versand. Mail-Connector nicht verbunden.`,
       data: {
         communicationIds: drafts.map((d) => d.id),
-        mock: true,
+        subjects: drafts.map((d) => d.subject),
+        bodies: drafts.map((d) => d.body),
+        mock: !useRealDraft,
         sent: false,
+        status: "prepared",
       },
     };
   },

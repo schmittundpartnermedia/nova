@@ -52,9 +52,9 @@ async function main() {
   }
 
   const aiRoles = [
-    { role: "master", provider: "mock", model: "mock-master" },
-    { role: "simple", provider: "mock", model: "mock-simple" },
-    { role: "sensitive", provider: "mock", model: "mock-local" },
+    { role: "master", provider: "openai", model: "gpt-4o" },
+    { role: "simple", provider: "openai", model: "gpt-4o-mini" },
+    { role: "sensitive", provider: "openai", model: "gpt-4o-mini" },
     { role: "fallback", provider: "mock", model: "mock-fallback" },
   ] as const;
 
@@ -77,7 +77,9 @@ async function main() {
         role: entry.role,
         model: entry.model,
         enabled: true,
-        config: JSON.stringify({ note: "V1 verwendet MockAIProvider. Kein echter KI-Anbieter verbunden." }),
+        config: JSON.stringify({
+          note: "V1 verwendet OpenAI über AiProviderConfig. Der API-Key liegt nur in der Environment Variable OPENAI_API_KEY.",
+        }),
       },
     });
   }

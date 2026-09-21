@@ -23,6 +23,7 @@ export type AgentRunContext = {
   userRequest: string;
   goal: string;
   projectId?: string;
+  aiModel?: string;
 };
 
 export type AgentRunResult = {
