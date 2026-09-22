@@ -1,4 +1,4 @@
-import { encodeWavPcm16, PcmSlicer } from "@/features/voice/pcm";
+import { downsampleToInt16, PcmSlicer } from "@/features/voice/pcm";
 import { VOICE_SESSION_CONFIG, type VoiceSessionConfig } from "@/features/voice/session-config";
 import { energyFromTimeDomain, type VadFrame } from "@/features/voice/vad";
 
@@ -6,8 +6,8 @@ export type VoiceCapture = {
   start(): Promise<void>;
   stop(): void;
   subscribe(listener: (frame: VadFrame) => void): () => void;
+  subscribePcm(listener: (samples: Int16Array) => void): () => void;
   setCollecting(on: boolean): void;
-  sliceUtterance(fromMs: number, toMs: number): Promise<Blob | null>;
 };
 
 const MIC_CONSTRAINTS: MediaStreamConstraints = {
@@ -47,6 +47,7 @@ export class MicrophoneCapture implements VoiceCapture {
   private onTrackEnded: (() => void) | null = null;
   private pcm: PcmSlicer;
   private collecting = true;
+  private pcmListener: ((samples: Int16Array) => void) | null = null;
   private vadSumSq = 0;
   private vadPeak = 0;
   private vadCount = 0;
@@ -116,18 +117,17 @@ export class MicrophoneCapture implements VoiceCapture {
     }
   }
 
-  async sliceUtterance(fromMs: number, toMs: number) {
-    const samples = this.pcm.slice(fromMs, toMs);
-    if (samples.length < 160) return null;
-    const blob = encodeWavPcm16(samples, this.config.pcmSampleRate);
-    if (blob.size < this.config.utteranceMinBytes) return null;
-    return blob;
-  }
-
   subscribe(listener: (frame: VadFrame) => void) {
     this.listener = listener;
     return () => {
       if (this.listener === listener) this.listener = null;
+    };
+  }
+
+  subscribePcm(listener: (samples: Int16Array) => void) {
+    this.pcmListener = listener;
+    return () => {
+      if (this.pcmListener === listener) this.pcmListener = null;
     };
   }
 
@@ -147,6 +147,7 @@ export class MicrophoneCapture implements VoiceCapture {
       return;
     }
     this.pcm.appendMono(input, context.sampleRate, at);
+    this.pcmListener?.(downsampleToInt16(input, context.sampleRate, this.config.pcmSampleRate));
     const energy = energyFromTimeDomain(input);
     this.vadSumSq += energy.rms * energy.rms * input.length;
     if (energy.peak > this.vadPeak) this.vadPeak = energy.peak;

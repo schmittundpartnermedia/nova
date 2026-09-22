@@ -1,10 +1,10 @@
 /**
- * Voice-Session: ein Mikrofon-Stream, PCM-Aufnahme, RMS-VAD, Whisper.
- * Kein Web Speech im Produktionspfad.
+ * Voice-Session: ein Mikrofon-Stream, Live-Transkription wie ChatGPT/Cursor.
+ * Text erscheint während des Sprechens. Kurze Stille beendet den Turn.
  */
 
 export const VOICE_SESSION_CONFIG = {
-  silenceTimeoutMs: 5000,
+  silenceTimeoutMs: 800,
   minSpeechDurationMs: 160,
   vadHangoverMs: 320,
   vadWarmupMs: 400,
@@ -25,7 +25,7 @@ export const VOICE_SESSION_CONFIG = {
   preRollMs: 350,
   postRollMs: 220,
   utteranceMinBytes: 800,
-  pcmSampleRate: 16000,
+  pcmSampleRate: 24000,
   pcmBufferSeconds: 30,
 } as const;
 

@@ -675,6 +675,7 @@ export function NovaShell() {
               sessionState={sessionSnap.state}
               silenceRemainingMs={sessionSnap.silenceRemainingMs}
               silenceTimeoutMs={sessionSnap.silenceTimeoutMs}
+              dictation={sessionSnap.transcript}
               onSubmit={(value) => void sendMessage(value, "text")}
               onMic={handleMic}
               onStopSpeech={stopSpeech}

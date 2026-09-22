@@ -86,7 +86,7 @@ export const IDLE_VOICE_SNAPSHOT: VoiceSessionSnapshot = {
   error: null,
   transcript: "",
   silenceRemainingMs: null,
-  silenceTimeoutMs: 5000,
+  silenceTimeoutMs: 800,
   level: 0,
   label: null,
 };

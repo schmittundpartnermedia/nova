@@ -19,7 +19,9 @@ export function NovaCommandBar({
   sessionActive = false,
   sessionState = "OFF",
   silenceRemainingMs = null,
-  silenceTimeoutMs = 5000,
+  silenceTimeoutMs = 800,
+
+  dictation = "",
   onSubmit,
   onMic,
   onStopSpeech,
@@ -36,6 +38,7 @@ export function NovaCommandBar({
   sessionState?: VoiceSessionState;
   silenceRemainingMs?: number | null;
   silenceTimeoutMs?: number;
+  dictation?: string;
   onSubmit: (value: string) => void;
   onMic: () => void;
   onStopSpeech: () => void;
@@ -45,6 +48,7 @@ export function NovaCommandBar({
 }) {
   const [value, setValue] = useState("");
   const [preparedHint, setPreparedHint] = useState(false);
+  const shown = sessionActive ? dictation : value;
   const silenceProgress =
     sessionState === "SILENCE_WAIT" && silenceRemainingMs != null
       ? Math.max(0, Math.min(1, silenceRemainingMs / silenceTimeoutMs))
@@ -71,22 +75,26 @@ export function NovaCommandBar({
       }}
     >
       <input
-        value={value}
+        value={shown}
         onChange={(event) => {
+          if (sessionActive) return;
           const next = event.target.value;
           setValue(next);
           onDraftChange?.(next);
         }}
         onFocus={() => onComposeStart?.()}
         disabled={disabled}
+        readOnly={sessionActive}
         placeholder={
-          sessionState === "USER_SPEAKING"
-            ? "Ich höre zu …"
-            : sessionActive
-              ? "NOVA hört zu …"
-              : speaking
-                ? "NOVA spricht …"
-                : "Was kann ich für dich tun?"
+          sessionActive
+            ? dictation
+              ? ""
+              : sessionState === "USER_SPEAKING"
+                ? "Ich höre zu …"
+                : "NOVA hört zu …"
+            : speaking
+              ? "NOVA spricht …"
+              : "Was kann ich für dich tun?"
         }
         autoComplete="off"
       />
