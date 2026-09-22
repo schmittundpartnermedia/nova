@@ -12,6 +12,7 @@ const ALLOWED = new Set([
   "audio/mpeg",
   "audio/mp3",
   "audio/wav",
+  "audio/wave",
   "audio/x-wav",
   "audio/m4a",
   "video/webm",

@@ -43,7 +43,7 @@ export function Composer({
           listening ? "bg-white/18 text-white" : "text-white/55 hover:bg-white/8 hover:text-white/80"
         }`}
         aria-label={voiceSupported ? "Spracheingabe" : "Spracheingabe vorbereitet"}
-        title={voiceSupported ? "Mikrofon" : "Spracheingabe vorbereitet (Web Speech API)"}
+        title={voiceSupported ? "Mikrofon" : "Spracheingabe vorbereitet"}
       >
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
           <path

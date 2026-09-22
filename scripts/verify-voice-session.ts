@@ -1,3 +1,4 @@
+import { encodeWavPcm16, PcmSlicer } from "@/features/voice/pcm";
 import { VOICE_SESSION_CONFIG } from "@/features/voice/session-config";
 import { VoiceSessionController } from "@/features/voice/session-controller";
 import {
@@ -5,7 +6,6 @@ import {
   reduceVoiceSession,
 } from "@/features/voice/session-machine";
 import type { VoiceClock, VoiceTurn } from "@/features/voice/session-types";
-import { isSpeechRecognitionSupported, WebSpeechStt, type SpeechToText, type SpeechToTextListener } from "@/features/voice/stt";
 import type { VoiceCapture } from "@/features/voice/capture";
 import {
   makeNoiseFrame,
@@ -60,25 +60,29 @@ class FakeCapture implements VoiceCapture {
   listener: ((frame: VadFrame) => void) | null = null;
   started = false;
   stopped = false;
-  blobs: Blob[] = [];
-  begun = 0;
+  collecting = true;
+  sliceCalls: Array<{ fromMs: number; toMs: number }> = [];
+  blob = new Blob([new Uint8Array(1200)], { type: "audio/wav" });
 
   async start() {
     this.started = true;
     this.stopped = false;
+    this.collecting = true;
   }
 
   stop() {
     this.stopped = true;
     this.started = false;
+    this.collecting = false;
   }
 
-  beginUtterance() {
-    this.begun += 1;
+  setCollecting(on: boolean) {
+    this.collecting = on;
   }
 
-  async endUtterance() {
-    return this.blobs.shift() ?? null;
+  async sliceUtterance(fromMs: number, toMs: number) {
+    this.sliceCalls.push({ fromMs, toMs });
+    return this.blob;
   }
 
   subscribe(listener: (frame: VadFrame) => void) {
@@ -93,44 +97,6 @@ class FakeCapture implements VoiceCapture {
   }
 }
 
-class FakeStt implements SpeechToText {
-  supported = true;
-  engine = "web-speech";
-  paused = false;
-  started = false;
-  stopped = false;
-  startCalls = 0;
-  listener: SpeechToTextListener = {};
-
-  start(listener: SpeechToTextListener) {
-    this.listener = listener;
-    this.started = true;
-    this.stopped = false;
-    this.paused = false;
-    this.startCalls += 1;
-  }
-
-  stop() {
-    this.stopped = true;
-    this.started = false;
-    this.paused = false;
-  }
-
-  pause() {
-    this.paused = true;
-  }
-
-  resume() {
-    this.paused = false;
-    this.started = true;
-  }
-
-  emit(transcript: string, confidence = 0.9) {
-    if (this.paused || this.stopped) return;
-    this.listener.onTranscript?.({ transcript, confidence, isFinal: true });
-  }
-}
-
 function pump(capture: FakeCapture, clock: FakeClock, ms: number, frame: (at: number) => VadFrame) {
   const step = 20;
   for (let elapsed = 0; elapsed < ms; elapsed += step) {
@@ -139,11 +105,24 @@ function pump(capture: FakeCapture, clock: FakeClock, ms: number, frame: (at: nu
   }
 }
 
+async function flush() {
+  await Promise.resolve();
+  await Promise.resolve();
+  await Promise.resolve();
+  await Promise.resolve();
+}
+
+function replies(texts: string[]) {
+  let i = 0;
+  return async () => texts[i++] ?? "";
+}
+
 export async function runVoiceSessionChecks() {
   assert(VOICE_SESSION_CONFIG.silenceTimeoutMs === 5000, "silenceTimeoutMs muss 5000 sein.");
   assert(VOICE_SESSION_CONFIG.bargeInEnabled === false, "Barge-In muss in dieser Architektur aus bleiben.");
   assert(VOICE_SESSION_CONFIG.minSpeechDurationMs > 0, "minSpeechDurationMs zentral");
   assert(VOICE_SESSION_CONFIG.postTtsGuardMs > 0, "postTtsGuardMs zentral");
+  assert(VOICE_SESSION_CONFIG.pcmSampleRate === 16000, "PCM muss 16 kHz sein.");
 
   const listening = reduceVoiceSession(INITIAL_VOICE_SESSION, { type: "START_REQUESTED" });
   assert(listening.state === "STARTING", "START_REQUESTED → STARTING");
@@ -193,22 +172,35 @@ export async function runVoiceSessionChecks() {
 
   const noisy = new VoiceActivityDetector();
   noisy.reset(0);
-  for (let t = 0; t <= 400; t += 20) noisy.push(makeNoiseFrame(t, { rms: 0.03, speechBand: 0.03, rumbleBand: 0.04, hissBand: 0.04 }));
+  for (let t = 0; t <= 400; t += 20) noisy.push(makeNoiseFrame(t, { rms: 0.03, peak: 0.03 }));
   let falseStart = false;
   for (let t = 420; t <= 2000; t += 20) {
-    const status = noisy.push(makeNoiseFrame(t, { rms: 0.028, speechBand: 0.025, rumbleBand: 0.04, hissBand: 0.05, zeroCrossingRate: 0.3 }));
+    const status = noisy.push(makeNoiseFrame(t, { rms: 0.028, peak: 0.03 }));
     if (status.event === "VOICE_START") falseStart = true;
   }
   assert(!falseStart, "Umgebungsgeräusch darf den VAD nicht als Stimme werten.");
 
+  const ring = new PcmSlicer(16000, 2);
+  const block = new Float32Array(1600);
+  for (let i = 0; i < block.length; i += 1) block[i] = i % 2 === 0 ? 0.5 : -0.5;
+  ring.appendMono(block, 16000, 1000);
+  const sliced = ring.slice(1000, 1100);
+  assert(sliced.length >= 1400 && sliced.length <= 1800, `PCM-Slice Länge, war ${sliced.length}`);
+  const wav = encodeWavPcm16(sliced, 16000);
+  assert(wav.type === "audio/wav", "WAV MIME");
+  assert(wav.size === 44 + sliced.length * 2, "WAV Header + PCM");
+
   const clock = new FakeClock();
   const capture = new FakeCapture();
-  const stt = new FakeStt();
   const turns: VoiceTurn[] = [];
   const controller = new VoiceSessionController({
     clock,
     createCapture: () => capture,
-    createStt: () => stt,
+    transcribeUtterance: replies([
+      "Hallo NOVA, gib mir den Status meiner Projekte und sag mir, was dort noch offen ist.",
+      "Nächster Beitrag ohne Klick.",
+      "Dritter Beitrag ohne Klick.",
+    ]),
   });
   controller.setListener({
     onTurn: (turn) => turns.push(turn),
@@ -217,8 +209,7 @@ export async function runVoiceSessionChecks() {
   await controller.start();
   assert(controller.getSnapshot().state === "LISTENING", `Start muss LISTENING sein, war ${controller.getSnapshot().state}`);
   assert(capture.started, "Capture muss laufen.");
-  assert(stt.started, "STT muss laufen.");
-  assert(stt.startCalls === 1, "STT startet einmal mit User-Geste.");
+  assert(capture.collecting, "PCM muss ab Session-Start sammeln.");
 
   pump(capture, clock, 350, (at) => makeNoiseFrame(at));
   assert(controller.getSnapshot().state === "LISTENING", "Vor der ersten Sprache bleibt LISTENING.");
@@ -227,43 +218,42 @@ export async function runVoiceSessionChecks() {
   assert(controller.getSnapshot().state === "LISTENING", "Session bleibt nach Stille aktiv.");
 
   pump(capture, clock, 400, (at) => makeSpeechFrame(at));
-  stt.emit("Hallo NOVA, gib mir den Status meiner Projekte.");
   assert(controller.getSnapshot().state === "USER_SPEAKING", `Sprache muss USER_SPEAKING sein, war ${controller.getSnapshot().state}`);
   pump(capture, clock, 400, (at) => makeNoiseFrame(at));
   assert(controller.getSnapshot().state === "SILENCE_WAIT", `Nach Stimme Ende SILENCE_WAIT, war ${controller.getSnapshot().state}`);
   clock.advance(2000);
   assert(turns.length === 0, "2s Pause darf den Turn nicht abschließen.");
   pump(capture, clock, 400, (at) => makeSpeechFrame(at));
-  stt.emit("und sag mir, was dort noch offen ist.");
   assert(controller.getSnapshot().state === "USER_SPEAKING", "Sprache nach kurzer Pause setzt denselben Turn fort.");
   pump(capture, clock, 400, (at) => makeNoiseFrame(at));
   clock.advance(VOICE_SESSION_CONFIG.silenceTimeoutMs);
+  await flush();
   assert(turns.length === 1, `Nach 5s Silence genau ein Turn, war ${turns.length}`);
   assert(turns[0]?.transcript.includes("Hallo NOVA"), `Transcript muss ersten Teil enthalten: ${turns[0]?.transcript}`);
   assert(turns[0]?.transcript.includes("offen"), `Transcript muss zweiten Teil enthalten: ${turns[0]?.transcript}`);
+  assert(turns[0]?.sttEngine === "whisper", String(turns[0]?.sttEngine));
   assert(turns[0]?.inputMode === "voice", "inputMode voice");
   assert(turns[0]?.durationMs >= 0, "durationMs");
   assert(Boolean(turns[0]?.startedAt && turns[0]?.endedAt), "startedAt/endedAt");
+  assert(capture.sliceCalls.length === 1, "Ein Whisper-Slice pro Turn.");
   assert(controller.getSnapshot().state === "PROCESSING", "Nach Turn: PROCESSING");
-  assert(stt.paused, "STT muss während PROCESSING pausieren.");
+  assert(!capture.collecting, "PCM während PROCESSING pausiert, damit TTS nicht mitgeschnitten wird.");
 
   controller.notifyNovaSpeaking();
   assert(controller.getSnapshot().state === "NOVA_SPEAKING", "NOVA_SPEAKING");
-  stt.emit("Ich bin NOVA und antworte jetzt.");
-  assert(turns.length === 1, "NOVAs Stimme darf keinen neuen User-Turn erzeugen.");
   pump(capture, clock, 400, (at) => makeSpeechFrame(at));
   assert(controller.getSnapshot().state === "NOVA_SPEAKING", "Ohne Barge-In bleibt NOVA_SPEAKING.");
+  assert(turns.length === 1, "NOVAs Stimme darf keinen neuen User-Turn erzeugen.");
 
   controller.notifyNovaIdle();
   clock.advance(VOICE_SESSION_CONFIG.postTtsGuardMs);
   assert(controller.getSnapshot().state === "LISTENING", `Auto Re-Listen, war ${controller.getSnapshot().state}`);
-  assert(!stt.paused && stt.started, "STT nach Guard wieder aktiv.");
-  assert(stt.startCalls === 1, "WKWebView: STT nach TTS per resume, ohne neuen start().");
+  assert(capture.collecting, "PCM nach Guard wieder aktiv.");
 
   pump(capture, clock, 400, (at) => makeSpeechFrame(at));
-  stt.emit("Nächster Beitrag ohne Klick.");
   pump(capture, clock, 400, (at) => makeNoiseFrame(at));
   clock.advance(VOICE_SESSION_CONFIG.silenceTimeoutMs);
+  await flush();
   assert(turns.length === 2, "Zweiter Turn ohne erneutes Aktivieren.");
   assert(turns[1]?.transcript.includes("Nächster Beitrag"), turns[1]?.transcript);
 
@@ -271,191 +261,65 @@ export async function runVoiceSessionChecks() {
   controller.notifyNovaIdle();
   clock.advance(VOICE_SESSION_CONFIG.postTtsGuardMs);
   pump(capture, clock, 400, (at) => makeSpeechFrame(at));
-  stt.emit("Dritter Beitrag ohne Klick.");
   pump(capture, clock, 400, (at) => makeNoiseFrame(at));
   clock.advance(VOICE_SESSION_CONFIG.silenceTimeoutMs);
+  await flush();
   assert(turns.length === 3, "Dritter Turn ohne erneutes Aktivieren.");
-  assert(stt.startCalls === 1, "Drei Turns teilen denselben STT-Start.");
 
   controller.stop();
   assert(controller.getSnapshot().state === "OFF", "Manuelles Ende → OFF");
   assert(capture.stopped, "MediaStream/Capture geschlossen.");
-  assert(stt.stopped, "STT gestoppt.");
   assert(clock.timers.size === 0, "Timer müssen geleert sein.");
 
   const blipClock = new FakeClock();
   const blipCapture = new FakeCapture();
-  const blipStt = new FakeStt();
   const blipTurns: VoiceTurn[] = [];
   const blipController = new VoiceSessionController({
     clock: blipClock,
     createCapture: () => blipCapture,
-    createStt: () => blipStt,
+    transcribeUtterance: async () => "Nur ein Satz.",
   });
   blipController.setListener({ onTurn: (turn) => blipTurns.push(turn) });
   await blipController.start();
   pump(blipCapture, blipClock, 350, (at) => makeNoiseFrame(at));
   pump(blipCapture, blipClock, 400, (at) => makeSpeechFrame(at));
-  blipStt.emit("Nur ein Satz.");
   pump(blipCapture, blipClock, 400, (at) => makeNoiseFrame(at));
   blipClock.advance(2100);
   assert(blipTurns.length === 0, "2.1s Pause ist noch kein Turn.");
   pump(blipCapture, blipClock, 200, (at) => makeSpeechFrame(at));
   pump(blipCapture, blipClock, 400, (at) => makeNoiseFrame(at));
   blipClock.advance(2600);
+  await flush();
   assert(blipTurns.length === 1, `VAD-Blip darf den 5s-Timer nicht neu starten, war ${blipTurns.length}`);
   blipController.stop();
 
-  const repeatClock = new FakeClock();
-  const repeatCapture = new FakeCapture();
-  const repeatStt = new FakeStt();
-  const repeatTurns: VoiceTurn[] = [];
-  const repeatController = new VoiceSessionController({
-    clock: repeatClock,
-    createCapture: () => repeatCapture,
-    createStt: () => repeatStt,
+  const emptyClock = new FakeClock();
+  const emptyCapture = new FakeCapture();
+  const emptyTurns: VoiceTurn[] = [];
+  const emptyController = new VoiceSessionController({
+    clock: emptyClock,
+    createCapture: () => emptyCapture,
+    transcribeUtterance: async () => "",
   });
-  repeatController.setListener({ onTurn: (turn) => repeatTurns.push(turn) });
-  await repeatController.start();
-  pump(repeatCapture, repeatClock, 350, (at) => makeNoiseFrame(at));
-  pump(repeatCapture, repeatClock, 400, (at) => makeSpeechFrame(at));
-  repeatStt.emit("Hallo NOVA");
-  pump(repeatCapture, repeatClock, 400, (at) => makeNoiseFrame(at));
-  repeatClock.advance(1000);
-  repeatStt.emit("Hallo NOVA");
-  repeatClock.advance(3700);
-  assert(repeatTurns.length === 1, `STT-onend-Duplikat darf den 5s-Timer nicht neu starten, war ${repeatTurns.length}`);
-  assert(repeatTurns[0]?.transcript === "Hallo NOVA", repeatTurns[0]?.transcript ?? "kein Turn");
-  repeatController.stop();
-
-  const sttOnlyClock = new FakeClock();
-  const sttOnlyCapture = new FakeCapture();
-  const sttOnlyStt = new FakeStt();
-  const sttOnlyTurns: VoiceTurn[] = [];
-  const sttOnly = new VoiceSessionController({
-    clock: sttOnlyClock,
-    createCapture: () => sttOnlyCapture,
-    createStt: () => sttOnlyStt,
-  });
-  sttOnly.setListener({ onTurn: (turn) => sttOnlyTurns.push(turn) });
-  await sttOnly.start();
-  pump(sttOnlyCapture, sttOnlyClock, 350, (at) => makeNoiseFrame(at));
-  sttOnlyStt.emit("Hallo nur über STT.");
-  assert(sttOnly.getSnapshot().state === "USER_SPEAKING", "STT in LISTENING muss den Turn starten.");
-  pump(sttOnlyCapture, sttOnlyClock, 400, (at) => makeNoiseFrame(at));
-  sttOnlyClock.advance(VOICE_SESSION_CONFIG.silenceTimeoutMs);
-  assert(sttOnlyTurns[0]?.transcript.includes("Hallo nur über STT"), sttOnlyTurns[0]?.transcript ?? "kein Turn");
-  sttOnly.stop();
-
-  const whisperClock = new FakeClock();
-  const whisperCapture = new FakeCapture();
-  whisperCapture.blobs.push(new Blob(["xxxxxxxxxxxxxxxxxxxxxxxx"], { type: "audio/webm" }));
-  const whisperTurns: VoiceTurn[] = [];
-  const whisper = new VoiceSessionController({
-    clock: whisperClock,
-    createCapture: () => whisperCapture,
-    createStt: () => new FakeStt(),
-    transcribeUtterance: async () => "Hallo über den Aufnahme-Stream.",
-  });
-  whisper.setListener({ onTurn: (turn) => whisperTurns.push(turn) });
-  await whisper.start();
-  pump(whisperCapture, whisperClock, 350, (at) => makeNoiseFrame(at));
-  pump(whisperCapture, whisperClock, 400, (at) => makeSpeechFrame(at));
-  pump(whisperCapture, whisperClock, 400, (at) => makeNoiseFrame(at));
-  whisperClock.advance(VOICE_SESSION_CONFIG.silenceTimeoutMs);
-  await Promise.resolve();
-  await Promise.resolve();
-  assert(whisperTurns[0]?.transcript === "Hallo über den Aufnahme-Stream.", whisperTurns[0]?.transcript ?? "kein Turn");
-  assert(whisperTurns[0]?.sttEngine === "whisper", String(whisperTurns[0]?.sttEngine));
-  whisper.stop();
-
-  const soft = new VoiceActivityDetector();
-  soft.reset(0);
-  for (let t = 0; t <= 400; t += 20) soft.push(makeNoiseFrame(t));
-  let softStart = false;
-  for (let t = 420; t <= 900; t += 20) {
-    const status = soft.push({
-      timestampMs: t,
-      rms: 0.06,
-      speechBand: 0.05,
-      rumbleBand: 0.08,
-      hissBand: 0.09,
-      zeroCrossingRate: 0.4,
-    });
-    if (status.event === "VOICE_START") softStart = true;
-  }
-  assert(softStart, "Energie-Fallback muss Sprache erkennen, auch wenn Spektrum/ZCR knapper sind.");
-
-  await runWebSpeechOnendChecks();
+  emptyController.setListener({ onTurn: (turn) => emptyTurns.push(turn) });
+  await emptyController.start();
+  pump(emptyCapture, emptyClock, 350, (at) => makeNoiseFrame(at));
+  pump(emptyCapture, emptyClock, 400, (at) => makeSpeechFrame(at));
+  pump(emptyCapture, emptyClock, 400, (at) => makeNoiseFrame(at));
+  emptyClock.advance(VOICE_SESSION_CONFIG.silenceTimeoutMs);
+  await flush();
+  assert(emptyTurns.length === 0, "Leeres Whisper-Ergebnis darf keinen Turn senden.");
+  assert(emptyController.getSnapshot().state === "LISTENING", "Nach leerem Slice bleibt LISTENING.");
+  assert(emptyCapture.collecting, "Nach leerem Slice weiter aufnehmen.");
+  emptyController.stop();
 
   return {
     ok: true,
     silenceTimeoutMs: VOICE_SESSION_CONFIG.silenceTimeoutMs,
     bargeInEnabled: VOICE_SESSION_CONFIG.bargeInEnabled,
+    engine: "whisper",
     turns: turns.map((turn) => turn.transcript),
   };
-}
-
-async function runWebSpeechOnendChecks() {
-  class FakeRecognition {
-    static starts = 0;
-    static constructs = 0;
-    static last: FakeRecognition | null = null;
-    lang = "";
-    interimResults = false;
-    continuous = false;
-    onresult: ((event: { resultIndex?: number; results: ArrayLike<{ 0?: { transcript?: string; confidence?: number }; isFinal?: boolean }> }) => void) | null = null;
-    onend: (() => void) | null = null;
-    onerror: ((event: { error?: string }) => void) | null = null;
-
-    constructor() {
-      FakeRecognition.constructs += 1;
-      FakeRecognition.last = this;
-    }
-
-    start() {
-      FakeRecognition.starts += 1;
-    }
-
-    stop() {}
-    abort() {}
-  }
-
-  const g = globalThis as typeof globalThis & { SpeechRecognition?: new () => FakeRecognition };
-  const previous = g.SpeechRecognition;
-  g.SpeechRecognition = FakeRecognition;
-  assert(isSpeechRecognitionSupported(), "Fake SpeechRecognition muss erkannt werden.");
-
-  const clock = new FakeClock();
-  const texts: string[] = [];
-  const stt = new WebSpeechStt(VOICE_SESSION_CONFIG, clock);
-  stt.start({
-    onTranscript: (input) => texts.push(input.transcript),
-  });
-  assert(FakeRecognition.starts === 1, "STT bootet einmal.");
-  const rec = FakeRecognition.last;
-  if (!rec) throw new Error("SpeechRecognition-Instanz fehlt.");
-  rec.onresult?.({
-    resultIndex: 0,
-    results: Object.assign([{ 0: { transcript: "Hallo NOVA", confidence: 0.9 }, isFinal: false, length: 1 }], { length: 1 }),
-  });
-  rec.onend?.();
-  assert(FakeRecognition.constructs === 1, "onend muss dieselbe SpeechRecognition-Instanz weiterverwenden.");
-  assert(FakeRecognition.starts === 2, "onend muss STT sofort neu starten, ohne den Turn zu beenden.");
-  assert(texts.some((text) => text.includes("Hallo NOVA")), "Interim muss beim onend committed werden.");
-
-  stt.pause();
-  const startsAfterPause = FakeRecognition.starts;
-  FakeRecognition.last?.onresult?.({
-    resultIndex: 0,
-    results: Object.assign([{ 0: { transcript: "NOVA spricht", confidence: 0.9 }, isFinal: true, length: 1 }], { length: 1 }),
-  });
-  assert(texts.every((text) => !text.includes("NOVA spricht")), "Pausiertes STT darf TTS nicht als User-Text übernehmen.");
-  FakeRecognition.last?.onend?.();
-  assert(FakeRecognition.starts > startsAfterPause, "Auch während pause bleibt die Engine am Leben.");
-  stt.resume();
-  stt.stop();
-  g.SpeechRecognition = previous;
 }
 
 if (process.argv[1]?.endsWith("verify-voice-session.ts")) {

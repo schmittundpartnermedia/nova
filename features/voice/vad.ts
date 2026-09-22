@@ -5,10 +5,7 @@ export type VadEvent = "VOICE_START" | "VOICE_ACTIVE" | "VOICE_END" | "SILENCE";
 export type VadFrame = {
   timestampMs: number;
   rms: number;
-  speechBand: number;
-  rumbleBand: number;
-  hissBand: number;
-  zeroCrossingRate: number;
+  peak: number;
 };
 
 export type VadStatus = {
@@ -19,70 +16,6 @@ export type VadStatus = {
   level: number;
   noiseFloor: number;
 };
-
-function bandEnergy(spectrum: Uint8Array, sampleRate: number, fftSize: number, fromHz: number, toHz: number): number {
-  const binHz = sampleRate / fftSize;
-  const start = Math.max(0, Math.floor(fromHz / binHz));
-  const end = Math.min(spectrum.length - 1, Math.ceil(toHz / binHz));
-  let sum = 0;
-  let count = 0;
-  for (let i = start; i <= end; i += 1) {
-    sum += spectrum[i] ?? 0;
-    count += 1;
-  }
-  return count ? sum / count / 255 : 0;
-}
-
-export function extractVadFrame(input: {
-  frequency: Uint8Array;
-  time: Float32Array;
-  sampleRate: number;
-  fftSize: number;
-  timestampMs: number;
-  config?: VoiceSessionConfig;
-}): VadFrame {
-  const config = input.config ?? VOICE_SESSION_CONFIG;
-  let sumSq = 0;
-  let crossings = 0;
-  let previous = input.time[0] ?? 0;
-  for (let i = 0; i < input.time.length; i += 1) {
-    const sample = input.time[i] ?? 0;
-    sumSq += sample * sample;
-    if (i > 0 && (previous >= 0) !== (sample >= 0)) crossings += 1;
-    previous = sample;
-  }
-  const rms = input.time.length ? Math.sqrt(sumSq / input.time.length) : 0;
-  return {
-    timestampMs: input.timestampMs,
-    rms,
-    speechBand: bandEnergy(
-      input.frequency,
-      input.sampleRate,
-      input.fftSize,
-      config.speechBandLowHz,
-      config.speechBandHighHz,
-    ),
-    rumbleBand: bandEnergy(input.frequency, input.sampleRate, input.fftSize, 20, config.rumbleHighHz),
-    hissBand: bandEnergy(input.frequency, input.sampleRate, input.fftSize, config.hissLowHz, 8000),
-    zeroCrossingRate: input.time.length > 1 ? crossings / (input.time.length - 1) : 0,
-  };
-}
-
-function speechEnergy(frame: VadFrame): number {
-  return Math.max(frame.speechBand, frame.rms * 0.85);
-}
-
-function isSpeechLike(frame: VadFrame, noiseFloor: number, config: VoiceSessionConfig): { speech: boolean; snrDb: number } {
-  const energy = speechEnergy(frame);
-  const snrDb = 20 * Math.log10((energy + 1e-8) / (noiseFloor + 1e-8));
-  const spectralOk =
-    frame.speechBand >= frame.rumbleBand * config.vadRumbleRatio &&
-    frame.speechBand >= frame.hissBand * config.vadHissRatio;
-  const zcrOk = frame.zeroCrossingRate >= config.vadZcrMin && frame.zeroCrossingRate <= config.vadZcrMax;
-  const speech =
-    energy >= config.vadMinSpeechEnergy && snrDb >= config.vadSnrDb && spectralOk && zcrOk;
-  return { speech, snrDb };
-}
 
 export class VoiceActivityDetector {
   private readonly config: VoiceSessionConfig;
@@ -113,8 +46,13 @@ export class VoiceActivityDetector {
     this.silenceRunMs = 0;
   }
 
-  get level() {
-    return this.noiseFloor;
+  wake(timestampMs: number) {
+    this.startedAt = timestampMs - this.config.vadWarmupMs;
+    this.noiseFloor = this.config.vadNoiseFloor;
+    this.inVoice = false;
+    this.speechRunMs = 0;
+    this.silenceRunMs = 0;
+    this.lastTs = timestampMs;
   }
 
   push(frame: VadFrame): VadStatus {
@@ -122,18 +60,17 @@ export class VoiceActivityDetector {
     this.lastTs = frame.timestampMs;
     if (!this.startedAt) this.startedAt = frame.timestampMs;
 
-    const energy = speechEnergy(frame);
+    const energy = Math.max(frame.rms, frame.peak * 0.45);
+    const threshold = Math.max(this.config.vadMinSpeechRms, this.noiseFloor * this.config.vadNoiseMultiplier);
+    const speech = energy >= threshold || frame.peak >= this.config.vadMinSpeechPeak;
+    const snrDb = 20 * Math.log10((energy + 1e-8) / (this.noiseFloor + 1e-8));
     const warming = frame.timestampMs - this.startedAt < this.config.vadWarmupMs;
-    const { speech, snrDb } = isSpeechLike(frame, this.noiseFloor, this.config);
-    const energyGate =
-      energy >= this.config.vadMinSpeechEnergy * this.config.vadSoftEnergyScale &&
-      snrDb >= this.config.vadSoftSnrDb;
-    const speechLikely = !warming && (speech || energyGate);
+    const speechLikely = !warming && speech;
 
     const adapt = this.inVoice || speechLikely ? this.config.vadNoiseAdaptSpeech : this.config.vadNoiseAdaptSilence;
     if (!speechLikely || warming) {
       this.noiseFloor = this.noiseFloor + (energy - this.noiseFloor) * adapt;
-      this.noiseFloor = Math.max(this.config.vadNoiseFloor * 0.4, Math.min(0.08, this.noiseFloor));
+      this.noiseFloor = Math.max(this.config.vadNoiseFloor * 0.4, Math.min(this.config.vadNoiseCeiling, this.noiseFloor));
     }
 
     if (warming) {
@@ -221,10 +158,7 @@ export function makeSpeechFrame(timestampMs: number, overrides: Partial<VadFrame
   return {
     timestampMs,
     rms: 0.08,
-    speechBand: 0.22,
-    rumbleBand: 0.04,
-    hissBand: 0.03,
-    zeroCrossingRate: 0.08,
+    peak: 0.22,
     ...overrides,
   };
 }
@@ -232,11 +166,21 @@ export function makeSpeechFrame(timestampMs: number, overrides: Partial<VadFrame
 export function makeNoiseFrame(timestampMs: number, overrides: Partial<VadFrame> = {}): VadFrame {
   return {
     timestampMs,
-    rms: 0.012,
-    speechBand: 0.01,
-    rumbleBand: 0.02,
-    hissBand: 0.018,
-    zeroCrossingRate: 0.22,
+    rms: 0.008,
+    peak: 0.016,
     ...overrides,
   };
+}
+
+export function energyFromTimeDomain(samples: ArrayLike<number>): { rms: number; peak: number } {
+  let sumSq = 0;
+  let peak = 0;
+  const n = samples.length;
+  for (let i = 0; i < n; i += 1) {
+    const sample = samples[i] ?? 0;
+    const abs = sample < 0 ? -sample : sample;
+    if (abs > peak) peak = abs;
+    sumSq += sample * sample;
+  }
+  return { rms: n ? Math.sqrt(sumSq / n) : 0, peak };
 }

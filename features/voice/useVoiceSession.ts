@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { isVoiceCaptureSupported } from "@/features/voice/capture";
 import { VoiceSessionController } from "@/features/voice/session-controller";
 import {
   IDLE_VOICE_SNAPSHOT,
@@ -14,20 +15,7 @@ export function useVoiceSession(onTurn: (turn: VoiceTurn) => void) {
   const interruptRef = useRef<() => void>(() => undefined);
   const browserSupported = useSyncExternalStore(
     () => () => undefined,
-    () => {
-      const g = globalThis as typeof globalThis & {
-        SpeechRecognition?: unknown;
-        webkitSpeechRecognition?: unknown;
-        window?: { SpeechRecognition?: unknown; webkitSpeechRecognition?: unknown };
-      };
-      return Boolean(
-        g.SpeechRecognition ||
-          g.webkitSpeechRecognition ||
-          g.window?.SpeechRecognition ||
-          g.window?.webkitSpeechRecognition ||
-          typeof MediaRecorder !== "undefined",
-      );
-    },
+    () => isVoiceCaptureSupported(),
     () => false,
   );
   const [snapshot, setSnapshot] = useState<VoiceSessionSnapshot>(IDLE_VOICE_SNAPSHOT);
