@@ -5,11 +5,18 @@ import { recordActivity } from "@/services/archive";
 import { addJobStep, completeJobStep } from "@/services/jobs";
 import { ingestKnowledgeBuffer, ingestParsedKnowledge } from "@/services/knowledge";
 import { importArchivedMessage } from "@/services/conversation";
-import { createKnowledgeImport, knowledgeCancelRequested, updateKnowledgeImport } from "@/services/knowledge/jobs";
+import { createKnowledgeImport, getKnowledgeImport, getLatestKnowledgeImport, knowledgeCancelRequested, updateKnowledgeImport } from "@/services/knowledge/jobs";
 import { inspectChatGPTExport, isImageAttachment, loadAttachmentBytes, parseChatGPTExport } from "@/lib/chatgpt/adapter";
 import { conversationToParsedDocument, estimatedTokens, extractConversationKnowledge } from "@/lib/chatgpt/extract";
 import { resolveExistingEntity } from "@/lib/knowledge/entities";
 import { formatChatGPTImportSummary } from "@/lib/knowledge/ranking";
+import {
+  chatgptImportConversations,
+  chatgptImportPercent,
+  friendlyChatGPTImportError,
+  isChatGPTImportTerminal,
+  type ChatGPTImportStatusView,
+} from "@/lib/chatgpt/progress";
 import type { ChatGPTImportCheckpoint, ChatGPTImportPhase, ChatGPTImportResult, ImportedConversation, ImportedMessage } from "@/types/chatgpt";
 import type { ConversationRole } from "@/types/conversation";
 import type { RelationType } from "@/types";
@@ -35,6 +42,7 @@ function emptyCheckpoint(): ChatGPTImportCheckpoint {
     itemsCreated: 0,
     memoryUpdates: 0,
     decisions: 0,
+    entities: 0,
     contradictions: 0,
     tokensPrompt: 0,
     tokensCompletion: 0,
@@ -249,6 +257,7 @@ export async function importChatGPTExport(input: {
       type: { in: ["PROJECT", "COMPANY", "PERSON"] },
     },
   });
+  checkpoint.entities = entities;
   const status = cancelled
     ? "CANCELLED"
     : checkpoint.failedExternalIds.length && checkpoint.conversationsImported
@@ -256,6 +265,16 @@ export async function importChatGPTExport(input: {
       : checkpoint.failedExternalIds.length && !checkpoint.conversationsImported
         ? "FAILED"
         : "COMPLETED";
+  const summary = formatChatGPTImportSummary({
+    conversations: chatgptImportConversations(checkpoint),
+    messages: checkpoint.messagesImported,
+    items: checkpoint.itemsCreated,
+    decisions: checkpoint.decisions,
+    entities,
+    contradictions: checkpoint.contradictions,
+  });
+  checkpoint.summary = summary;
+  checkpoint.phase = status;
   await updateKnowledgeImport({
     organizationId: input.organizationId,
     id: knowledgeImport.id,
@@ -268,7 +287,7 @@ export async function importChatGPTExport(input: {
     filesFailed: checkpoint.failedExternalIds.length,
     tokensPrompt: checkpoint.tokensPrompt,
     tokensCompletion: checkpoint.tokensCompletion,
-    progress: { ...checkpoint, phase: status },
+    progress: checkpoint,
     finished: true,
   });
   if (step) {
@@ -279,14 +298,6 @@ export async function importChatGPTExport(input: {
       output: checkpoint,
     });
   }
-  const summary = formatChatGPTImportSummary({
-    conversations: checkpoint.conversationsImported + checkpoint.conversationsSkipped,
-    messages: checkpoint.messagesImported,
-    items: checkpoint.itemsCreated,
-    decisions: checkpoint.decisions,
-    entities,
-    contradictions: checkpoint.contradictions,
-  });
   await recordActivity({
     organizationId: input.organizationId,
     type: "knowledge",
@@ -577,6 +588,66 @@ async function processConversationKnowledge(input: {
     attachmentsImported,
     tokensPrompt,
   };
+}
+
+function statusFromImport(row: {
+  id: string;
+  jobId: string | null;
+  status: string;
+  error: string | null;
+  progressJson: string | null;
+  filesSuccess: number;
+  filesSkipped: number;
+  itemsCreated: number;
+}): ChatGPTImportStatusView {
+  const checkpoint = parseCheckpoint(row.progressJson);
+  const running = !isChatGPTImportTerminal(row.status);
+  const failed = row.status === "FAILED" || row.status === "CANCELLED";
+  return {
+    ok: !failed && (row.status === "COMPLETED" || row.status === "PARTIAL" || running),
+    running,
+    finished: !running,
+    jobId: row.jobId ?? undefined,
+    importId: row.id,
+    status: row.status,
+    percent: chatgptImportPercent(checkpoint),
+    error: failed ? friendlyChatGPTImportError(row.error) : null,
+    conversations: chatgptImportConversations(checkpoint) || row.filesSuccess + row.filesSkipped,
+    messages: checkpoint.messagesImported,
+    items: checkpoint.itemsCreated || row.itemsCreated,
+    decisions: checkpoint.decisions,
+    entities: checkpoint.entities,
+    contradictions: checkpoint.contradictions,
+    summary: checkpoint.summary,
+  };
+}
+
+export async function getChatGPTImportStatus(
+  organizationId: string,
+  query?: { jobId?: string; importId?: string },
+): Promise<ChatGPTImportStatusView | null> {
+  assertOrganizationId(organizationId);
+  const row = query?.importId
+    ? await getKnowledgeImport(organizationId, query.importId)
+    : query?.jobId
+      ? await prisma.knowledgeImport.findFirst({
+          where: { organizationId, jobId: query.jobId, kind: "chatgpt" },
+          orderBy: { startedAt: "desc" },
+        })
+      : await getLatestKnowledgeImport(organizationId, "chatgpt");
+  if (!row) return null;
+  return statusFromImport(row);
+}
+
+export function assertChatGPTExportFile(input: { zipBytes?: Buffer; jsonBytes?: Buffer; filePath?: string }): void {
+  const inspected = inspectChatGPTExport(input);
+  const expectsZip = Boolean(input.zipBytes) || Boolean(input.filePath && /\.zip$/i.test(input.filePath));
+  if (expectsZip && inspected.kind !== "zip") {
+    throw new Error("Das ist kein gültiger ChatGPT-Export. Bitte die originale ZIP-Datei wählen, die du von OpenAI heruntergeladen hast.");
+  }
+  if (inspected.kind === "zip" && !inspected.manifest.conversationsPath) {
+    throw new Error("In der ZIP fehlt conversations.json. Bitte die originale ChatGPT-Export-Datei wählen.");
+  }
 }
 
 export type ChatGPTExportConversation = {

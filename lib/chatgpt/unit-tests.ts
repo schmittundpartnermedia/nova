@@ -5,6 +5,7 @@ import { createChatGPTExportConversations, createChatGPTExportZip, CHATGPT_FIXTU
 import { inspectUntrustedDocument } from "@/lib/knowledge/security";
 import { looksLikeSecret } from "@/lib/computer/redaction";
 import { detectChatGPTImportIntent } from "@/lib/chatgpt/intent";
+import { chatgptImportPercent, friendlyChatGPTImportError } from "@/lib/chatgpt/progress";
 
 export function runChatGPTUnitTests(): string[] {
   const failures: string[] = [];
@@ -55,6 +56,26 @@ export function runChatGPTUnitTests(): string[] {
   }
   if (parsed.manifest.conversationsPath !== "conversations.json") failures.push("conversations.json nicht erkannt");
   if (!parsed.manifest.htmlPath) failures.push("chat.html sollte gefunden, aber nicht benötigt sein");
+
+  if (chatgptImportPercent({ phase: "VALIDATING", conversationsTotal: 0, processedExternalIds: [], conversationsSkipped: 0 }) !== 2) {
+    failures.push("Progress VALIDATING falsch");
+  }
+  if (chatgptImportPercent({ phase: "COMPLETED", conversationsTotal: 10, processedExternalIds: ["a"], conversationsSkipped: 0 }) !== 100) {
+    failures.push("Progress COMPLETED falsch");
+  }
+  const mid = chatgptImportPercent({
+    phase: "IMPORTING_ARCHIVE",
+    conversationsTotal: 10,
+    processedExternalIds: ["1", "2", "3", "4", "5"],
+    conversationsSkipped: 0,
+  });
+  if (mid < 40 || mid > 70) failures.push(`Progress Import-Mitte unerwartet: ${mid}`);
+  if (!/originale ZIP-Datei/i.test(friendlyChatGPTImportError("Kein gültiges ZIP-Archiv."))) {
+    failures.push("Freundliche ZIP-Fehlermeldung fehlt");
+  }
+  if (!/originale ZIP-Datei/i.test(friendlyChatGPTImportError("conversations.json ist kein gültiges JSON."))) {
+    failures.push("Freundliche JSON-Fehlermeldung fehlt");
+  }
 
   return failures;
 }

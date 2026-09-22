@@ -24,11 +24,13 @@ export function NovaSidebar({
   onSection,
   userName,
   open,
+  onOpenSettings,
 }: {
   section: NovaSection;
   onSection: (section: NovaSection) => void;
   userName: string;
   open?: boolean;
+  onOpenSettings?: () => void;
 }) {
   const initial = userName.trim().slice(0, 1).toUpperCase() || "N";
 
@@ -55,13 +57,13 @@ export function NovaSidebar({
           </button>
         ))}
       </nav>
-      <div className="nova-user">
+      <button type="button" className="nova-user" onClick={onOpenSettings} title="Einstellungen">
         <span className="nova-user-mark">{initial}</span>
         <div>
           <strong>{userName || "NOVA"}</strong>
-          <small>NOVA</small>
+          <small>Einstellungen</small>
         </div>
-      </div>
+      </button>
     </aside>
   );
 }

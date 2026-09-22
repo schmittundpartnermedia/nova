@@ -7,7 +7,7 @@ import { chatgptKnowledgeStatus, runKnowledgeAgent } from "@/agents/knowledge";
 import { runMaster } from "@/agents/master";
 import { runChatGPTUnitTests } from "@/lib/chatgpt/unit-tests";
 import { createChatGPTExportZip, CHATGPT_FIXTURE_IDS } from "@/lib/chatgpt/fixtures";
-import { importChatGPTExport } from "@/services/import/chatgpt";
+import { importChatGPTExport, getChatGPTImportStatus } from "@/services/import/chatgpt";
 import { conversationArchive } from "@/services/archive";
 import { searchKnowledge } from "@/services/knowledge";
 import { requestKnowledgeCancel } from "@/services/knowledge/jobs";
@@ -72,6 +72,11 @@ async function main() {
   assert(imported.messagesImported > 0, "Keine Messages importiert");
   assert(imported.itemsCreated > 0, "Keine Knowledge Items");
   assert(imported.decisions >= 1, "Keine Entscheidung extrahiert");
+
+  const status = await getChatGPTImportStatus(organization.id, { importId: imported.importId });
+  assert(status?.finished === true, "Import-Status nicht abgeschlossen");
+  assert((status?.percent ?? 0) === 100, "Import-Progress nicht 100");
+  assert((status?.conversations ?? 0) >= 4, "Status ohne Gespräche");
 
   const conversations = await prisma.conversation.findMany({
     where: { organizationId: organization.id, origin: "chatgpt_import" },

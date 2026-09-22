@@ -10,6 +10,7 @@ import { NovaVoiceWave } from "@/components/nova/NovaVoiceWave";
 import { NovaSidebar, type NovaSection } from "@/components/nova/NovaSidebar";
 import { NovaContextPanel, type NovaJobSummary } from "@/components/nova/NovaContextPanel";
 import { ApprovalCard } from "@/components/nova/ApprovalCard";
+import { NovaChatGptImport } from "@/components/nova/NovaChatGptImport";
 import { ArchivePanel, type ArchiveItem } from "@/components/archive/ArchivePanel";
 import { performanceForState } from "@/components/nova/avatar-performance";
 import { useVoiceSession } from "@/features/voice/useVoiceSession";
@@ -97,7 +98,7 @@ export function NovaShell() {
   const [draft, setDraft] = useState("");
   const [visibleLines, setVisibleLines] = useState<CommunicationLine[]>([]);
   const [interactionMode, setInteractionMode] = useState<InteractionMode>("voice");
-  const [chatgptImportHint, setChatgptImportHint] = useState(false);
+  const [importOpen, setImportOpen] = useState(false);
   const idleTimer = useRef<number | null>(null);
   const hideTimer = useRef<number | null>(null);
   const interruptedRef = useRef(false);
@@ -349,7 +350,7 @@ export function NovaShell() {
           }
           const nextState = (payload.orbState as OrbState) ?? "DONE";
           if (payload.needsFile === "chatgpt-export") {
-            setChatgptImportHint(true);
+            setImportOpen(true);
           }
           if (typeof payload.statusMessage === "string") setStatus(payload.statusMessage);
           if (interruptedRef.current) {
@@ -418,47 +419,6 @@ export function NovaShell() {
     notifyNovaIdle,
     notifyProcessing,
   ]);
-
-  const importChatGPTFile = useCallback(async (file: File) => {
-    interruptedRef.current = false;
-    setChatgptImportHint(false);
-    setBusy(true);
-    setOrbState("WORKING");
-    setStatus("Ich importiere deinen ChatGPT-Verlauf.");
-    keepComm();
-    const userLine: CommunicationLine = { id: `user-${Date.now()}`, speaker: "JOACHIM", text: `ChatGPT-Export: ${file.name}` };
-    const assistantLine: CommunicationLine = { id: `nova-${Date.now()}`, speaker: "NOVA", text: "", pending: true };
-    setVisibleLines((current) => clipWindow([...current.filter((line) => !line.pending), userLine, assistantLine]));
-    try {
-      const body = new FormData();
-      body.append("file", file);
-      const response = await fetch("/api/import/chatgpt", { method: "POST", body });
-      const data = (await response.json()) as { ok?: boolean; reply?: string; error?: string; jobId?: string };
-      const reply = data.reply ?? data.error ?? "Import abgeschlossen.";
-      setVisibleLines((current) => {
-        const next = [...current];
-        const last = next[next.length - 1];
-        if (last?.speaker === "NOVA") next[next.length - 1] = { ...last, text: reply, pending: false };
-        return clipWindow(next);
-      });
-      if (typeof data.jobId === "string" && data.jobId) {
-        setJob({
-          id: data.jobId,
-          goal: "ChatGPT-Verlauf importieren",
-          status: data.ok ? "completed" : "failed",
-          userRequest: file.name,
-        });
-      }
-      setOrbState(data.ok ? "DONE" : "ERROR");
-      setStatus(data.ok ? "ChatGPT-Verlauf importiert" : "Import fehlgeschlagen");
-      scheduleCommHide(COMM_HIDE_MS);
-    } catch {
-      setOrbState("ERROR");
-      setStatus("Import fehlgeschlagen");
-    } finally {
-      setBusy(false);
-    }
-  }, [clipWindow, keepComm, scheduleCommHide]);
 
   useEffect(() => {
     sendVoiceTurnRef.current = (turn) => {
@@ -659,7 +619,13 @@ export function NovaShell() {
       />
 
       <div className="nova-shell">
-        <NovaSidebar section={section} onSection={chooseSection} userName={userName} open={navOpen} />
+        <NovaSidebar
+          section={section}
+          onSection={chooseSection}
+          userName={userName}
+          open={navOpen}
+          onOpenSettings={() => setImportOpen(true)}
+        />
 
         <main className="nova-center">
           <div className="nova-mobile-bar">
@@ -709,6 +675,7 @@ export function NovaShell() {
                 onReject={() => void decide("rejected")}
               />
             ) : null}
+            <NovaChatGptImport open={importOpen} onClose={() => setImportOpen(false)} />
             <NovaStatus text={shownStatus} />
             <NovaCommandBar
               disabled={busy}
@@ -727,8 +694,6 @@ export function NovaShell() {
               onToggleVoice={toggleEnabled}
               onDraftChange={handleDraftChange}
               onComposeStart={openTextLayer}
-              onImportFile={(file) => void importChatGPTFile(file)}
-              importHint={chatgptImportHint}
             />
             <NovaVoiceWave
               listening={sessionSnap.capturing}

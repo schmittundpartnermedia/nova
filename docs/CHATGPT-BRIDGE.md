@@ -39,8 +39,10 @@ ChatGPT Export
 
 Entry Points:
 
-- Chat: „Importiere meinen ChatGPT Verlauf.“ → ZIP über + wählen
-- `POST /api/import/chatgpt` (multipart ZIP, JSON-Pfad oder `conversations`)
+- Einstellungen (unten links) → „ChatGPT-Verlauf importieren“ → originale ZIP wählen
+- Chat: „Importiere meinen ChatGPT Verlauf.“ öffnet denselben Dialog
+- `POST /api/import/chatgpt` startet den Import im Hintergrund (multipart ZIP)
+- `GET /api/import/chatgpt?jobId=` liefert Fortschritt
 - CLI: `npm run import:chatgpt -- --file /pfad/export.zip`
 
 Nachrichten sind untrusted historical content. Secrets werden redaktiert. Prompt-Injection wird nur gespeichert, nie ausgeführt.

@@ -90,9 +90,11 @@ export type ChatGPTImportCheckpoint = {
   itemsCreated: number;
   memoryUpdates: number;
   decisions: number;
+  entities: number;
   contradictions: number;
   tokensPrompt: number;
   tokensCompletion: number;
+  summary?: string;
 };
 
 export type ChatGPTImportResult = {

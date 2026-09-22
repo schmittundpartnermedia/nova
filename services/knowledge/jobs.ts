@@ -109,3 +109,11 @@ export async function getKnowledgeImport(organizationId: string, id: string) {
     where: { id, organizationId },
   });
 }
+
+export async function getLatestKnowledgeImport(organizationId: string, kind?: string) {
+  assertOrganizationId(organizationId);
+  return prisma.knowledgeImport.findFirst({
+    where: { organizationId, ...(kind ? { kind } : {}) },
+    orderBy: { startedAt: "desc" },
+  });
+}
