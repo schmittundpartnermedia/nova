@@ -1,10 +1,24 @@
 import { PrismaClient } from "@prisma/client";
 import { runMaster } from "@/agents/master";
+import { needsSpecialistWork } from "@/agents/master/intent";
 import { searchMemory } from "@/services/retrieval";
 
 const prisma = new PrismaClient();
 
 async function main() {
+  if (needsSpecialistWork("Hallo NOVA, wie ist der Stand?")) {
+    throw new Error("Gespräch darf keinen Spezialisten-Planer brauchen.");
+  }
+  if (needsSpecialistWork("Was hatten wir zu ELEVUM beschlossen?")) {
+    throw new Error("Archiv-Rückfrage darf direkt beantwortet werden.");
+  }
+  if (!needsSpecialistWork("Finde aktuelle Unternehmen, die als Sponsor passen.")) {
+    throw new Error("Aktuelle Recherche muss den Spezialisten-Pfad nutzen.");
+  }
+  if (!needsSpecialistWork("Merk dir: Hetzner startet mit drei Monaten Pilot.")) {
+    throw new Error("Merk-dir muss Memory schreiben.");
+  }
+
   const organization = await prisma.organization.findUnique({ where: { slug: "joachim" } });
   if (!organization) {
     throw new Error("Seed fehlt. Bitte zuerst prisma migrate + seed ausführen.");

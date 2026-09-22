@@ -202,6 +202,7 @@ export class VoiceSessionController {
   private warmupTranscribe() {
     if (typeof window === "undefined" || typeof fetch !== "function") return;
     void fetch("/api/nova/transcribe", { method: "GET", cache: "no-store" }).catch(() => undefined);
+    void fetch("/api/nova/speech", { method: "GET", cache: "no-store" }).catch(() => undefined);
   }
 
   private onFrame(frame: VadFrame) {

@@ -4,6 +4,7 @@ import { runComputerAgent } from "@/agents/computer";
 import { detectCodingIntent } from "@/agents/coding/intent";
 import { runCodingAgent } from "@/agents/coding";
 import { needsLiveResearch } from "@/lib/research/intent";
+import { needsSpecialistWork } from "@/agents/master/intent";
 import { getDefaultProject, runAgentStep } from "@/agents/runtime";
 import { resolveAIProvider } from "@/providers/ai/registry";
 import { createJob, updateJobStatus } from "@/services/jobs";
@@ -143,6 +144,68 @@ async function persistDurableMemory(input: {
   return saved;
 }
 
+function novaReplySystem(input: {
+  organizationName: string;
+  mock: boolean;
+  researchAnswer?: string;
+  researchBlocked?: boolean;
+  researchFailed?: boolean;
+}) {
+  return `Du bist NOVA, der persönliche KI-Business-Assistent von ${input.organizationName}.
+Du bist nicht rankPilot und nicht SURI.
+Antworte auf Deutsch, klar und knapp. Im Gespräch wenige Sätze, außer die Sache braucht mehr.
+Erfinde keine Fakten. Wenn Memory nichts enthält, sage das ehrlich.
+Behaupte niemals, E-Mails seien gesendet, wenn das nicht der Fall ist.
+Conversation Archive ist die vollständige Kommunikation. Business Memory ist extrahiertes Wissen mit Quelle.
+Aktuelle Fakten nur aus der Recherche mit Quellen.
+${input.researchAnswer ? "Eine echte Webrecherche ist erfolgt. Verwende deren Ergebnis." : ""}
+${input.researchBlocked ? "Es ist kein echter Search Connector verbunden. Sage klar, dass aktuelle Informationen gerade nicht zuverlässig prüfbar sind. Erfinde keine Treffer." : ""}
+${input.researchFailed ? "Die Webrecherche konnte die aktuelle Information nicht zuverlässig prüfen. Sage genau das. Erfinde keine Ergebnisse." : ""}
+${input.mock ? "Du bist im Mock-Modus. Kennzeichne das, täusche keine echte Modellantwort vor." : ""}`;
+}
+
+async function runDirectReply(input: {
+  userRequest: string;
+  onEvent?: (event: MasterEvent) => void;
+  provider: { id: string; stream: (value: GenerateInput) => AsyncIterable<{ delta: string; done: boolean }> };
+  decision: { model: string };
+  mode: ProviderMode;
+  contextPack: { organizationName: string; promptBlock: string };
+}): Promise<MasterRunResult> {
+  const reply = await collectStream({
+    provider: input.provider,
+    generateInput: {
+      model: input.decision.model,
+      temperature: 0.4,
+      system: novaReplySystem({
+        organizationName: input.contextPack.organizationName,
+        mock: input.provider.id === "mock",
+      }),
+      prompt: `Benutzer: ${input.userRequest}
+
+Kontext:
+${input.contextPack.promptBlock}
+
+Formuliere die Nutzerantwort direkt. Keine Agenten, kein Plan, kein Prozessbericht.`,
+    },
+    onDelta: (delta) => {
+      void emit(input.onEvent, { type: "delta", delta });
+    },
+  });
+
+  return {
+    jobId: "",
+    status: "completed",
+    orbState: "DONE",
+    statusMessage: "Erledigt.",
+    reply,
+    mock: input.provider.id === "mock",
+    providerMode: input.mode,
+    providerId: input.provider.id,
+    model: input.decision.model,
+  };
+}
+
 export async function runMaster(input: {
   organizationId: string;
   userRequest: string;
@@ -167,7 +230,16 @@ export async function runMaster(input: {
     return runComputerMasterPath(input, computerIntent.statusMessage);
   }
 
-  const { provider, decision } = await resolveAIProvider(input.organizationId, "master");
+  const specialist = needsSpecialistWork(input.userRequest);
+  const [{ provider, decision }, project, contextPack] = await Promise.all([
+    resolveAIProvider(input.organizationId, specialist ? "master" : "simple"),
+    getDefaultProject(input.organizationId),
+    loadRelevantBusinessContext({
+      organizationId: input.organizationId,
+      query: input.userRequest,
+      conversationId: input.conversationId,
+    }),
+  ]);
   const mode = providerModeOf(decision);
   await emit(input.onEvent, {
     type: "provider",
@@ -192,12 +264,16 @@ export async function runMaster(input: {
     };
   }
 
-  const project = await getDefaultProject(input.organizationId);
-  const contextPack = await loadRelevantBusinessContext({
-    organizationId: input.organizationId,
-    query: input.userRequest,
-    conversationId: input.conversationId,
-  });
+  if (!specialist) {
+    return runDirectReply({
+      userRequest: input.userRequest,
+      onEvent: input.onEvent,
+      provider,
+      decision,
+      mode,
+      contextPack,
+    });
+  }
 
   const available = implementedAgentIds();
   const plan = await provider.structuredOutput<MasterPlan>({
@@ -502,45 +578,6 @@ ${input.userRequest}`,
   if (researchMemory.length > 0) {
     memoryItems = [...memoryItems, ...researchMemory];
   }
-  if (memoryItems.length === 0) {
-    const extracted = await provider.structuredOutput<{ persist?: boolean; items?: MemoryItem[] }>({
-      model: decision.model,
-      schemaName: "durable-memory",
-      schemaDescription:
-        'JSON {persist:boolean, items:[{type,title,content}]}. persist=true nur bei langlebigen Business-Fakten (Entscheidungen, Projekte, Firmen, Kontakte, Aufgaben, Präferenzen, Deadlines, Zusagen). Kein Smalltalk, keine Secrets, nichts erfinden. Keine aktuellen Preise, News oder unbestätigte Web-Snippets speichern.',
-      prompt: `Anfrage: ${input.userRequest}\nKontext:\n${contextPack.promptBlock}\nRecherche speichert eigene Kandidaten separat. Welche zusätzlichen langlebigen Fakten sollen ins Business Memory?`,
-    });
-    if (extracted.persist && Array.isArray(extracted.items)) {
-      memoryItems = extracted.items.filter((item) => item.title && item.content);
-    }
-  }
-  if (memoryItems.length > 0) {
-    const saved = await persistDurableMemory({
-      organizationId: input.organizationId,
-      items: memoryItems,
-      projectId: project?.id,
-      sourceId: source.id,
-      jobId: job.id,
-      conversationMessageId: input.sourceMessageId,
-    });
-    if (saved.length > 0) {
-      agentNotes.push(`Memory: ${saved.length} langlebige Einträge gespeichert.`);
-      await recordActivity({
-        organizationId: input.organizationId,
-        type: saved.some((item) => item.type === "decision") ? "decision" : "memory",
-        title: "Business Memory aktualisiert",
-        description: saved.map((item) => item.title).join(", "),
-        status: "prepared",
-        jobId: job.id,
-        projectId: project?.id,
-        metadata: {
-          memoryIds: saved.map((item) => item.id),
-          sourceType: input.sourceMessageId ? "conversation_message" : "nova",
-          sourceMessageId: input.sourceMessageId ?? null,
-        },
-      });
-    }
-  }
 
   let approvalId: string | undefined;
   let orbState: OrbState = "DONE";
@@ -598,18 +635,13 @@ ${input.userRequest}`,
       generateInput: {
         model: decision.model,
         temperature: 0.4,
-        system: `Du bist NOVA, der persönliche KI-Business-Assistent von ${contextPack.organizationName}.
-Du bist nicht rankPilot und nicht SURI.
-Antworte auf Deutsch, klar und knapp.
-Erfinde keine Fakten. Wenn Memory nichts enthält, sage das ehrlich.
-Behaupte niemals, E-Mails seien gesendet, wenn das nicht der Fall ist.
-Conversation Archive ist die vollständige Kommunikation. Business Memory ist extrahiertes Wissen mit Quelle.
-Wenn du auf gespeichertes Wissen antwortest, bleibt die Quelle (Gesprächsnachricht) nachvollziehbar.
-Aktuelle Fakten nur aus der Recherche mit Quellen. Nenne Standdatum und Quelle, nicht den gesamten Rechercheprozess.
-${researchAnswer ? "Eine echte Webrecherche ist erfolgt. Verwende deren Ergebnis. Behaupte nicht, dass kein Search Connector verbunden ist." : ""}
-${researchBlocked ? "Es ist kein echter Search Connector verbunden. Sage klar, dass aktuelle Informationen gerade nicht zuverlässig prüfbar sind. Erfinde keine Treffer." : ""}
-${researchFailed ? "Die Webrecherche konnte die aktuelle Information nicht zuverlässig prüfen. Sage genau das. Erfinde keine Ergebnisse." : ""}
-${provider.id === "mock" ? "Du bist im Mock-Modus. Kennzeichne das, täusche keine echte Modellantwort vor." : ""}`,
+        system: novaReplySystem({
+          organizationName: contextPack.organizationName,
+          mock: provider.id === "mock",
+          researchAnswer,
+          researchBlocked,
+          researchFailed,
+        }),
         prompt: `Benutzer: ${input.userRequest}
 
 Kontext:
@@ -640,6 +672,45 @@ Formuliere die Nutzerantwort. Wenn ein Entwurf erzeugt wurde, zeige ihn.${
         void emit(input.onEvent, { type: "delta", delta });
       },
     });
+  }
+
+  if (memoryItems.length === 0 && plan.remember) {
+    const extracted = await provider.structuredOutput<{ persist?: boolean; items?: MemoryItem[] }>({
+      model: decision.model,
+      schemaName: "durable-memory",
+      schemaDescription:
+        'JSON {persist:boolean, items:[{type,title,content}]}. persist=true nur bei langlebigen Business-Fakten (Entscheidungen, Projekte, Firmen, Kontakte, Aufgaben, Präferenzen, Deadlines, Zusagen). Kein Smalltalk, keine Secrets, nichts erfinden. Keine aktuellen Preise, News oder unbestätigte Web-Snippets speichern.',
+      prompt: `Anfrage: ${input.userRequest}\nAntwort: ${reply}\nKontext:\n${contextPack.promptBlock}\nRecherche speichert eigene Kandidaten separat. Welche zusätzlichen langlebigen Fakten sollen ins Business Memory?`,
+    });
+    if (extracted.persist && Array.isArray(extracted.items)) {
+      memoryItems = extracted.items.filter((item) => item.title && item.content);
+    }
+  }
+  if (memoryItems.length > 0) {
+    const saved = await persistDurableMemory({
+      organizationId: input.organizationId,
+      items: memoryItems,
+      projectId: project?.id,
+      sourceId: source.id,
+      jobId: job.id,
+      conversationMessageId: input.sourceMessageId,
+    });
+    if (saved.length > 0) {
+      await recordActivity({
+        organizationId: input.organizationId,
+        type: saved.some((item) => item.type === "decision") ? "decision" : "memory",
+        title: "Business Memory aktualisiert",
+        description: saved.map((item) => item.title).join(", "),
+        status: "prepared",
+        jobId: job.id,
+        projectId: project?.id,
+        metadata: {
+          memoryIds: saved.map((item) => item.id),
+          sourceType: input.sourceMessageId ? "conversation_message" : "nova",
+          sourceMessageId: input.sourceMessageId ?? null,
+        },
+      });
+    }
   }
 
   if (!wantsExternal || communicationIds.length === 0) {
