@@ -16,6 +16,8 @@ import {
   type VoiceTurn,
 } from "@/features/voice/session-types";
 import { isSpeechRecognitionSupported, WebSpeechStt, type SpeechToText } from "@/features/voice/stt";
+import { transcribeUtterance as transcribeUtteranceRequest } from "@/features/voice/transcribe";
+import { isUtteranceRecordingSupported } from "@/features/voice/utterance-recorder";
 import { VoiceActivityDetector, type VadFrame } from "@/features/voice/vad";
 
 export type VoiceSessionListener = {
@@ -29,6 +31,7 @@ export type VoiceSessionDeps = {
   clock?: VoiceClock;
   createCapture?: (onTrackEnded: () => void) => VoiceCapture;
   createStt?: () => SpeechToText;
+  transcribeUtterance?: (blob: Blob) => Promise<string>;
 };
 
 type PendingSpeech = {
@@ -42,6 +45,7 @@ export class VoiceSessionController {
   private readonly clock: VoiceClock;
   private readonly createCapture: (onTrackEnded: () => void) => VoiceCapture;
   private readonly createStt: () => SpeechToText;
+  private readonly transcribeUtterance: (blob: Blob) => Promise<string>;
   private listener: VoiceSessionListener = {};
   private model: VoiceSessionModel = { ...INITIAL_VOICE_SESSION };
   private capture: VoiceCapture | null = null;
@@ -60,6 +64,8 @@ export class VoiceSessionController {
   private supported = false;
   private lastTurnActivityAt: number | null = null;
   private tentativeResumeAt: number | null = null;
+  private finalizing = false;
+  private utteranceOpen = false;
 
   constructor(deps: VoiceSessionDeps = {}) {
     this.config = deps.config ?? VOICE_SESSION_CONFIG;
@@ -67,8 +73,9 @@ export class VoiceSessionController {
     this.createCapture =
       deps.createCapture ?? ((onTrackEnded) => new MicrophoneCapture(this.config, onTrackEnded));
     this.createStt = deps.createStt ?? (() => new WebSpeechStt(this.config, this.clock));
+    this.transcribeUtterance = deps.transcribeUtterance ?? transcribeUtteranceRequest;
     this.vad = new VoiceActivityDetector(this.config);
-    this.supported = typeof window === "undefined" ? false : isSpeechRecognitionSupported();
+    this.supported = typeof window === "undefined" ? false : voiceInputSupported();
   }
 
   setListener(listener: VoiceSessionListener) {
@@ -115,7 +122,7 @@ export class VoiceSessionController {
         this.fail("Mikrofonverbindung verloren.");
       });
       this.stt = this.createStt();
-      if (!this.stt.supported) {
+      if (!this.stt.supported && !isUtteranceRecordingSupported()) {
         throw new Error("Spracheingabe ist in diesem Browser nicht verfügbar.");
       }
       this.unsubscribeCapture = this.capture.subscribe((frame) => this.onFrame(frame));
@@ -145,6 +152,8 @@ export class VoiceSessionController {
     this.level = 0;
     this.lastTurnActivityAt = null;
     this.tentativeResumeAt = null;
+    this.finalizing = false;
+    this.utteranceOpen = false;
     this.lastError = this.model.state === "ERROR" ? this.lastError : null;
     this.dispatch({ type: "STOP" });
   }
@@ -202,9 +211,9 @@ export class VoiceSessionController {
 
   private peekSupported() {
     try {
-      return this.createStt().supported;
+      return this.createStt().supported || isUtteranceRecordingSupported();
     } catch {
-      return isSpeechRecognitionSupported();
+      return isSpeechRecognitionSupported() || isUtteranceRecordingSupported();
     }
   }
 
@@ -229,6 +238,7 @@ export class VoiceSessionController {
       return;
     }
 
+    if (status.speechLikely) this.ensureUtteranceRecording();
     if (this.model.state === "USER_SPEAKING" && status.speechLikely) {
       this.noteSpeechProgress(frame.timestampMs);
     }
@@ -253,6 +263,7 @@ export class VoiceSessionController {
       this.confidence = this.pending.confidence;
     }
     this.pending = null;
+    this.ensureUtteranceRecording();
     this.dispatch({ type: "VOICE_START", at });
     this.scheduleTurnWatchdog();
   }
@@ -306,7 +317,7 @@ export class VoiceSessionController {
       this.scheduleTurnWatchdog();
       return;
     }
-    this.finalizeTurn();
+    void this.finalizeTurn();
   }
 
   private tickSilence() {
@@ -315,16 +326,40 @@ export class VoiceSessionController {
     this.silenceTick = this.clock.setTimeout(() => this.tickSilence(), this.config.silenceUiTickMs);
   }
 
-  private finalizeTurn() {
-    const transcript = this.transcript.trim();
+  private async finalizeTurn() {
+    if (this.finalizing) return;
+    const inTurn = this.model.state === "SILENCE_WAIT" || this.model.state === "USER_SPEAKING";
+    if (!inTurn) return;
+    this.finalizing = true;
+    const generation = this.generation;
     const startedAt = this.model.turnStartedAt;
     const endedAt = this.clock.now();
+    let transcript = this.transcript.trim();
+    let engine = this.stt?.engine;
+    try {
+      if (!transcript) {
+        const blob = (await this.capture?.endUtterance()) ?? null;
+        this.utteranceOpen = false;
+        if (generation !== this.generation) return;
+        if (blob) {
+          transcript = (await this.transcribeUtterance(blob)).trim();
+          if (transcript) engine = "whisper";
+        }
+      } else {
+        void this.capture?.endUtterance();
+        this.utteranceOpen = false;
+      }
+    } catch {
+      this.utteranceOpen = false;
+    }
+    if (generation !== this.generation) return;
     this.dispatch({ type: "SILENCE_TIMEOUT", hasTranscript: Boolean(transcript) });
     if (!transcript || this.model.state !== "PROCESSING") {
       this.transcript = "";
       this.pending = null;
       this.lastTurnActivityAt = null;
       this.tentativeResumeAt = null;
+      this.finalizing = false;
       this.emit();
       return;
     }
@@ -338,7 +373,7 @@ export class VoiceSessionController {
       endedAt: wallEnd.toISOString(),
       durationMs,
       confidence: this.confidence,
-      sttEngine: this.stt?.engine,
+      sttEngine: engine,
       inputMode: "voice",
     };
     this.transcript = "";
@@ -346,6 +381,7 @@ export class VoiceSessionController {
     this.confidence = undefined;
     this.lastTurnActivityAt = null;
     this.tentativeResumeAt = null;
+    this.finalizing = false;
     this.emit();
     this.listener.onTurn?.(turn);
   }
@@ -355,7 +391,9 @@ export class VoiceSessionController {
     const text = input.transcript.replace(/\s+/g, " ").trim();
     if (!text) return;
     if (this.model.state === "LISTENING") {
-      this.pending = { text, confidence: input.confidence, at: now };
+      this.transcript = text;
+      this.confidence = input.confidence;
+      this.beginSpeech(now);
       return;
     }
     if (this.model.state === "USER_SPEAKING" || this.model.state === "SILENCE_WAIT" || this.model.state === "INTERRUPTED") {
@@ -369,19 +407,29 @@ export class VoiceSessionController {
   }
 
   private armStt() {
-    if (!this.stt) return;
+    if (!this.stt?.supported) return;
     this.stt.start({
       onTranscript: (input) => this.onSttTranscript(input),
       onError: (message, fatal) => {
-        if (fatal) this.fail(message);
+        if (fatal && !isUtteranceRecordingSupported()) this.fail(message);
       },
     });
+  }
+
+  private ensureUtteranceRecording() {
+    if (this.utteranceOpen) return;
+    this.capture?.beginUtterance();
+    this.utteranceOpen = true;
   }
 
   private pauseInput() {
     this.clearSilence();
     this.tentativeResumeAt = null;
     this.stt?.pause();
+    if (this.utteranceOpen) {
+      void this.capture?.endUtterance();
+      this.utteranceOpen = false;
+    }
   }
 
   private silenceRemaining(): number | null {
@@ -430,6 +478,10 @@ export class VoiceSessionController {
     this.capture = null;
     this.vad.reset(this.clock.now());
   }
+}
+
+function voiceInputSupported(): boolean {
+  return isSpeechRecognitionSupported() || isUtteranceRecordingSupported();
 }
 
 function mergeTranscript(current: string, next: string): string {

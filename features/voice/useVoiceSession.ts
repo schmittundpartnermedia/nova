@@ -24,7 +24,8 @@ export function useVoiceSession(onTurn: (turn: VoiceTurn) => void) {
         g.SpeechRecognition ||
           g.webkitSpeechRecognition ||
           g.window?.SpeechRecognition ||
-          g.window?.webkitSpeechRecognition,
+          g.window?.webkitSpeechRecognition ||
+          typeof MediaRecorder !== "undefined",
       );
     },
     () => false,

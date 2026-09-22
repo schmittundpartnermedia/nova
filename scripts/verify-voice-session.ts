@@ -60,6 +60,8 @@ class FakeCapture implements VoiceCapture {
   listener: ((frame: VadFrame) => void) | null = null;
   started = false;
   stopped = false;
+  blobs: Blob[] = [];
+  begun = 0;
 
   async start() {
     this.started = true;
@@ -69,6 +71,14 @@ class FakeCapture implements VoiceCapture {
   stop() {
     this.stopped = true;
     this.started = false;
+  }
+
+  beginUtterance() {
+    this.begun += 1;
+  }
+
+  async endUtterance() {
+    return this.blobs.shift() ?? null;
   }
 
   subscribe(listener: (frame: VadFrame) => void) {
@@ -317,6 +327,64 @@ export async function runVoiceSessionChecks() {
   assert(repeatTurns.length === 1, `STT-onend-Duplikat darf den 5s-Timer nicht neu starten, war ${repeatTurns.length}`);
   assert(repeatTurns[0]?.transcript === "Hallo NOVA", repeatTurns[0]?.transcript ?? "kein Turn");
   repeatController.stop();
+
+  const sttOnlyClock = new FakeClock();
+  const sttOnlyCapture = new FakeCapture();
+  const sttOnlyStt = new FakeStt();
+  const sttOnlyTurns: VoiceTurn[] = [];
+  const sttOnly = new VoiceSessionController({
+    clock: sttOnlyClock,
+    createCapture: () => sttOnlyCapture,
+    createStt: () => sttOnlyStt,
+  });
+  sttOnly.setListener({ onTurn: (turn) => sttOnlyTurns.push(turn) });
+  await sttOnly.start();
+  pump(sttOnlyCapture, sttOnlyClock, 350, (at) => makeNoiseFrame(at));
+  sttOnlyStt.emit("Hallo nur über STT.");
+  assert(sttOnly.getSnapshot().state === "USER_SPEAKING", "STT in LISTENING muss den Turn starten.");
+  pump(sttOnlyCapture, sttOnlyClock, 400, (at) => makeNoiseFrame(at));
+  sttOnlyClock.advance(VOICE_SESSION_CONFIG.silenceTimeoutMs);
+  assert(sttOnlyTurns[0]?.transcript.includes("Hallo nur über STT"), sttOnlyTurns[0]?.transcript ?? "kein Turn");
+  sttOnly.stop();
+
+  const whisperClock = new FakeClock();
+  const whisperCapture = new FakeCapture();
+  whisperCapture.blobs.push(new Blob(["xxxxxxxxxxxxxxxxxxxxxxxx"], { type: "audio/webm" }));
+  const whisperTurns: VoiceTurn[] = [];
+  const whisper = new VoiceSessionController({
+    clock: whisperClock,
+    createCapture: () => whisperCapture,
+    createStt: () => new FakeStt(),
+    transcribeUtterance: async () => "Hallo über den Aufnahme-Stream.",
+  });
+  whisper.setListener({ onTurn: (turn) => whisperTurns.push(turn) });
+  await whisper.start();
+  pump(whisperCapture, whisperClock, 350, (at) => makeNoiseFrame(at));
+  pump(whisperCapture, whisperClock, 400, (at) => makeSpeechFrame(at));
+  pump(whisperCapture, whisperClock, 400, (at) => makeNoiseFrame(at));
+  whisperClock.advance(VOICE_SESSION_CONFIG.silenceTimeoutMs);
+  await Promise.resolve();
+  await Promise.resolve();
+  assert(whisperTurns[0]?.transcript === "Hallo über den Aufnahme-Stream.", whisperTurns[0]?.transcript ?? "kein Turn");
+  assert(whisperTurns[0]?.sttEngine === "whisper", String(whisperTurns[0]?.sttEngine));
+  whisper.stop();
+
+  const soft = new VoiceActivityDetector();
+  soft.reset(0);
+  for (let t = 0; t <= 400; t += 20) soft.push(makeNoiseFrame(t));
+  let softStart = false;
+  for (let t = 420; t <= 900; t += 20) {
+    const status = soft.push({
+      timestampMs: t,
+      rms: 0.06,
+      speechBand: 0.05,
+      rumbleBand: 0.08,
+      hissBand: 0.09,
+      zeroCrossingRate: 0.4,
+    });
+    if (status.event === "VOICE_START") softStart = true;
+  }
+  assert(softStart, "Energie-Fallback muss Sprache erkennen, auch wenn Spektrum/ZCR knapper sind.");
 
   await runWebSpeechOnendChecks();
 

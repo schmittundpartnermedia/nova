@@ -1,10 +1,13 @@
 import { VOICE_SESSION_CONFIG, type VoiceSessionConfig } from "@/features/voice/session-config";
 import { extractVadFrame, type VadFrame } from "@/features/voice/vad";
+import { createUtteranceRecorder, type UtteranceRecorder } from "@/features/voice/utterance-recorder";
 
 export type VoiceCapture = {
   start(): Promise<void>;
   stop(): void;
   subscribe(listener: (frame: VadFrame) => void): () => void;
+  beginUtterance(): void;
+  endUtterance(): Promise<Blob | null>;
 };
 
 const MIC_CONSTRAINTS: MediaStreamConstraints = {
@@ -28,10 +31,12 @@ export class MicrophoneCapture implements VoiceCapture {
   private freq = new Uint8Array(0);
   private time = new Float32Array(0);
   private onTrackEnded: (() => void) | null = null;
+  private recorder: UtteranceRecorder;
 
   constructor(config: VoiceSessionConfig = VOICE_SESSION_CONFIG, onTrackEnded?: () => void) {
     this.config = config;
     this.onTrackEnded = onTrackEnded ?? null;
+    this.recorder = createUtteranceRecorder(config);
   }
 
   async start() {
@@ -48,6 +53,7 @@ export class MicrophoneCapture implements VoiceCapture {
     this.analyser.fftSize = this.config.fftSize;
     this.analyser.smoothingTimeConstant = 0.35;
     this.source.connect(this.analyser);
+    this.recorder.attach(this.stream);
     this.freq = new Uint8Array(this.analyser.frequencyBinCount);
     this.time = new Float32Array(this.analyser.fftSize);
     this.tick();
@@ -81,10 +87,19 @@ export class MicrophoneCapture implements VoiceCapture {
     if (this.context && this.context.state !== "closed") {
       void this.context.close().catch(() => undefined);
     }
+    this.recorder.stop();
     this.stream = null;
     this.context = null;
     this.source = null;
     this.analyser = null;
+  }
+
+  beginUtterance() {
+    this.recorder.begin();
+  }
+
+  endUtterance() {
+    return this.recorder.end();
   }
 
   subscribe(listener: (frame: VadFrame) => void) {

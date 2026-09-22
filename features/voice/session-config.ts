@@ -2,12 +2,9 @@
  * Zentrale Voice-Session-Konfiguration.
  * Keine Magic Numbers in Components.
  *
- * Barge-In ist bewusst aus:
- * Web Speech API nutzt einen eigenen Mikrofonpfad. echoCancellation auf
- * unserem MediaStream gilt nicht für STT. STT während TTS würde NOVAs
- * eigene Stimme transkribieren. Mic-VAD während TTS kann durch Lautsprecher-
- * Leak fehlzünden. Echtes Barge-In braucht denselben echo-cancelled Capture-
- * Graphen für VAD und STT (z. B. AudioWorklet).
+ * STT in NOVA.app läuft über denselben echo-cancelled MediaStream
+ * (Aufnahme + Whisper), nicht über einen zweiten Web-Speech-Mikrofpfad.
+ * Web Speech bleibt optionaler Schnellweg, wenn es Ergebnisse liefert.
  */
 
 export const VOICE_SESSION_CONFIG = {
@@ -37,6 +34,9 @@ export const VOICE_SESSION_CONFIG = {
   hissLowHz: 5000,
   fftSize: 2048,
   maxTranscriptChars: 4000,
+  utteranceMinBytes: 1800,
+  vadSoftEnergyScale: 0.7,
+  vadSoftSnrDb: 5,
 } as const;
 
 export type VoiceSessionConfig = typeof VOICE_SESSION_CONFIG;

@@ -125,7 +125,10 @@ export class VoiceActivityDetector {
     const energy = speechEnergy(frame);
     const warming = frame.timestampMs - this.startedAt < this.config.vadWarmupMs;
     const { speech, snrDb } = isSpeechLike(frame, this.noiseFloor, this.config);
-    const speechLikely = !warming && speech;
+    const energyGate =
+      energy >= this.config.vadMinSpeechEnergy * this.config.vadSoftEnergyScale &&
+      snrDb >= this.config.vadSoftSnrDb;
+    const speechLikely = !warming && (speech || energyGate);
 
     const adapt = this.inVoice || speechLikely ? this.config.vadNoiseAdaptSpeech : this.config.vadNoiseAdaptSilence;
     if (!speechLikely || warming) {
