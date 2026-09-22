@@ -199,7 +199,7 @@ async function main() {
   assert(relations.length >= 0, "Relation-Query fehlgeschlagen");
 
   const chatgpt = await chatgptKnowledgeStatus();
-  assert(chatgpt.prepared && chatgpt.implemented === false, "ChatGPT-Import sollte nur vorbereitet sein");
+  assert(chatgpt.prepared && chatgpt.implemented === true, "ChatGPT-Import sollte implementiert sein");
 
   const queryMaster = await runMaster({
     organizationId: organization.id,

@@ -24,14 +24,25 @@ Katalog: `GET /api/bridge`
 
 `bridge/mcp` enthält das Vertragsgerüst. Ein eigener MCP-Prozess ist in V1 nicht gestartet.
 
-## Import
+## ChatGPT-Export-Import
 
-`POST /api/import/chatgpt`
+Offizieller Datenexport (ZIP mit `conversations.json`). Keine Live-Synchronisation, kein Scraping, keine Session-Cookies.
 
 Pipeline:
 
-Raw Chat → Conversation Archive (Full Transcript)
+```
+ChatGPT Export
+  → Conversation Archive (vollständiger Verlauf, Original-Zeitstempel)
+  → Knowledge Agent (strukturiertes Wissen)
+  → Memory (nur dauerhaft relevantes)
+```
 
-Parser/Adapter für Conversations, Messages und Source Traceability ist vorbereitet.
+Entry Points:
 
-Dauerhaft relevantes Wissen folgt über Knowledge Agent / Memory – nicht als blinde Übernahme aller Rohnachrichten.
+- Chat: „Importiere meinen ChatGPT Verlauf.“ → ZIP über + wählen
+- `POST /api/import/chatgpt` (multipart ZIP, JSON-Pfad oder `conversations`)
+- CLI: `npm run import:chatgpt -- --file /pfad/export.zip`
+
+Nachrichten sind untrusted historical content. Secrets werden redaktiert. Prompt-Injection wird nur gespeichert, nie ausgeführt.
+
+Import ist idempotent und inkrementell (external IDs, Checksums, Checkpoints). „NOVA Stop“ bricht ab; fertige Conversations bleiben.

@@ -1,6 +1,6 @@
 import { PrismaClient } from "@prisma/client";
 
-const PRISMA_SCHEMA_STAMP = "knowledge-agent-v1";
+const PRISMA_SCHEMA_STAMP = "chatgpt-import-v1";
 
 const globalForPrisma = globalThis as unknown as {
   prisma?: PrismaClient;

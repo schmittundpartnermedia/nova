@@ -1,7 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { assertOrganizationId } from "@/services/tenant";
 import { assertActivityStatusHonesty } from "@/lib/honesty";
-import { searchConversationMessages } from "@/services/conversation";
+import { reconstructMessageContext, searchConversationMessages } from "@/services/conversation";
 import type { ActivityStatus, ActivityType } from "@/types";
 import type { ConversationInputMode } from "@/types/conversation";
 
@@ -143,3 +143,8 @@ export async function listArchive(input: {
 
   return { activities, conversationMessages };
 }
+
+export const conversationArchive = {
+  search: searchConversationMessages,
+  reconstruct: reconstructMessageContext,
+};

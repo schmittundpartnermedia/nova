@@ -4,6 +4,7 @@ import { runComputerAgent } from "@/agents/computer";
 import { detectCodingIntent } from "@/agents/coding/intent";
 import { runCodingAgent } from "@/agents/coding";
 import { detectKnowledgeIntent } from "@/agents/knowledge/intent";
+import { detectChatGPTImportIntent } from "@/lib/chatgpt/intent";
 import { runKnowledgeAgent } from "@/agents/knowledge";
 import { needsLiveResearch } from "@/lib/research/intent";
 import { needsSpecialistWork } from "@/agents/master/intent";
@@ -78,6 +79,7 @@ export type MasterRunResult = {
   providerMode: ProviderMode;
   providerId: string;
   model: string;
+  needsFile?: "chatgpt-export";
 };
 
 async function emit(onEvent: ((event: MasterEvent) => void) | undefined, event: MasterEvent) {
@@ -221,6 +223,7 @@ export async function runMaster(input: {
 
   const computerIntent = detectComputerIntent(input.userRequest);
   const knowledgeIntent = detectKnowledgeIntent(input.userRequest);
+  const chatgptIntent = detectChatGPTImportIntent(input.userRequest);
   if (computerIntent.kind === "cancel" || knowledgeIntent.kind === "cancel") {
     await requestKnowledgeCancel(input.organizationId);
     return runComputerMasterPath(input, computerIntent.statusMessage || knowledgeIntent.statusMessage);
@@ -229,6 +232,29 @@ export async function runMaster(input: {
   const codingIntent = detectCodingIntent(input.userRequest);
   if (codingIntent.kind !== "none") {
     return runCodingMasterPath(input, codingIntent.statusMessage);
+  }
+
+  if (chatgptIntent.kind === "prompt") {
+    await emit(input.onEvent, { type: "status", orbState: "DONE", statusMessage: chatgptIntent.statusMessage });
+    if (chatgptIntent.statusMessage) {
+      await emit(input.onEvent, { type: "delta", delta: "Wähle deinen ChatGPT-Export aus." });
+    }
+    return {
+      jobId: "",
+      status: "completed",
+      orbState: "DONE",
+      statusMessage: chatgptIntent.statusMessage,
+      reply: "Wähle deinen ChatGPT-Export aus.",
+      mock: false,
+      providerMode: "fallback",
+      providerId: "knowledge",
+      model: "nova-knowledge",
+      needsFile: "chatgpt-export",
+    };
+  }
+
+  if (chatgptIntent.kind !== "none") {
+    return runKnowledgeMasterPath(input, chatgptIntent.statusMessage);
   }
 
   if (knowledgeIntent.kind === "import") {
@@ -793,6 +819,7 @@ async function runKnowledgeMasterPath(
     providerMode: "fallback",
     providerId: "knowledge",
     model: "nova-knowledge",
+    needsFile: result.needsFile,
   };
 }
 

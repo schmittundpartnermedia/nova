@@ -67,6 +67,7 @@ export function sourceQuality(sourceType?: string): number {
   if (sourceType === "pdf" || sourceType === "docx") return 0.9;
   if (sourceType === "xlsx" || sourceType === "csv" || sourceType === "json") return 0.85;
   if (sourceType === "markdown" || sourceType === "txt") return 0.7;
+  if (sourceType === "chatgpt" || sourceType === "chat") return 0.78;
   return 0.5;
 }
 
@@ -115,6 +116,9 @@ export function formatSourceLocation(name: string, location: SourceLocation): st
   if (location.sheet) parts.push(`Tabelle ${location.sheet}`);
   if (location.cell) parts.push(`Zelle ${location.cell}`);
   if (location.row && !location.cell) parts.push(`Zeile ${location.row}`);
+  if (location.conversationTitle) parts.push(`Gespräch „${location.conversationTitle}“`);
+  if (location.messageId) parts.push(`Nachricht ${location.messageId}`);
+  if (location.occurredAt) parts.push(location.occurredAt.slice(0, 10));
   return parts.join(", ");
 }
 
@@ -129,8 +133,15 @@ export function formatKnowledgeAnswer(input: {
   const lines: string[] = [];
   const byType = (type: KnowledgeItemType | string) => input.hits.filter((hit) => hit.type === type);
   if (/preis|wie hoch/i.test(input.query) && byType("PRICE").length) {
-    for (const hit of byType("PRICE")) {
-      lines.push(`${hit.content} Quelle: ${formatSourceLocation(hit.sourceName ?? "Dokument", hit.location)}.`);
+    const prices = [...byType("PRICE")].sort((a, b) => a.extractedAt.getTime() - b.extractedAt.getTime());
+    if (prices.length >= 2 && /alt|aktuell|später|geändert/i.test(input.query)) {
+      const oldest = prices[0];
+      const newest = prices[prices.length - 1];
+      lines.push(`Alter Preis: ${oldest.content}. Aktueller Preis: ${newest.content}. Quelle: ${formatSourceLocation(newest.sourceName ?? "Dokument", newest.location)}.`);
+    } else {
+      for (const hit of prices) {
+        lines.push(`${hit.content} Quelle: ${formatSourceLocation(hit.sourceName ?? "Dokument", hit.location)}.`);
+      }
     }
   } else if (/deadline|frist|wann/i.test(input.query) && byType("DEADLINE").length) {
     for (const hit of byType("DEADLINE")) {
@@ -146,6 +157,10 @@ export function formatKnowledgeAnswer(input: {
     }
   } else if (/umsatz|märz|marz|march/i.test(input.query) && byType("METRIC").length) {
     for (const hit of byType("METRIC").slice(0, 4)) {
+      lines.push(`${hit.content} Quelle: ${formatSourceLocation(hit.sourceName ?? "Dokument", hit.location)}.`);
+    }
+  } else if (/gespräch|woher|quelle|damals/i.test(input.query) && input.hits.length) {
+    for (const hit of input.hits.slice(0, 4)) {
       lines.push(`${hit.content} Quelle: ${formatSourceLocation(hit.sourceName ?? "Dokument", hit.location)}.`);
     }
   } else {
@@ -175,4 +190,15 @@ export function formatImportSummary(input: {
   if (input.filesFailed > 0) return `${main} ${input.filesFailed} Dateien konnte ich nicht lesen.`;
   if (input.duplicates) return `${main} Identische Dateien habe ich nicht doppelt übernommen.`;
   return main;
+}
+
+export function formatChatGPTImportSummary(input: {
+  conversations: number;
+  messages: number;
+  items: number;
+  decisions: number;
+  entities: number;
+  contradictions: number;
+}): string {
+  return `ChatGPT-Verlauf importiert. ${input.conversations} Gespräche, ${input.messages} Nachrichten, ${input.items} relevante Wissenseinträge, ${input.decisions} Entscheidungen, ${input.entities} Projekte/Firmen erkannt, ${input.contradictions} Widersprüche erkannt.`;
 }

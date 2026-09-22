@@ -85,7 +85,11 @@ export type RelationType =
   | "has_deadline"
   | "relates_to"
   | "version_of"
-  | "contradicts";
+  | "contradicts"
+  | "attached_to"
+  | "considered_as_partner_for"
+  | "used_by"
+  | "supersedes";
 
 export type RiskLevel = "low" | "medium" | "high";
 

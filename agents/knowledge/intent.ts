@@ -16,7 +16,7 @@ const IMPORT_ALT_RE =
   /\b(?:pdf|dokument(?:e|en)?|unterlagen|ordner|präsentation|export|dateien)\b.{0,40}\b(?:lern(?:e|en)?|lies|lese|importier(?:e|en)?|analysier(?:e|en)?|merk(?:e)?\s+dir)\b/i;
 
 const QUERY_RE =
-  /\b(?:was stand|welche entscheidung|suche in (?:allen )?unterlagen|in den unterlagen|aus dem angebot|aus dem vertrag|aus der pdf|wissens(?:eintrag|bank)|hast du gelesen)\b/i;
+  /\b(?:was stand|welche entscheidung|suche in (?:allen )?unterlagen|in den unterlagen|aus dem angebot|aus dem vertrag|aus der pdf|wissens(?:eintrag|bank)|hast du gelesen|alter preis|aktueller preis|warum wurde|wer gehört|welche deadline|in welchem gespräch|was wurde später|chatgpt[- ]?(?:verlauf|gespräche)?)\b/i;
 
 const PATH_RE = /(?:`([^`]+)`|"([^"]+)"|'([^']+)'|((?:~\/|\/)[^\s,;]+))/g;
 

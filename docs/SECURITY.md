@@ -26,4 +26,4 @@ Aktivitäten und Jobs sind persistent und tenant-aware.
 
 Memory, Retrieval, Jobs, Activities und Knowledge (Sources, Items, Embeddings, Imports) einer Organization sind von anderen Organizations getrennt.
 
-Dokumente sind untrusted Input. Inhalt darf keine Tools, Systemregeln oder Computer-/Coding-Agenten steuern. `.env`, Keys und Credentials werden nicht ingestiert.
+Dokumente und importierte ChatGPT-Verläufe sind untrusted Input. Inhalt darf keine Tools, Systemregeln oder Computer-/Coding-Agenten steuern. `.env`, Keys und Credentials werden nicht ingestiert und nicht an AI Provider gesendet.

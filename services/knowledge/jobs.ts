@@ -7,6 +7,7 @@ export async function createKnowledgeImport(input: {
   userRequest: string;
   jobId?: string;
   rootPath?: string;
+  kind?: string;
   metadata?: Record<string, unknown>;
 }) {
   assertOrganizationId(input.organizationId);
@@ -16,7 +17,8 @@ export async function createKnowledgeImport(input: {
       userRequest: input.userRequest,
       jobId: input.jobId,
       rootPath: input.rootPath,
-      status: "DISCOVERING",
+      kind: input.kind ?? "document",
+      status: input.kind === "chatgpt" ? "VALIDATING" : "DISCOVERING",
       metadata: input.metadata ? JSON.stringify(input.metadata) : undefined,
     },
   });
@@ -36,6 +38,9 @@ export async function updateKnowledgeImport(input: {
   progress?: Record<string, unknown>;
   error?: string;
   finished?: boolean;
+  kind?: string;
+  tokensPrompt?: number;
+  tokensCompletion?: number;
 }) {
   assertOrganizationId(input.organizationId);
   return prisma.knowledgeImport.updateMany({
@@ -51,6 +56,9 @@ export async function updateKnowledgeImport(input: {
       ...(input.relevantFiles != null ? { relevantFiles: input.relevantFiles } : {}),
       ...(input.progress ? { progressJson: JSON.stringify(input.progress) } : {}),
       ...(input.error ? { error: input.error } : {}),
+      ...(input.kind ? { kind: input.kind } : {}),
+      ...(input.tokensPrompt != null ? { tokensPrompt: input.tokensPrompt } : {}),
+      ...(input.tokensCompletion != null ? { tokensCompletion: input.tokensCompletion } : {}),
       ...(input.finished ? { finishedAt: new Date() } : {}),
     },
   });
@@ -61,7 +69,25 @@ export async function requestKnowledgeCancel(organizationId: string): Promise<nu
   const result = await prisma.knowledgeImport.updateMany({
     where: {
       organizationId,
-      status: { in: ["DISCOVERING", "PARSING", "EXTRACTING", "STRUCTURING", "INDEXING", "MEMORY_PROCESSING"] },
+      status: {
+        in: [
+          "VALIDATING",
+          "EXTRACTING_ARCHIVE",
+          "DISCOVERING",
+          "PARSING",
+          "PARSING_CONVERSATIONS",
+          "IMPORTING_ARCHIVE",
+          "EXTRACTING",
+          "PROCESSING_KNOWLEDGE",
+          "STRUCTURING",
+          "RESOLVING_ENTITIES",
+          "BUILDING_RELATIONS",
+          "UPDATING_MEMORY",
+          "INDEXING",
+          "MEMORY_PROCESSING",
+          "VERIFYING",
+        ],
+      },
     },
     data: { cancelRequested: true },
   });

@@ -1,5 +1,6 @@
 import { needsLiveResearch } from "@/lib/research/intent";
 import { detectKnowledgeIntent } from "@/agents/knowledge/intent";
+import { detectChatGPTImportIntent } from "@/lib/chatgpt/intent";
 
 /**
  * Spezialisten (Recherche, Mail, Aufgabe, Memory-Schreiben) brauchen den Planer.
@@ -9,6 +10,7 @@ export function needsSpecialistWork(userRequest: string): boolean {
   const text = userRequest.trim();
   if (!text) return false;
   const knowledge = detectKnowledgeIntent(text);
+  if (detectChatGPTImportIntent(text).kind !== "none") return true;
   if (knowledge.kind === "import") return true;
   if (knowledge.kind === "query") return false;
   if (needsLiveResearch(text) && knowledge.kind === "none") return true;

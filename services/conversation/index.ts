@@ -136,19 +136,41 @@ export async function searchConversationMessages(input: {
   organizationId: string;
   query: string;
   conversationId?: string;
+  projectId?: string;
+  origin?: string;
+  roles?: string[];
+  dateRange?: { from?: Date; to?: Date };
   limit?: number;
 }) {
   assertOrganizationId(input.organizationId);
   const q = input.query.trim();
   const limit = input.limit ?? 20;
+  const conversationFilter = {
+    organizationId: input.organizationId,
+    ...(input.projectId ? { projectId: input.projectId } : {}),
+    ...(input.origin ? { origin: input.origin } : {}),
+  };
+  const createdAt =
+    input.dateRange?.from || input.dateRange?.to
+      ? {
+          createdAt: {
+            ...(input.dateRange.from ? { gte: input.dateRange.from } : {}),
+            ...(input.dateRange.to ? { lte: input.dateRange.to } : {}),
+          },
+        }
+      : {};
   if (!q) {
     return prisma.conversationMessage.findMany({
       where: {
         organizationId: input.organizationId,
         ...(input.conversationId ? { conversationId: input.conversationId } : {}),
+        ...(input.roles?.length ? { role: { in: input.roles } } : {}),
+        ...createdAt,
+        ...(input.projectId || input.origin ? { conversation: conversationFilter } : {}),
       },
       orderBy: { createdAt: "desc" },
       take: limit,
+      include: { conversation: true },
     }).then((rows) => rows.map(toStored));
   }
 
@@ -162,6 +184,9 @@ export async function searchConversationMessages(input: {
     where: {
       organizationId: input.organizationId,
       ...(input.conversationId ? { conversationId: input.conversationId } : {}),
+      ...(input.roles?.length ? { role: { in: input.roles } } : {}),
+      ...createdAt,
+      ...(input.projectId || input.origin ? { conversation: conversationFilter } : {}),
       OR: [
         { content: { contains: q } },
         { fulltext: { contains: q.toLowerCase() } },
@@ -173,8 +198,82 @@ export async function searchConversationMessages(input: {
     },
     orderBy: { createdAt: "desc" },
     take: limit,
+    include: { conversation: true },
   });
   return rows.map(toStored);
+}
+
+export async function reconstructMessageContext(input: {
+  organizationId: string;
+  messageId: string;
+  radius?: number;
+}) {
+  assertOrganizationId(input.organizationId);
+  const message = await prisma.conversationMessage.findFirst({
+    where: { id: input.messageId, organizationId: input.organizationId },
+    include: { conversation: true },
+  });
+  if (!message) return null;
+  const radius = input.radius ?? 3;
+  const neighbors = await prisma.conversationMessage.findMany({
+    where: {
+      organizationId: input.organizationId,
+      conversationId: message.conversationId,
+    },
+    orderBy: { createdAt: "asc" },
+  });
+  const index = neighbors.findIndex((item) => item.id === message.id);
+  const slice = neighbors.slice(Math.max(0, index - radius), index + radius + 1);
+  return {
+    conversation: message.conversation,
+    focus: toStored(message),
+    messages: slice.map(toStored),
+  };
+}
+
+export async function importArchivedMessage(input: {
+  organizationId: string;
+  conversationId: string;
+  role: ConversationRole;
+  content: string;
+  createdAt: Date;
+  externalId?: string;
+  parentExternalId?: string;
+  metadata?: Record<string, unknown>;
+  inputMode?: ConversationInputMode;
+}) {
+  assertOrganizationId(input.organizationId);
+  if (input.externalId) {
+    const existing = await prisma.conversationMessage.findFirst({
+      where: {
+        organizationId: input.organizationId,
+        conversationId: input.conversationId,
+        externalId: input.externalId,
+      },
+    });
+    if (existing) return toStored(existing);
+  }
+  const content = redactSecrets(input.content.trim());
+  if (!content) {
+    throw new Error("ConversationMessage braucht einen Inhalt.");
+  }
+  const created = await prisma.conversationMessage.create({
+    data: {
+      organizationId: input.organizationId,
+      conversationId: input.conversationId,
+      role: input.role,
+      content,
+      inputMode: input.inputMode ?? "external",
+      status: "final",
+      visible: false,
+      fulltext: messageFulltext({ role: input.role, inputMode: input.inputMode ?? "external", content }),
+      metadata: input.metadata ? JSON.stringify(input.metadata) : null,
+      externalId: input.externalId,
+      parentExternalId: input.parentExternalId,
+      createdAt: input.createdAt,
+    },
+  });
+  return toStored(created);
 }
 
 export function selectContextWindow<T>(messages: T[], limit = CONTEXT_WINDOW_SIZE): T[] {

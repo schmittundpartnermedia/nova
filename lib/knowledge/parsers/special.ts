@@ -5,6 +5,7 @@ import type {
   ParsedSection,
 } from "@/types/knowledge";
 import { inspectUntrustedDocument, isSecretPath, languageOf, redactKnowledgeText, shouldIgnoreName } from "@/lib/knowledge/security";
+import { asRawConversations, reconstructConversation } from "@/lib/chatgpt/graph";
 import { unzipSync } from "@/lib/knowledge/zip";
 
 export const zipParser: KnowledgeParser = {
@@ -82,36 +83,21 @@ export const chatgptParser: KnowledgeParser = {
     } catch {
       parsed = [];
     }
-    const conversations = Array.isArray(parsed) ? parsed : [parsed];
+    const conversations = asRawConversations(parsed);
     const sections: ParsedSection[] = [];
-    conversations.slice(0, 200).forEach((conversation, index) => {
-      if (!conversation || typeof conversation !== "object") return;
-      const item = conversation as {
-        title?: string;
-        id?: string;
-        mapping?: Record<string, { message?: { author?: { role?: string }; content?: { parts?: unknown[] }; id?: string } }>;
-      };
-      const messages: string[] = [];
-      if (item.mapping) {
-        for (const node of Object.values(item.mapping)) {
-          const role = node.message?.author?.role ?? "unknown";
-          const content = (node.message?.content?.parts ?? [])
-            .filter((part): part is string => typeof part === "string")
-            .join("\n")
-            .trim();
-          if (!content) continue;
-          messages.push(`${role}: ${content}`);
-        }
-      }
+    conversations.slice(0, 200).forEach((raw) => {
+      const conversation = reconstructConversation(raw);
+      if (!conversation) return;
       sections.push({
-        id: item.id ?? `chatgpt-${index + 1}`,
-        heading: item.title ?? `ChatGPT Conversation ${index + 1}`,
-        content: messages.join("\n"),
+        id: conversation.externalId,
+        heading: conversation.title,
+        content: conversation.primaryPath.map((message) => `${message.role}: ${message.content}`).join("\n"),
         hierarchy: 1,
         metadata: {
-          conversationId: item.id,
-          messageCount: messages.length,
-          pipeline: "chatgpt-export-prepared",
+          conversationId: conversation.externalId,
+          messageCount: conversation.primaryPath.length,
+          alternativeBranches: conversation.alternativeBranches.length,
+          pipeline: "chatgpt-export",
         },
       });
     });
@@ -123,9 +109,9 @@ export const chatgptParser: KnowledgeParser = {
       metadata: {
         parser: "chatgpt",
         prepared: true,
-        fullImport: false,
+        fullImport: true,
         conversationCount: sections.length,
-        note: "Parser vorbereitet. Vollständiger ChatGPT-Import folgt separat. Transcript → Conversation Archive, dauerhaftes Wissen → Knowledge/Memory.",
+        note: "Transcript → Conversation Archive, dauerhaftes Wissen → Knowledge/Memory.",
       },
       sections,
       tables: [],

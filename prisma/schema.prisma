@@ -459,6 +459,9 @@ model Conversation {
   organizationId String   @map("organization_id")
   title          String?
   origin         String
+  externalId     String?  @map("external_id")
+  checksum       String?
+  importedAt     DateTime? @map("imported_at")
   startedAt      DateTime @default(now()) @map("started_at")
   lastActivityAt DateTime @default(now()) @map("last_activity_at")
   status         String   @default("active")
@@ -480,21 +483,24 @@ model Conversation {
   @@index([organizationId])
   @@index([organizationId, status])
   @@index([organizationId, lastActivityAt])
+  @@index([organizationId, origin, externalId])
   @@map("conversations")
 }
 
 model ConversationMessage {
-  id             String   @id @default(cuid())
-  organizationId String   @map("organization_id")
-  conversationId String   @map("conversation_id")
-  role           String
-  content        String
-  inputMode      String   @default("text") @map("input_mode")
-  status         String   @default("final")
-  visible        Boolean  @default(false)
-  fulltext       String   @default("")
-  metadata       String?
-  createdAt      DateTime @default(now()) @map("created_at")
+  id                String   @id @default(cuid())
+  organizationId    String   @map("organization_id")
+  conversationId    String   @map("conversation_id")
+  role              String
+  content           String
+  inputMode         String   @default("text") @map("input_mode")
+  status            String   @default("final")
+  visible           Boolean  @default(false)
+  fulltext          String   @default("")
+  metadata          String?
+  externalId        String?  @map("external_id")
+  parentExternalId  String?  @map("parent_external_id")
+  createdAt         DateTime @default(now()) @map("created_at")
 
   organization  Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   conversation  Conversation  @relation(fields: [conversationId], references: [id], onDelete: Cascade)
@@ -504,6 +510,7 @@ model ConversationMessage {
   @@index([conversationId])
   @@index([organizationId, createdAt])
   @@index([organizationId, fulltext])
+  @@index([organizationId, externalId])
   @@map("conversation_messages")
 }
 
@@ -768,6 +775,9 @@ model KnowledgeItem {
   duplicateOfId         String?  @map("duplicate_of_id")
   contradictionGroupId  String?  @map("contradiction_group_id")
   memoryEntryId         String?  @map("memory_entry_id")
+  conversationMessageId String?  @map("conversation_message_id")
+  epistemicStatus       String?  @map("epistemic_status")
+  supersedesId          String?  @map("supersedes_id")
   fulltext              String
   embeddingRef          String?  @map("embedding_ref")
   createdAt             DateTime @default(now()) @map("created_at")
@@ -785,6 +795,8 @@ model KnowledgeItem {
   @@index([organizationId, fulltext])
   @@index([sourceId])
   @@index([memoryEntryId])
+  @@index([conversationMessageId])
+  @@index([organizationId, epistemicStatus])
   @@map("knowledge_items")
 }
 
@@ -840,11 +852,14 @@ model KnowledgeImport {
   filesFailed     Int       @default(0) @map("files_failed")
   itemsCreated    Int       @default(0) @map("items_created")
   memoryUpdates   Int       @default(0) @map("memory_updates")
-  relevantFiles   Int       @default(0) @map("relevant_files")
-  startedAt       DateTime  @default(now()) @map("started_at")
-  finishedAt      DateTime? @map("finished_at")
-  error           String?
-  metadata        String?
+  relevantFiles     Int       @default(0) @map("relevant_files")
+  kind              String    @default("document")
+  tokensPrompt      Int       @default(0) @map("tokens_prompt")
+  tokensCompletion  Int       @default(0) @map("tokens_completion")
+  startedAt         DateTime  @default(now()) @map("started_at")
+  finishedAt        DateTime? @map("finished_at")
+  error             String?
+  metadata          String?
 
   organization Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   job          Job?             @relation(fields: [jobId], references: [id], onDelete: SetNull)

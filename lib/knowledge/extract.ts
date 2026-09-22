@@ -16,6 +16,7 @@ export type ExtractedKnowledge = {
   excerpt: string;
   confidence: number;
   relations: Array<{ from: string; type: RelationType; to: string }>;
+  epistemicStatus?: import("@/types/knowledge").EpistemicStatus;
 };
 
 const PRICE_RE = /(?:preis|price|kosten|fee)\s*[:is]*\s*(\d+[.,]?\d*)\s*(€|eur|usd|\$)?/i;

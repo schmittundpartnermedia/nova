@@ -26,16 +26,33 @@ export type KnowledgeSourceStatus =
   | "ARCHIVED";
 
 export type KnowledgeImportStatus =
+  | "VALIDATING"
+  | "EXTRACTING_ARCHIVE"
   | "DISCOVERING"
   | "PARSING"
+  | "PARSING_CONVERSATIONS"
+  | "IMPORTING_ARCHIVE"
   | "EXTRACTING"
+  | "PROCESSING_KNOWLEDGE"
   | "STRUCTURING"
+  | "RESOLVING_ENTITIES"
+  | "BUILDING_RELATIONS"
+  | "UPDATING_MEMORY"
   | "INDEXING"
   | "MEMORY_PROCESSING"
+  | "VERIFYING"
   | "COMPLETED"
   | "PARTIAL"
   | "FAILED"
   | "CANCELLED";
+
+export type EpistemicStatus =
+  | "USER_STATED"
+  | "ASSISTANT_SUGGESTED"
+  | "JOINTLY_DECIDED"
+  | "SYSTEM_OBSERVED"
+  | "TOOL_VERIFIED"
+  | "UNCERTAIN";
 
 export type KnowledgeItemType =
   | "FACT"
@@ -83,6 +100,9 @@ export type SourceLocation = {
   path?: string;
   conversationId?: string;
   messageId?: string;
+  conversationTitle?: string;
+  messageExternalId?: string;
+  occurredAt?: string;
 };
 
 export type ParsedSection = {

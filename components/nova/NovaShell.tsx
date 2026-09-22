@@ -97,6 +97,7 @@ export function NovaShell() {
   const [draft, setDraft] = useState("");
   const [visibleLines, setVisibleLines] = useState<CommunicationLine[]>([]);
   const [interactionMode, setInteractionMode] = useState<InteractionMode>("voice");
+  const [chatgptImportHint, setChatgptImportHint] = useState(false);
   const idleTimer = useRef<number | null>(null);
   const hideTimer = useRef<number | null>(null);
   const interruptedRef = useRef(false);
@@ -347,6 +348,9 @@ export function NovaShell() {
             });
           }
           const nextState = (payload.orbState as OrbState) ?? "DONE";
+          if (payload.needsFile === "chatgpt-export") {
+            setChatgptImportHint(true);
+          }
           if (typeof payload.statusMessage === "string") setStatus(payload.statusMessage);
           if (interruptedRef.current) {
             return;
@@ -414,6 +418,47 @@ export function NovaShell() {
     notifyNovaIdle,
     notifyProcessing,
   ]);
+
+  const importChatGPTFile = useCallback(async (file: File) => {
+    interruptedRef.current = false;
+    setChatgptImportHint(false);
+    setBusy(true);
+    setOrbState("WORKING");
+    setStatus("Ich importiere deinen ChatGPT-Verlauf.");
+    keepComm();
+    const userLine: CommunicationLine = { id: `user-${Date.now()}`, speaker: "JOACHIM", text: `ChatGPT-Export: ${file.name}` };
+    const assistantLine: CommunicationLine = { id: `nova-${Date.now()}`, speaker: "NOVA", text: "", pending: true };
+    setVisibleLines((current) => clipWindow([...current.filter((line) => !line.pending), userLine, assistantLine]));
+    try {
+      const body = new FormData();
+      body.append("file", file);
+      const response = await fetch("/api/import/chatgpt", { method: "POST", body });
+      const data = (await response.json()) as { ok?: boolean; reply?: string; error?: string; jobId?: string };
+      const reply = data.reply ?? data.error ?? "Import abgeschlossen.";
+      setVisibleLines((current) => {
+        const next = [...current];
+        const last = next[next.length - 1];
+        if (last?.speaker === "NOVA") next[next.length - 1] = { ...last, text: reply, pending: false };
+        return clipWindow(next);
+      });
+      if (typeof data.jobId === "string" && data.jobId) {
+        setJob({
+          id: data.jobId,
+          goal: "ChatGPT-Verlauf importieren",
+          status: data.ok ? "completed" : "failed",
+          userRequest: file.name,
+        });
+      }
+      setOrbState(data.ok ? "DONE" : "ERROR");
+      setStatus(data.ok ? "ChatGPT-Verlauf importiert" : "Import fehlgeschlagen");
+      scheduleCommHide(COMM_HIDE_MS);
+    } catch {
+      setOrbState("ERROR");
+      setStatus("Import fehlgeschlagen");
+    } finally {
+      setBusy(false);
+    }
+  }, [clipWindow, keepComm, scheduleCommHide]);
 
   useEffect(() => {
     sendVoiceTurnRef.current = (turn) => {
@@ -682,6 +727,8 @@ export function NovaShell() {
               onToggleVoice={toggleEnabled}
               onDraftChange={handleDraftChange}
               onComposeStart={openTextLayer}
+              onImportFile={(file) => void importChatGPTFile(file)}
+              importHint={chatgptImportHint}
             />
             <NovaVoiceWave
               listening={sessionSnap.capturing}

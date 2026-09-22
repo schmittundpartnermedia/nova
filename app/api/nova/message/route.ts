@@ -110,6 +110,7 @@ export async function POST(request: Request) {
             providerMode: result.providerMode,
             providerId: result.providerId,
             model: result.model,
+            needsFile: result.needsFile ?? null,
           };
         } catch (error) {
           resultReply = publicErrorMessage(error);

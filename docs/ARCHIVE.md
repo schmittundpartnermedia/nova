@@ -27,6 +27,6 @@ Timeline, gruppiert nach Heute / Gestern / Wochentag.
 
 Filter: Alle, Gespräch, Recherche, Aufgaben, Projekte, Kommunikation, Entscheidungen, Freigaben, Ausführung.
 
-Gesprächseinträge stammen aus dem Conversation Archive und sind chronologisch auffindbar. Fulltext-Suche über `ConversationMessage` ist vorbereitet und aktiv.
+Gesprächseinträge stammen aus dem Conversation Archive und sind chronologisch auffindbar. Fulltext-Suche über `ConversationMessage` ist aktiv, inklusive ChatGPT-Import (`origin=chatgpt_import`). `conversationArchive.search` filtert nach Query, Projekt, Datum, Rolle und Origin.
 
 Die Oberfläche zeigt nicht den kompletten Chat. Das Archiv bleibt die Stelle für ältere Kommunikation.

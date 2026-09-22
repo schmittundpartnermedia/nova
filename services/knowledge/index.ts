@@ -33,7 +33,7 @@ import {
   type SearchableItem,
 } from "@/lib/knowledge/ranking";
 import type { KnowledgeItemType, KnowledgeParserSource, ParsedDocument } from "@/types/knowledge";
-import type { MemoryType, RelationType } from "@/types";
+import type { MemoryType, RelationType, SourceType } from "@/types";
 import {
   createKnowledgeImport,
   knowledgeCancelRequested,
@@ -198,14 +198,18 @@ async function promoteToMemory(input: {
     content: string;
     sourceId: string;
     entityName?: string | null;
+    conversationMessageId?: string | null;
+    epistemicStatus?: string | null;
   }>;
   relations: Array<{ from: string; type: RelationType; to: string }>;
   originSourceId: string;
+  sourceType?: SourceType;
 }) {
   const memoryByName = new Map<string, string>();
   let updates = 0;
   for (const item of input.items) {
     if (!isDurableKnowledge(item.type as KnowledgeItemType)) continue;
+    if (item.epistemicStatus === "ASSISTANT_SUGGESTED") continue;
     const provenance = await prisma.source.findFirst({
       where: { organizationId: input.organizationId, knowledgeSourceId: item.sourceId },
     });
@@ -216,8 +220,9 @@ async function promoteToMemory(input: {
       content: item.content,
       projectId: input.projectId,
       sourceId: provenance?.id ?? input.originSourceId,
-      sourceType: "document",
+      sourceType: input.sourceType ?? "document",
       sourceReference: item.id,
+      conversationMessageId: item.conversationMessageId ?? undefined,
     });
     if (!memory) continue;
     await prisma.knowledgeItem.updateMany({
@@ -471,6 +476,181 @@ async function ingestBuffer(input: {
     items: created.length,
     duplicate: false,
     relevant: created.length > 0 || parsed.fulltext.length > 40,
+  };
+}
+
+export async function ingestKnowledgeBuffer(input: Parameters<typeof ingestBuffer>[0]) {
+  return ingestBuffer(input);
+}
+
+export async function ingestParsedKnowledge(input: {
+  organizationId: string;
+  importId: string;
+  jobId?: string;
+  projectId?: string;
+  companyId?: string;
+  name: string;
+  originalPath?: string;
+  sourceType: string;
+  checksum: string;
+  size: number;
+  parsed: ParsedDocument;
+  items: Array<{
+    type: string;
+    title: string;
+    content: string;
+    normalizedKey?: string;
+    normalizedValue?: string;
+    entityName?: string;
+    excerpt: string;
+    confidence: number;
+    location: Record<string, unknown>;
+    relations: Array<{ from: string; type: RelationType; to: string }>;
+    epistemicStatus?: string;
+    conversationMessageId?: string;
+    occurredAt?: Date;
+  }>;
+  conversationId?: string;
+  sourceTypeMemory?: SourceType;
+}): Promise<{ sourceId: string; itemIds: string[]; items: number; memoryUpdates: number; duplicate: boolean }> {
+  assertOrganizationId(input.organizationId);
+  const existing = await prisma.knowledgeSource.findFirst({
+    where: { organizationId: input.organizationId, checksum: input.checksum },
+    orderBy: { createdAt: "asc" },
+  });
+  if (existing && existing.status === "INDEXED") {
+    return { sourceId: existing.id, itemIds: [], items: 0, memoryUpdates: 0, duplicate: true };
+  }
+
+  const source = existing
+    ? await prisma.knowledgeSource.update({
+        where: { id: existing.id },
+        data: {
+          status: "PROCESSING",
+          importId: input.importId,
+          jobId: input.jobId,
+          projectId: input.projectId,
+          conversationId: input.conversationId,
+          name: input.name,
+        },
+      })
+    : await prisma.knowledgeSource.create({
+        data: {
+          organizationId: input.organizationId,
+          sourceType: input.sourceType,
+          name: input.name,
+          originalPath: input.originalPath,
+          checksum: input.checksum,
+          size: input.size,
+          status: "PROCESSING",
+          importId: input.importId,
+          jobId: input.jobId,
+          projectId: input.projectId,
+          conversationId: input.conversationId,
+          importedAt: new Date(),
+          injectionSuspected: Boolean(input.parsed.injectionSuspected),
+          language: input.parsed.language,
+        },
+      });
+
+  await persistParsed({ organizationId: input.organizationId, sourceId: source.id, parsed: input.parsed });
+  const provenance = await prisma.source.findFirst({
+    where: { organizationId: input.organizationId, knowledgeSourceId: source.id },
+  });
+  const origin =
+    provenance ??
+    (await createSource({
+      organizationId: input.organizationId,
+      type: input.sourceTypeMemory ?? "chatgpt",
+      label: input.name,
+      reference: source.id,
+      title: input.parsed.title,
+      excerpt: input.parsed.fulltext.slice(0, 280),
+      jobId: input.jobId,
+      metadata: { knowledgeSourceId: source.id, conversationId: input.conversationId },
+    }));
+  if (!provenance) {
+    await prisma.source.update({
+      where: { id: origin.id },
+      data: { knowledgeSourceId: source.id },
+    });
+  }
+
+  const created = [];
+  const relationDrafts: Array<{ from: string; type: RelationType; to: string }> = [];
+  for (const item of input.items) {
+    const duplicateItem = await prisma.knowledgeItem.findFirst({
+      where: {
+        organizationId: input.organizationId,
+        type: item.type,
+        content: item.content,
+        ...(item.normalizedKey ? { normalizedKey: item.normalizedKey } : { title: item.title }),
+      },
+    });
+    if (duplicateItem) continue;
+    const previous = item.normalizedKey
+      ? await prisma.knowledgeItem.findFirst({
+          where: {
+            organizationId: input.organizationId,
+            normalizedKey: item.normalizedKey,
+            normalizedValue: { not: item.normalizedValue ?? "" },
+          },
+          orderBy: { extractedAt: "desc" },
+        })
+      : null;
+    const row = await prisma.knowledgeItem.create({
+      data: {
+        organizationId: input.organizationId,
+        sourceId: source.id,
+        type: item.type,
+        title: item.title,
+        content: item.content,
+        normalizedKey: item.normalizedKey,
+        normalizedValue: item.normalizedValue,
+        entityName: item.entityName,
+        projectId: input.projectId,
+        companyId: input.companyId,
+        locationJson: JSON.stringify(item.location),
+        excerpt: item.excerpt,
+        extractedAt: item.occurredAt ?? new Date(),
+        confidence: item.confidence,
+        extractor: "chatgpt-knowledge-v1",
+        verified: false,
+        fulltext: `${item.title} ${item.content}`.toLowerCase(),
+        conversationMessageId: item.conversationMessageId,
+        epistemicStatus: item.epistemicStatus,
+        supersedesId: previous && item.normalizedValue && previous.normalizedValue !== item.normalizedValue ? previous.id : null,
+      },
+    });
+    created.push(row);
+    relationDrafts.push(...item.relations);
+    await indexItem({
+      organizationId: input.organizationId,
+      sourceId: source.id,
+      itemId: row.id,
+      text: `${item.title}\n${item.content}`,
+    });
+  }
+
+  const memoryUpdates = await promoteToMemory({
+    organizationId: input.organizationId,
+    projectId: input.projectId,
+    items: created,
+    relations: relationDrafts,
+    originSourceId: origin.id,
+    sourceType: input.sourceTypeMemory ?? "chatgpt",
+  });
+  await detectContradictions(input.organizationId);
+  await prisma.knowledgeSource.update({
+    where: { id: source.id },
+    data: { status: "INDEXED", metadata: JSON.stringify({ parser: input.parsed.metadata.parser, memoryUpdates }) },
+  });
+  return {
+    sourceId: source.id,
+    itemIds: created.map((item) => item.id),
+    items: created.length,
+    memoryUpdates,
+    duplicate: false,
   };
 }
 
@@ -815,7 +995,7 @@ export async function buildKnowledgeContext(input: KnowledgeSearchInput): Promis
         }
       })(),
     }))
-    .filter((row) => hits.some((hit) => hit.normalizedKey === row.topic) || /preis|price/i.test(input.query));
+    .filter((row) => hits.some((hit) => hit.normalizedKey === row.topic) || /preis|price|später|geändert|alt/i.test(input.query));
   const lines = hits.slice(0, 8).map((hit) => {
     const loc = [hit.sourceName, hit.location.page ? `S.${hit.location.page}` : "", hit.location.cell ?? ""]
       .filter(Boolean)
@@ -839,7 +1019,7 @@ export async function buildKnowledgeContext(input: KnowledgeSearchInput): Promis
 export async function preparedChatGPTKnowledgeImport(): Promise<{ prepared: boolean; implemented: boolean; note: string }> {
   return {
     prepared: true,
-    implemented: false,
-    note: "ChatGPT-Export-Parser ist vorbereitet (Conversations, Messages, Source Traceability). Der vollständige Import in Conversation Archive + Knowledge/Memory folgt als nächster Schritt.",
+    implemented: true,
+    note: "ChatGPT-Export wird über Conversation Archive → Knowledge Agent → Memory importiert. Nachrichten sind untrusted historical content.",
   };
 }

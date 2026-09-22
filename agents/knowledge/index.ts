@@ -1,5 +1,6 @@
 import type { NovaAgent } from "@/types/agents";
 import { detectKnowledgeIntent } from "@/agents/knowledge/intent";
+import { detectChatGPTImportIntent } from "@/lib/chatgpt/intent";
 import {
   buildKnowledgeContext,
   importKnowledgePaths,
@@ -7,6 +8,8 @@ import {
   requestKnowledgeCancel,
   searchKnowledge,
 } from "@/services/knowledge";
+import { importChatGPTExport } from "@/services/import/chatgpt";
+import { conversationArchive } from "@/services/archive";
 import { assertOrganizationId } from "@/services/tenant";
 
 export type KnowledgeAgentResult = {
@@ -16,6 +19,7 @@ export type KnowledgeAgentResult = {
   statusMessage: string;
   importId?: string;
   cancelled?: boolean;
+  needsFile?: "chatgpt-export";
 };
 
 export const knowledgeAgent: NovaAgent = {
@@ -34,6 +38,7 @@ export const knowledgeAgent: NovaAgent = {
       "entity-extraction",
       "knowledge-search",
       "source-traceability",
+      "chatgpt-import",
     ],
     requiredTools: ["filesystem"],
     inputSchema: { path: "string?", paths: "string[]?", query: "string?", action: "import|search" },
@@ -49,6 +54,7 @@ export const knowledgeAgent: NovaAgent = {
       paths: Array.isArray(input.paths) ? (input.paths as string[]) : typeof input.path === "string" ? [input.path] : undefined,
       query: typeof input.query === "string" ? input.query : undefined,
       projectId: context.projectId,
+      zipBytes: input.zipBytes instanceof Buffer ? input.zipBytes : undefined,
     });
     return {
       ok: result.ok,
@@ -69,11 +75,13 @@ export async function runKnowledgeAgent(input: {
   paths?: string[];
   query?: string;
   projectId?: string;
+  zipBytes?: Buffer;
   onStatus?: (message: string) => void;
 }): Promise<KnowledgeAgentResult> {
   assertOrganizationId(input.organizationId);
   const intent = detectKnowledgeIntent(input.userRequest);
-  input.onStatus?.(intent.statusMessage || "Knowledge Agent arbeitet.");
+  const chatgpt = detectChatGPTImportIntent(input.userRequest);
+  input.onStatus?.(chatgpt.statusMessage || intent.statusMessage || "Knowledge Agent arbeitet.");
 
   if (intent.kind === "cancel") {
     const count = await requestKnowledgeCancel(input.organizationId);
@@ -81,8 +89,37 @@ export async function runKnowledgeAgent(input: {
       ok: true,
       cancelled: true,
       summary: `${count} Knowledge-Import(s) abgebrochen.`,
-      reply: "Ich habe den Knowledge-Import gestoppt. Bereits sauber importierte Einträge bleiben erhalten.",
+      reply: "Ich habe den Import gestoppt. Bereits vollständig verarbeitete Gespräche und Einträge bleiben erhalten.",
       statusMessage: "Abgebrochen",
+    };
+  }
+
+  if (chatgpt.kind === "prompt" && !input.zipBytes && !(input.paths?.length || chatgpt.paths.length)) {
+    return {
+      ok: true,
+      summary: "ChatGPT-Export auswählen",
+      reply: "Wähle deinen ChatGPT-Export aus.",
+      statusMessage: "Wähle deinen ChatGPT-Export aus.",
+      needsFile: "chatgpt-export",
+    };
+  }
+
+  if (chatgpt.kind !== "none" || input.zipBytes) {
+    const path = input.paths?.[0] ?? chatgpt.paths[0];
+    const imported = await importChatGPTExport({
+      organizationId: input.organizationId,
+      userRequest: input.userRequest,
+      jobId: input.jobId,
+      filePath: path,
+      zipBytes: input.zipBytes,
+    });
+    return {
+      ok: imported.ok,
+      cancelled: imported.cancelled,
+      importId: imported.importId,
+      summary: imported.summary,
+      reply: imported.reply,
+      statusMessage: imported.cancelled ? "Abgebrochen" : "ChatGPT-Verlauf importiert",
     };
   }
 
@@ -94,10 +131,29 @@ export async function runKnowledgeAgent(input: {
       query,
       projectId: input.projectId,
     });
+    let reply = context.answer;
+    if (/gespräch|woher|quelle|damals/i.test(query)) {
+      const archiveHits = await conversationArchive.search({
+        organizationId: input.organizationId,
+        query,
+        origin: "chatgpt_import",
+        limit: 4,
+      });
+      if (archiveHits.length) {
+        const focus = archiveHits[0];
+        const around = await conversationArchive.reconstruct({
+          organizationId: input.organizationId,
+          messageId: focus.id,
+          radius: 2,
+        });
+        const history = around?.messages.map((item) => `${item.createdAt.slice(0, 10)} ${item.role}: ${item.content}`).join("\n") ?? "";
+        reply = `${reply}\n\nUrsprünglicher Zusammenhang:\n${history}`.trim();
+      }
+    }
     return {
       ok: true,
       summary: context.hits.length ? `${context.hits.length} Wissens-Treffer` : "Kein Knowledge-Treffer",
-      reply: context.answer,
+      reply,
       statusMessage: "Unterlagen geprüft",
     };
   }

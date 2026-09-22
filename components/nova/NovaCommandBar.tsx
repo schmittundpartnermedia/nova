@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import type { VoiceSessionState } from "@/features/voice/session-types";
 
 const QUICK_ACTIONS = [
@@ -28,6 +28,8 @@ export function NovaCommandBar({
   onToggleVoice,
   onDraftChange,
   onComposeStart,
+  onImportFile,
+  importHint = false,
 }: {
   disabled: boolean;
   listening: boolean;
@@ -45,9 +47,12 @@ export function NovaCommandBar({
   onToggleVoice: () => void;
   onDraftChange?: (value: string) => void;
   onComposeStart?: () => void;
+  onImportFile?: (file: File) => void;
+  importHint?: boolean;
 }) {
   const [value, setValue] = useState("");
   const [preparedHint, setPreparedHint] = useState(false);
+  const fileRef = useRef<HTMLInputElement | null>(null);
   const shown = sessionActive ? dictation : value;
   const silenceProgress =
     sessionState === "SILENCE_WAIT" && silenceRemainingMs != null
@@ -99,12 +104,28 @@ export function NovaCommandBar({
         autoComplete="off"
       />
       <div className="nova-command-row">
+        <input
+          ref={fileRef}
+          type="file"
+          accept=".zip,application/zip,application/json"
+          className="nova-file-input"
+          style={{ display: "none" }}
+          onChange={(event) => {
+            const file = event.target.files?.[0];
+            event.target.value = "";
+            if (file) onImportFile?.(file);
+            setPreparedHint(false);
+          }}
+        />
         <button
           type="button"
           className="nova-icon-btn prepared"
-          aria-label="Anhänge vorbereitet"
-          title="Anhänge sind vorbereitet, noch nicht verfügbar."
-          onClick={() => setPreparedHint(true)}
+          aria-label="ChatGPT-Export wählen"
+          title="ChatGPT-Export ZIP auswählen"
+          onClick={() => {
+            if (onImportFile) fileRef.current?.click();
+            else setPreparedHint(true);
+          }}
         >
           +
         </button>
@@ -193,7 +214,9 @@ export function NovaCommandBar({
           </button>
         </span>
       </div>
-      {preparedHint ? <p className="nova-hint">Anhänge sind vorbereitet, noch nicht verfügbar.</p> : null}
+      {preparedHint || importHint ? (
+        <p className="nova-hint">Wähle deinen ChatGPT-Export als ZIP über + aus.</p>
+      ) : null}
     </form>
   );
 }

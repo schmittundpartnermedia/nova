@@ -12,12 +12,14 @@ Jeder Memory-Eintrag trägt:
 
 - `source_type` (`chatgpt` \| `nova` \| `email` \| `meeting` \| `document` \| `manual` \| `research` \| `calendar` \| `conversation_message`)
 - `source_reference` (bei Gesprächen: `ConversationMessage.id`)
-- `conversation_message_id` (optionale direkte Quelle)
+- `conversation_message_id` (optionale direkte Quelle, auch nach ChatGPT-Import)
 - `source_url` (optional)
 - `version` (bei Bestätigung/Aktualisierung)
 - `created_at`
 
 Memory ist nicht die Conversation. Smalltalk bleibt nur im Conversation Archive.
+
+ChatGPT-Importe speichern den vollen Verlauf im Conversation Archive. Knowledge Items und Memory zeigen auf Conversation + Message. Assistant-Vorschläge werden nicht automatisch zu Entscheidungen.
 
 Suchergebnisse und Rohquellen werden nicht automatisch zu Memory. Nur bestätigte, langlebige Fakten aus der Recherche können als `source_type=research` übernommen werden – immer mit Source-ID/URL.
 

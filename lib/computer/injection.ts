@@ -2,6 +2,8 @@ import type { ContentSource } from "@/lib/computer/types";
 
 const INJECTION_PATTERNS: RegExp[] = [
   /ignore (?:previous|all|nova)?\s*(?:instructions|rules|regeln)/i,
+  /ignore all previous instructions/i,
+  /delete all (?:project )?files/i,
   /ignoriere (?:vorherige|alle) (?:anweisungen|regeln)/i,
   /you are now/i,
   /system prompt/i,
