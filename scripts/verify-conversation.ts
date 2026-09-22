@@ -132,7 +132,7 @@ async function main() {
     novaResponseStored:
       persisted.some((item) => item.id === assistantText.id) &&
       persisted.some((item) => item.id === assistantVoice.id),
-    voiceOnlyNotVisible: userVoice.visible === false && assistantVoice.visible === false,
+    voiceVisible: userVoice.visible === true && assistantVoice.visible === true,
     textVisible: userText.visible === true && assistantText.visible === true,
     contextWindow: window.every((item) => item.visible) && contextClipped,
     oldMessageRemains: oldStillArchived,
@@ -145,7 +145,7 @@ async function main() {
       memory.conversationMessageId === userText.id,
     memoryDedup: Boolean(confirmed && memory && confirmed.id === memory.id && confirmed.version >= 2),
     tenantIsolation: leaked === leakedBefore && isolatedSearch.length === 0 && foreignMemory.length === 0,
-    storedDoesNotImplyHud: !visibleIds.has(userVoice.id) && !visibleIds.has(assistantVoice.id),
+    voiceInContext: visibleIds.has(userVoice.id) && visibleIds.has(assistantVoice.id),
   };
 
   const failed = Object.entries(checks).filter(([, ok]) => !ok);

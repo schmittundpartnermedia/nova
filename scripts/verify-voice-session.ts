@@ -7,7 +7,6 @@ import {
 } from "@/features/voice/session-machine";
 import type { VoiceClock, VoiceTurn } from "@/features/voice/session-types";
 import type { VoiceCapture } from "@/features/voice/capture";
-import type { LiveStt, LiveSttEvent } from "@/features/voice/live-stt";
 import {
   makeNoiseFrame,
   makeSpeechFrame,
@@ -17,6 +16,11 @@ import {
 
 function assert(condition: unknown, message: string) {
   if (!condition) throw new Error(message);
+}
+
+async function flush() {
+  for (let i = 0; i < 20; i += 1) await Promise.resolve();
+  await new Promise<void>((resolve) => setImmediate(resolve));
 }
 
 class FakeClock implements VoiceClock {
@@ -59,10 +63,10 @@ class FakeClock implements VoiceClock {
 
 class FakeCapture implements VoiceCapture {
   listener: ((frame: VadFrame) => void) | null = null;
-  pcmListener: ((samples: Int16Array) => void) | null = null;
   started = false;
   stopped = false;
   collecting = true;
+  slices = 0;
 
   async start() {
     this.started = true;
@@ -87,47 +91,24 @@ class FakeCapture implements VoiceCapture {
     };
   }
 
-  subscribePcm(listener: (samples: Int16Array) => void) {
-    this.pcmListener = listener;
-    return () => {
-      if (this.pcmListener === listener) this.pcmListener = null;
-    };
+  async sliceUtterance() {
+    this.slices += 1;
+    return new Blob([new Uint8Array(1200)], { type: "audio/wav" });
   }
 }
 
-class FakeLiveStt implements LiveStt {
-  started = false;
-  stopped = false;
-  paused = false;
-  listener: ((event: LiveSttEvent) => void) | null = null;
-
-  async start(listener: (event: LiveSttEvent) => void) {
-    this.listener = listener;
-    this.started = true;
-    this.stopped = false;
-    this.paused = false;
-  }
-
-  sendPcm() {}
-
-  setPaused(paused: boolean) {
-    this.paused = paused;
-  }
-
-  stop() {
-    this.stopped = true;
-    this.started = false;
-  }
-
-  emit(event: LiveSttEvent) {
-    this.listener?.(event);
+function pump(capture: FakeCapture, clock: FakeClock, durationMs: number, kind: "speech" | "noise") {
+  const end = clock.nowMs + durationMs;
+  while (clock.nowMs < end) {
+    clock.advance(20);
+    capture.listener?.(kind === "speech" ? makeSpeechFrame(clock.nowMs) : makeNoiseFrame(clock.nowMs));
   }
 }
 
 export async function runVoiceSessionChecks() {
   assert(VOICE_SESSION_CONFIG.silenceTimeoutMs === 800, "silenceTimeoutMs muss 800 sein.");
   assert(VOICE_SESSION_CONFIG.bargeInEnabled === false, "Barge-In muss in dieser Architektur aus bleiben.");
-  assert(VOICE_SESSION_CONFIG.pcmSampleRate === 24000, "PCM muss 24 kHz sein.");
+  assert(VOICE_SESSION_CONFIG.pcmSampleRate === 16000, "PCM muss 16 kHz sein.");
   assert(VOICE_SESSION_CONFIG.minSpeechDurationMs > 0, "minSpeechDurationMs zentral");
   assert(VOICE_SESSION_CONFIG.postTtsGuardMs > 0, "postTtsGuardMs zentral");
 
@@ -159,92 +140,98 @@ export async function runVoiceSessionChecks() {
   }
   assert(started, "VAD muss VOICE_START bei Sprache erkennen.");
 
-  const ring = new PcmSlicer(24000, 2);
-  const block = new Float32Array(2400);
+  const ring = new PcmSlicer(16000, 2);
+  const block = new Float32Array(1600);
   for (let i = 0; i < block.length; i += 1) block[i] = i % 2 === 0 ? 0.5 : -0.5;
-  ring.appendMono(block, 24000, 1000);
+  ring.appendMono(block, 16000, 1000);
   const sliced = ring.slice(1000, 1100);
-  assert(sliced.length >= 2000 && sliced.length <= 2800, `PCM-Slice Länge, war ${sliced.length}`);
-  const wav = encodeWavPcm16(sliced, 24000);
+  assert(sliced.length >= 1400 && sliced.length <= 1800, `PCM-Slice Länge, war ${sliced.length}`);
+  const wav = encodeWavPcm16(sliced, 16000);
   assert(wav.type === "audio/wav", "WAV MIME");
 
   const clock = new FakeClock();
   const capture = new FakeCapture();
-  const stt = new FakeLiveStt();
   const turns: VoiceTurn[] = [];
+  const transcripts: string[] = ["Hallo NOVA, gib mir den Status.", "Nächster Beitrag ohne Klick.", "Dritter Beitrag ohne Klick."];
+  let transcribeCalls = 0;
   const controller = new VoiceSessionController({
     clock,
     createCapture: () => capture,
-    createLiveStt: () => stt,
+    transcribeUtterance: async () => {
+      const text = transcripts[transcribeCalls] ?? "";
+      transcribeCalls += 1;
+      return text;
+    },
   });
   controller.setListener({ onTurn: (turn) => turns.push(turn) });
 
   await controller.start();
   assert(controller.getSnapshot().state === "LISTENING", `Start muss LISTENING sein, war ${controller.getSnapshot().state}`);
   assert(capture.started, "Capture muss laufen.");
-  assert(stt.started, "Live-STT muss laufen.");
 
   clock.advance(30_000);
   assert(turns.length === 0, "Ohne Sprache keinen Turn.");
 
-  stt.emit({ type: "speech_started" });
+  pump(capture, clock, 400, "noise");
+  pump(capture, clock, 500, "speech");
   assert(controller.getSnapshot().state === "USER_SPEAKING", `Sprache muss USER_SPEAKING sein, war ${controller.getSnapshot().state}`);
-  stt.emit({ type: "delta", delta: "Hallo NOVA, " });
-  assert(controller.getSnapshot().transcript.includes("Hallo NOVA"), `Live-Text fehlt: ${controller.getSnapshot().transcript}`);
-  stt.emit({ type: "delta", delta: "gib mir den Status." });
-  stt.emit({ type: "speech_stopped" });
+  pump(capture, clock, 320, "noise");
   assert(controller.getSnapshot().state === "SILENCE_WAIT", `Nach Stimme Ende SILENCE_WAIT, war ${controller.getSnapshot().state}`);
-  stt.emit({ type: "completed", transcript: "Hallo NOVA, gib mir den Status." });
-  assert(turns.length === 1, `Nach fertigem Transkript genau ein Turn, war ${turns.length}`);
+  clock.advance(VOICE_SESSION_CONFIG.silenceTimeoutMs);
+  await flush();
+  assert(turns.length === 1, `Nach Transkript genau ein Turn, war ${turns.length}`);
   assert(turns[0]?.transcript === "Hallo NOVA, gib mir den Status.", turns[0]?.transcript ?? "kein Turn");
-  assert(turns[0]?.sttEngine === "realtime", String(turns[0]?.sttEngine));
+  assert(turns[0]?.sttEngine === "whisper", String(turns[0]?.sttEngine));
   assert(controller.getSnapshot().state === "PROCESSING", "Nach Turn: PROCESSING");
-  assert(stt.paused, "STT während PROCESSING pausiert.");
-  assert(!capture.collecting, "PCM während PROCESSING pausiert.");
+  assert(!capture.collecting, "Capture während PROCESSING pausiert.");
+  assert(capture.slices >= 1, "Utterance muss geschnitten werden.");
 
   controller.notifyNovaSpeaking();
   assert(controller.getSnapshot().state === "NOVA_SPEAKING", "NOVA_SPEAKING");
-  stt.emit({ type: "completed", transcript: "Ich bin NOVA." });
+  pump(capture, clock, 400, "speech");
   assert(turns.length === 1, "NOVAs Stimme darf keinen neuen User-Turn erzeugen.");
 
   controller.notifyNovaIdle();
   clock.advance(VOICE_SESSION_CONFIG.postTtsGuardMs);
   assert(controller.getSnapshot().state === "LISTENING", `Auto Re-Listen, war ${controller.getSnapshot().state}`);
-  assert(!stt.paused, "STT nach Guard wieder aktiv.");
-  assert(capture.collecting, "PCM nach Guard wieder aktiv.");
+  assert(capture.collecting, "Capture nach Guard wieder aktiv.");
 
-  stt.emit({ type: "speech_started" });
-  stt.emit({ type: "delta", delta: "Nächster Beitrag ohne Klick." });
-  stt.emit({ type: "completed", transcript: "Nächster Beitrag ohne Klick." });
+  pump(capture, clock, 400, "speech");
+  pump(capture, clock, 320, "noise");
+  clock.advance(VOICE_SESSION_CONFIG.silenceTimeoutMs);
+  await flush();
   assert(turns.length === 2, "Zweiter Turn ohne erneutes Aktivieren.");
   assert(turns[1]?.transcript.includes("Nächster Beitrag"), turns[1]?.transcript);
 
   controller.notifyNovaSpeaking();
   controller.notifyNovaIdle();
   clock.advance(VOICE_SESSION_CONFIG.postTtsGuardMs);
-  stt.emit({ type: "completed", transcript: "Dritter Beitrag ohne Klick." });
+  pump(capture, clock, 400, "speech");
+  pump(capture, clock, 320, "noise");
+  clock.advance(VOICE_SESSION_CONFIG.silenceTimeoutMs);
+  await flush();
   assert(turns.length === 3, "Dritter Turn ohne erneutes Aktivieren.");
 
   controller.stop();
   assert(controller.getSnapshot().state === "OFF", "Manuelles Ende → OFF");
   assert(capture.stopped, "MediaStream/Capture geschlossen.");
-  assert(stt.stopped, "Live-STT gestoppt.");
   assert(clock.timers.size === 0, "Timer müssen geleert sein.");
 
   const emptyClock = new FakeClock();
   const emptyCapture = new FakeCapture();
-  const emptyStt = new FakeLiveStt();
   const emptyTurns: VoiceTurn[] = [];
   const emptyController = new VoiceSessionController({
     clock: emptyClock,
     createCapture: () => emptyCapture,
-    createLiveStt: () => emptyStt,
+    transcribeUtterance: async () => "",
   });
   emptyController.setListener({ onTurn: (turn) => emptyTurns.push(turn) });
   await emptyController.start();
-  emptyStt.emit({ type: "speech_started" });
-  emptyStt.emit({ type: "speech_stopped" });
-  emptyStt.emit({ type: "completed", transcript: "" });
+  pump(emptyCapture, emptyClock, 400, "noise");
+  pump(emptyCapture, emptyClock, 400, "speech");
+  pump(emptyCapture, emptyClock, 320, "noise");
+  emptyClock.advance(VOICE_SESSION_CONFIG.silenceTimeoutMs);
+  await flush();
   assert(emptyTurns.length === 0, "Leeres Transkript darf keinen Turn senden.");
   assert(emptyController.getSnapshot().state === "LISTENING", "Nach leerem Slice bleibt LISTENING.");
   emptyController.stop();
@@ -253,7 +240,7 @@ export async function runVoiceSessionChecks() {
     ok: true,
     silenceTimeoutMs: VOICE_SESSION_CONFIG.silenceTimeoutMs,
     bargeInEnabled: VOICE_SESSION_CONFIG.bargeInEnabled,
-    engine: "realtime",
+    engine: "whisper",
     turns: turns.map((turn) => turn.transcript),
   };
 }

@@ -66,7 +66,7 @@ export async function POST(request: Request) {
           role: "user",
           content: redactSecrets(parsed.message),
           inputMode: parsed.inputMode,
-          visible: parsed.inputMode === "text",
+          visible: true,
           metadata: {
             channel: "nova-ui",
             ...(voiceMeta
@@ -131,7 +131,7 @@ export async function POST(request: Request) {
             content: resultReply,
             inputMode: parsed.inputMode,
             status: resultPayload ? "final" : "error",
-            visible: parsed.inputMode === "text",
+            visible: true,
             metadata: { channel: "nova-ui" },
           });
           assistantMessageId = assistantMessage.id;
@@ -154,7 +154,7 @@ export async function POST(request: Request) {
             userMessageId: userMessage.id,
             assistantMessageId: assistantMessageId ?? null,
             stored: true,
-            visible: parsed.inputMode === "text",
+            visible: true,
             inputMode: parsed.inputMode,
           });
         }

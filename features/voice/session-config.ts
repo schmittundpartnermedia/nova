@@ -1,12 +1,12 @@
 /**
- * Voice-Session: ein Mikrofon-Stream, Live-Transkription wie ChatGPT/Cursor.
- * Text erscheint während des Sprechens. Kurze Stille beendet den Turn.
+ * Ein Mikrofon-Stream, RMS-VAD, HTTP-Transkription.
+ * Kurze Pause beendet den Turn. Keine langlebige Socket-Session.
  */
 
 export const VOICE_SESSION_CONFIG = {
   silenceTimeoutMs: 800,
   minSpeechDurationMs: 160,
-  vadHangoverMs: 320,
+  vadHangoverMs: 280,
   vadWarmupMs: 400,
   vadMinSpeechRms: 0.012,
   vadMinSpeechPeak: 0.04,
@@ -15,17 +15,17 @@ export const VOICE_SESSION_CONFIG = {
   vadNoiseAdaptSpeech: 0.04,
   vadNoiseAdaptSilence: 0.12,
   vadNoiseCeiling: 0.06,
-  postTtsGuardMs: 400,
+  postTtsGuardMs: 350,
   bargeInEnabled: false,
-  silenceResumeConfirmMs: 400,
+  silenceResumeConfirmMs: 280,
   silenceUiTickMs: 100,
   fftSize: 2048,
   maxTranscriptChars: 4000,
   maxUtteranceMs: 25000,
   preRollMs: 350,
-  postRollMs: 220,
+  postRollMs: 180,
   utteranceMinBytes: 800,
-  pcmSampleRate: 24000,
+  pcmSampleRate: 16000,
   pcmBufferSeconds: 30,
 } as const;
 

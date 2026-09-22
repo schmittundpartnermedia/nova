@@ -86,6 +86,6 @@ npm run verify:conversation # Conversation Archive, Memory-Quelle, Tenant Isolat
 - AI: `OpenAIProvider` (Mock bleibt Fallback/Tests)
 - Recherche: kein echter Search Connector; keine erfundenen Live-Treffer
 - Mail/Kalender/Drive: nur Interfaces + Mocks
-- Spracheingabe: Live-Transkription (OpenAI Realtime), Text erscheint während des Sprechens
+- Spracheingabe: Mikrofon → kurze Pause → HTTP-Transkription (`gpt-4o-mini-transcribe` / Whisper) → Antwort + Archiv
 - Sprachausgabe: OpenAI `gpt-4o-mini-tts`, lokal ein- und ausschaltbar
 - Multi-Tenant: technisch vorbereitet, in der UI unsichtbar

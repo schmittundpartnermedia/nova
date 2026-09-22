@@ -32,6 +32,7 @@ export function useVoiceSession(onTurn: (turn: VoiceTurn) => void) {
       onTurn: (turn) => onTurnRef.current(turn),
       onInterruptNova: () => interruptRef.current(),
     });
+    void fetch("/api/nova/transcribe", { method: "GET", cache: "no-store" }).catch(() => undefined);
     return () => {
       controller.dispose();
       controllerRef.current = null;

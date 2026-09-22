@@ -1,5 +1,4 @@
 import { isVoiceCaptureSupported, MicrophoneCapture, type VoiceCapture } from "@/features/voice/capture";
-import { HttpLiveStt, type LiveStt, type LiveSttEvent } from "@/features/voice/live-stt";
 import { VOICE_SESSION_CONFIG, type VoiceSessionConfig } from "@/features/voice/session-config";
 import {
   INITIAL_VOICE_SESSION,
@@ -16,6 +15,7 @@ import {
   type VoiceSessionSnapshot,
   type VoiceTurn,
 } from "@/features/voice/session-types";
+import { transcribeUtterance as transcribeUtteranceRequest } from "@/features/voice/transcribe";
 import { VoiceActivityDetector, type VadFrame } from "@/features/voice/vad";
 
 export type VoiceSessionListener = {
@@ -28,22 +28,21 @@ export type VoiceSessionDeps = {
   config?: VoiceSessionConfig;
   clock?: VoiceClock;
   createCapture?: (onTrackEnded: () => void) => VoiceCapture;
-  createLiveStt?: () => LiveStt;
+  transcribeUtterance?: (blob: Blob) => Promise<string>;
 };
 
 export class VoiceSessionController {
   private readonly config: VoiceSessionConfig;
   private readonly clock: VoiceClock;
   private readonly createCapture: (onTrackEnded: () => void) => VoiceCapture;
-  private readonly createLiveStt: () => LiveStt;
   private readonly injectedCapture: boolean;
+  private readonly transcribeUtterance: (blob: Blob) => Promise<string>;
   private listener: VoiceSessionListener = {};
   private model: VoiceSessionModel = { ...INITIAL_VOICE_SESSION };
   private capture: VoiceCapture | null = null;
-  private liveStt: LiveStt | null = null;
   private unsubscribeCapture: (() => void) | null = null;
-  private unsubscribePcm: (() => void) | null = null;
   private vad = new VoiceActivityDetector();
+  private silenceTimer: unknown = null;
   private silenceTick: unknown = null;
   private guardTimer: unknown = null;
   private level = 0;
@@ -51,8 +50,11 @@ export class VoiceSessionController {
   private generation = 0;
   private supported = false;
   private transcript = "";
-  private turnStartedAt: number | null = null;
+  private lastTurnActivityAt: number | null = null;
+  private tentativeResumeAt: number | null = null;
+  private utteranceFromMs: number | null = null;
   private finalizing = false;
+  private pendingTranscript: Promise<string> | null = null;
 
   constructor(deps: VoiceSessionDeps = {}) {
     this.config = deps.config ?? VOICE_SESSION_CONFIG;
@@ -60,7 +62,7 @@ export class VoiceSessionController {
     this.injectedCapture = Boolean(deps.createCapture);
     this.createCapture =
       deps.createCapture ?? ((onTrackEnded) => new MicrophoneCapture(this.config, onTrackEnded));
-    this.createLiveStt = deps.createLiveStt ?? (() => new HttpLiveStt());
+    this.transcribeUtterance = deps.transcribeUtterance ?? transcribeUtteranceRequest;
     this.vad = new VoiceActivityDetector(this.config);
     this.supported = this.peekSupported();
   }
@@ -101,6 +103,7 @@ export class VoiceSessionController {
     this.supported = this.peekSupported();
     this.dispatch({ type: "START_REQUESTED" });
     const gen = this.generation;
+    this.warmupTranscribe();
     try {
       if (!this.supported) {
         throw new Error("Spracheingabe ist in diesem Browser nicht verfügbar.");
@@ -108,18 +111,11 @@ export class VoiceSessionController {
       this.capture = this.createCapture(() => {
         this.fail("Mikrofonverbindung verloren.");
       });
-      this.liveStt = this.createLiveStt();
       this.unsubscribeCapture = this.capture.subscribe((frame) => this.onFrame(frame));
-      this.unsubscribePcm = this.capture.subscribePcm((samples) => this.liveStt?.sendPcm(samples));
       this.capture.setCollecting(true);
       await this.capture.start();
       if (gen !== this.generation || this.model.state !== "STARTING") {
         this.capture.stop();
-        return;
-      }
-      await this.liveStt.start((event) => this.onLiveStt(event));
-      if (gen !== this.generation || this.model.state !== "STARTING") {
-        this.cleanupResources();
         return;
       }
       this.vad.reset(this.clock.now());
@@ -139,7 +135,10 @@ export class VoiceSessionController {
     this.cleanupResources();
     this.level = 0;
     this.transcript = "";
-    this.turnStartedAt = null;
+    this.lastTurnActivityAt = null;
+    this.tentativeResumeAt = null;
+    this.utteranceFromMs = null;
+    this.pendingTranscript = null;
     this.finalizing = false;
     this.lastError = this.model.state === "ERROR" ? this.lastError : null;
     this.dispatch({ type: "STOP" });
@@ -172,10 +171,12 @@ export class VoiceSessionController {
         return;
       }
       this.transcript = "";
-      this.turnStartedAt = null;
+      this.lastTurnActivityAt = null;
+      this.tentativeResumeAt = null;
+      this.utteranceFromMs = null;
+      this.pendingTranscript = null;
       this.vad.wake(this.clock.now());
       this.capture?.setCollecting(true);
-      this.liveStt?.setPaused(false);
       this.dispatch({ type: "NOVA_IDLE" });
     }, this.config.postTtsGuardMs);
   }
@@ -198,110 +199,91 @@ export class VoiceSessionController {
     return this.injectedCapture || isVoiceCaptureSupported();
   }
 
-  private onLiveStt(event: LiveSttEvent) {
-    if (event.type === "error") {
-      this.fail(event.message);
-      return;
-    }
-    if (this.model.state === "NOVA_SPEAKING" || this.model.state === "PROCESSING") return;
-
-    if (event.type === "speech_started") {
-      this.beginSpeech(this.clock.now());
-      return;
-    }
-    if (event.type === "delta") {
-      if (this.model.state === "LISTENING") this.beginSpeech(this.clock.now());
-      this.transcript = `${this.transcript}${event.delta}`.slice(0, this.config.maxTranscriptChars);
-      this.emit();
-      return;
-    }
-    if (event.type === "speech_stopped") {
-      this.endSpeech(this.clock.now());
-      return;
-    }
-    if (event.type === "completed") {
-      this.finishWithTranscript(event.transcript);
-    }
+  private warmupTranscribe() {
+    if (typeof window === "undefined" || typeof fetch !== "function") return;
+    void fetch("/api/nova/transcribe", { method: "GET", cache: "no-store" }).catch(() => undefined);
   }
 
   private onFrame(frame: VadFrame) {
-    if (!isVoiceCapturing(this.model.state) && this.model.state !== "NOVA_SPEAKING") return;
+    if (this.model.state === "NOVA_SPEAKING" || this.model.state === "PROCESSING") return;
+    if (!isVoiceCapturing(this.model.state)) return;
     const status = this.vad.push(frame);
     this.level = Math.max(0, Math.min(1, status.level / 0.12));
     this.emit();
+
+    if (this.model.state === "USER_SPEAKING" && status.speechLikely) {
+      this.noteSpeechProgress(frame.timestampMs);
+    }
+    if (status.event === "VOICE_START" || (status.event === "VOICE_ACTIVE" && this.model.state === "LISTENING")) {
+      this.beginSpeech(frame.timestampMs);
+      return;
+    }
+    if (status.event === "VOICE_END") {
+      this.endSpeech(frame.timestampMs);
+    }
   }
 
   private beginSpeech(at: number) {
-    if (this.turnStartedAt == null) this.turnStartedAt = at;
-    if (this.model.state === "LISTENING" || this.model.state === "SILENCE_WAIT" || this.model.state === "INTERRUPTED") {
-      this.dispatch({ type: "VOICE_START", at });
+    if (this.model.state === "SILENCE_WAIT") {
+      this.tentativeResumeAt = at;
+      this.pendingTranscript = null;
+    } else {
+      this.markTurnActivity(at);
+      if (this.utteranceFromMs == null) this.utteranceFromMs = at - this.config.preRollMs;
     }
-    this.armSilenceUi();
+    this.dispatch({ type: "VOICE_START", at });
+    this.scheduleTurnWatchdog();
+  }
+
+  private noteSpeechProgress(at: number) {
+    if (this.tentativeResumeAt != null) {
+      if (at - this.tentativeResumeAt >= this.config.silenceResumeConfirmMs) {
+        this.markTurnActivity(at);
+      }
+      return;
+    }
+    this.markTurnActivity(at);
   }
 
   private endSpeech(at: number) {
     if (this.model.state !== "USER_SPEAKING") return;
+    this.tentativeResumeAt = null;
     this.dispatch({ type: "VOICE_END", at });
-    this.armSilenceUi();
+    this.kickTranscribe();
+    this.scheduleTurnWatchdog();
   }
 
-  private finishWithTranscript(raw: string) {
-    if (this.finalizing) return;
-    const transcript = raw.replace(/\s+/g, " ").trim() || this.transcript.replace(/\s+/g, " ").trim();
-    const inTurn = this.model.state === "SILENCE_WAIT" || this.model.state === "USER_SPEAKING" || Boolean(transcript);
-    if (!inTurn && this.model.state !== "LISTENING") return;
-    if (!transcript) {
-      this.transcript = "";
-      this.turnStartedAt = null;
-      if (this.model.state === "USER_SPEAKING" || this.model.state === "SILENCE_WAIT") {
-        this.dispatch({ type: "SILENCE_TIMEOUT", hasTranscript: false });
-      }
-      this.emit();
-      return;
+  private markTurnActivity(at: number) {
+    this.lastTurnActivityAt = at;
+    this.tentativeResumeAt = null;
+    if (this.model.state === "USER_SPEAKING" || this.model.state === "SILENCE_WAIT") {
+      this.scheduleTurnWatchdog();
     }
-    if (this.model.state === "LISTENING" && transcript) {
-      const now = this.clock.now();
-      this.dispatch({ type: "VOICE_START", at: this.turnStartedAt ?? now });
-      this.dispatch({ type: "VOICE_END", at: now });
-    }
-    this.finalizing = true;
-    const startedAt = this.turnStartedAt ?? this.clock.now();
-    const endedAt = this.clock.now();
-    this.pauseInput();
-    this.dispatch({ type: "SILENCE_TIMEOUT", hasTranscript: true });
-    if (this.model.state !== "PROCESSING") {
-      this.finalizing = false;
-      return;
-    }
-    const durationMs = Math.max(0, Math.round(endedAt - startedAt));
-    const wallEnd = new Date();
-    const wallStart = new Date(wallEnd.getTime() - durationMs);
-    const turn: VoiceTurn = {
-      transcript: transcript.slice(0, this.config.maxTranscriptChars),
-      startedAt: wallStart.toISOString(),
-      endedAt: wallEnd.toISOString(),
-      durationMs,
-      sttEngine: "realtime",
-      inputMode: "voice",
-    };
-    this.transcript = "";
-    this.turnStartedAt = null;
-    this.finalizing = false;
-    this.emit();
-    this.listener.onTurn?.(turn);
   }
 
-  private pauseInput() {
+  private scheduleTurnWatchdog() {
     this.clearSilence();
-    this.capture?.setCollecting(false);
-    this.liveStt?.setPaused(true);
-  }
-
-  private armSilenceUi() {
-    this.clearSilence();
-    if (this.model.state !== "SILENCE_WAIT") return;
+    if (this.model.state !== "USER_SPEAKING" && this.model.state !== "SILENCE_WAIT") return;
+    const origin = this.lastTurnActivityAt;
+    if (origin == null) return;
+    const remaining = this.config.silenceTimeoutMs - (this.clock.now() - origin);
+    this.silenceTimer = this.clock.setTimeout(() => {
+      this.silenceTimer = null;
+      this.onTurnWatchdog();
+    }, Math.max(0, remaining));
     this.silenceTick = this.clock.setTimeout(() => this.tickSilence(), this.config.silenceUiTickMs);
     this.emit();
+  }
+
+  private onTurnWatchdog() {
+    if (this.model.state !== "SILENCE_WAIT" && this.model.state !== "USER_SPEAKING") return;
+    const origin = this.lastTurnActivityAt;
+    if (origin == null) return;
+    if (this.clock.now() - origin < this.config.silenceTimeoutMs) {
+      this.scheduleTurnWatchdog();
+      return;
+    }
+    void this.finalizeTurn();
   }
 
   private tickSilence() {
@@ -310,9 +292,89 @@ export class VoiceSessionController {
     this.silenceTick = this.clock.setTimeout(() => this.tickSilence(), this.config.silenceUiTickMs);
   }
 
+  private kickTranscribe() {
+    if (this.pendingTranscript) return;
+    const generation = this.generation;
+    const from = this.utteranceFromMs ?? this.clock.now() - 1000;
+    const to = (this.lastTurnActivityAt ?? this.clock.now()) + this.config.postRollMs;
+    this.pendingTranscript = this.sliceAndTranscribe(from, to).then((text) => {
+      if (generation !== this.generation) return "";
+      if (text) {
+        this.transcript = text.slice(0, this.config.maxTranscriptChars);
+        this.emit();
+      }
+      return text;
+    });
+  }
+
+  private async sliceAndTranscribe(from: number, to: number): Promise<string> {
+    try {
+      const blob = await this.capture?.sliceUtterance(from, Math.min(to, from + this.config.maxUtteranceMs));
+      if (!blob) return "";
+      return (await this.transcribeUtterance(blob)).trim();
+    } catch {
+      return "";
+    }
+  }
+
+  private async finalizeTurn() {
+    if (this.finalizing) return;
+    const inTurn = this.model.state === "SILENCE_WAIT" || this.model.state === "USER_SPEAKING";
+    if (!inTurn) return;
+    this.finalizing = true;
+    const generation = this.generation;
+    const startedAt = this.utteranceFromMs ?? this.model.turnStartedAt;
+    const endedAt = this.clock.now();
+    if (!this.pendingTranscript) this.kickTranscribe();
+    let transcript = "";
+    try {
+      transcript = ((await this.pendingTranscript) ?? "").trim();
+    } catch {
+      transcript = "";
+    }
+    if (generation !== this.generation) return;
+    this.pendingTranscript = null;
+    this.pauseInput();
+    this.transcript = transcript.slice(0, this.config.maxTranscriptChars);
+    this.dispatch({ type: "SILENCE_TIMEOUT", hasTranscript: Boolean(transcript) });
+    if (!transcript || this.model.state !== "PROCESSING") {
+      this.lastTurnActivityAt = null;
+      this.tentativeResumeAt = null;
+      this.utteranceFromMs = null;
+      this.finalizing = false;
+      this.vad.wake(this.clock.now());
+      this.capture?.setCollecting(true);
+      this.emit();
+      return;
+    }
+    const durationMs = startedAt != null ? Math.max(0, Math.round(endedAt - startedAt)) : 0;
+    const wallEnd = new Date();
+    const wallStart = new Date(wallEnd.getTime() - durationMs);
+    const turn: VoiceTurn = {
+      transcript: this.transcript,
+      startedAt: wallStart.toISOString(),
+      endedAt: wallEnd.toISOString(),
+      durationMs,
+      sttEngine: "whisper",
+      inputMode: "voice",
+    };
+    this.lastTurnActivityAt = null;
+    this.tentativeResumeAt = null;
+    this.utteranceFromMs = null;
+    this.finalizing = false;
+    this.emit();
+    this.listener.onTurn?.(turn);
+  }
+
+  private pauseInput() {
+    this.clearSilence();
+    this.tentativeResumeAt = null;
+    this.capture?.setCollecting(false);
+  }
+
   private silenceRemaining(): number | null {
-    if (this.model.state !== "SILENCE_WAIT" || this.model.lastVoiceEndAt == null) return null;
-    return Math.max(0, this.config.silenceTimeoutMs - (this.clock.now() - this.model.lastVoiceEndAt));
+    if (this.model.state !== "SILENCE_WAIT" || this.lastTurnActivityAt == null) return null;
+    return Math.max(0, this.config.silenceTimeoutMs - (this.clock.now() - this.lastTurnActivityAt));
   }
 
   private dispatch(event: Parameters<typeof reduceVoiceSession>[1]) {
@@ -325,6 +387,10 @@ export class VoiceSessionController {
   }
 
   private clearSilence() {
+    if (this.silenceTimer != null) {
+      this.clock.clearTimeout(this.silenceTimer);
+      this.silenceTimer = null;
+    }
     if (this.silenceTick != null) {
       this.clock.clearTimeout(this.silenceTick);
       this.silenceTick = null;
@@ -346,10 +412,6 @@ export class VoiceSessionController {
   private cleanupResources() {
     this.unsubscribeCapture?.();
     this.unsubscribeCapture = null;
-    this.unsubscribePcm?.();
-    this.unsubscribePcm = null;
-    this.liveStt?.stop();
-    this.liveStt = null;
     this.capture?.stop();
     this.capture = null;
     this.vad.reset(this.clock.now());

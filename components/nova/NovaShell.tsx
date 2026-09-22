@@ -246,20 +246,20 @@ export function NovaShell() {
     clearHint();
     if (voiceEnabled) beginTurn("");
 
-    const textTurn = inputMode === "text";
-    if (textTurn) {
+    const textTurn = true;
+    keepComm();
+    const userLine: CommunicationLine = { id: `user-${Date.now()}`, speaker: "JOACHIM", text: message };
+    const assistantLine: CommunicationLine = {
+      id: `nova-${Date.now()}`,
+      speaker: "NOVA",
+      text: "",
+      pending: true,
+    };
+    setVisibleLines((current) => clipWindow([...current.filter((line) => !line.pending), userLine, assistantLine]));
+    setDraft("");
+    if (inputMode === "text") {
       setInteractionMode((current) => (current === "voice" ? "text" : current === "hybrid" ? "hybrid" : "text"));
-      keepComm();
-      const userLine: CommunicationLine = { id: `user-${Date.now()}`, speaker: "JOACHIM", text: message };
-      const assistantLine: CommunicationLine = {
-        id: `nova-${Date.now()}`,
-        speaker: "NOVA",
-        text: "",
-        pending: true,
-      };
-      setVisibleLines((current) => clipWindow([...current.filter((line) => !line.pending), userLine, assistantLine]));
-      setDraft("");
-    } else if (commOpenRef.current) {
+    } else if (commOpenRef.current || sessionActiveRef.current) {
       setInteractionMode("hybrid");
     }
 

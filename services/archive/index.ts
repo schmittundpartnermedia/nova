@@ -76,7 +76,7 @@ export async function recordConversationTurn(input: {
       assistantMessageId: input.assistantMessageId ?? null,
       inputMode: input.inputMode,
       stored: true,
-      visible: input.inputMode === "text",
+      visible: input.inputMode === "text" || input.inputMode === "voice",
     },
   });
 }

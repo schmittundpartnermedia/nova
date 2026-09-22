@@ -55,7 +55,7 @@ function messageFulltext(input: {
 }
 
 function shouldDisplay(inputMode: ConversationInputMode): boolean {
-  return inputMode === "text";
+  return inputMode === "text" || inputMode === "voice";
 }
 
 export async function getOrCreateActiveConversation(organizationId: string) {
