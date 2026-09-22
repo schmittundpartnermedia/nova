@@ -7,11 +7,16 @@ Native macOS-Launcher-App für den lokalen NOVA-Start.
 ```
 NOVA.app
   → Process Supervisor
-    → NOVA Application Service  (Next.js, später Production-Build)
-    → Desktop Service           (127.0.0.1:47821)
-    → Native Helper             (bestehendes signiertes Helper-Bundle)
-  → NOVA UI                     (bestehende Oberfläche, kein neues Frontend)
+    → CHECKING_ENVIRONMENT
+    → CHECKING_VOLUME
+    → CHECKING_RUNTIME
+    → Application Service  (Next.js, Health: /api/nova/ready)
+    → Desktop Service      (127.0.0.1:47821 /health)
+    → Native Helper        (bestehendes signiertes Helper-Bundle)
+  → NOVA UI                (bestehende Oberfläche, kein neues Frontend)
 ```
+
+NOVA.app startet nach einem Mac-Neustart ohne Terminal. Die Runtime kommt aus `NOVANodeBin` (`/usr/local/bin/node`), nicht aus einer Login-Shell. Liegt das Projekt auf einem externen Volume, wartet der Supervisor auf Mount und Lesbarkeit, statt blind zu schlafen.
 
 Der Helper bleibt ein eigenes Bundle unter:
 
@@ -64,6 +69,8 @@ Lokal, ohne Secrets:
 - `.nova/logs/launcher.log`
 - `.nova/logs/nova-web.log`
 - `.nova/logs/desktop-service.log`
+
+Startfehler nennen den Supervisor-Zustand, PID, Executable, cwd und den letzten Logausschnitt. Secrets werden redigiert.
 
 ## Beenden
 

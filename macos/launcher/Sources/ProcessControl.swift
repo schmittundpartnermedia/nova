@@ -5,6 +5,7 @@ struct SpawnedProcess {
     let pid: pid_t
     let pgid: pid_t
     let argv: [String]
+    let startedAt: Date
 }
 
 enum ProcessControl {
@@ -24,6 +25,12 @@ enum ProcessControl {
         return first.flatMap { $0 > 0 ? $0 : nil }
     }
 
+    static func isOwnedListener(port: Int, root: pid_t) -> Bool {
+        guard let listener = listeningPid(port: port) else { return false }
+        if listener == root { return true }
+        return descendantPids(root: root).contains(listener)
+    }
+
     static func readPidFile(_ url: URL) -> pid_t? {
         guard let raw = try? String(contentsOf: url, encoding: .utf8) else { return nil }
         let value = raw.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -41,13 +48,28 @@ enum ProcessControl {
             try? FileManager.default.removeItem(at: pidFile)
             return
         }
+        if isPidFileFromPreviousBoot(pidFile) {
+            try? FileManager.default.removeItem(at: pidFile)
+            return
+        }
         if !isAlive(pid) {
             try? FileManager.default.removeItem(at: pidFile)
             return
         }
-        if let expected, let command = commandLine(pid: pid), !expected(command) {
-            try? FileManager.default.removeItem(at: pidFile)
+        if let expected {
+            guard let command = commandLine(pid: pid), expected(command) else {
+                try? FileManager.default.removeItem(at: pidFile)
+                return
+            }
         }
+    }
+
+    static func isPidFileFromPreviousBoot(_ pidFile: URL) -> Bool {
+        guard let boot = LaunchConfig.systemBootDate(),
+              let attrs = try? FileManager.default.attributesOfItem(atPath: pidFile.path),
+              let modified = attrs[.modificationDate] as? Date
+        else { return false }
+        return modified < boot
     }
 
     static func looksLikeNovaWeb(_ command: String) -> Bool {
@@ -81,7 +103,10 @@ enum ProcessControl {
         var fileActions: posix_spawn_file_actions_t?
         posix_spawn_file_actions_init(&fileActions)
         defer { posix_spawn_file_actions_destroy(&fileActions) }
-        cwd.path.withCString { _ = posix_spawn_file_actions_addchdir_np(&fileActions, $0) }
+        let chdirStatus = cwd.path.withCString { posix_spawn_file_actions_addchdir_np(&fileActions, $0) }
+        if chdirStatus != 0 {
+            throw LaunchError.start("Working Directory konnte nicht gesetzt werden: \(cwd.path)")
+        }
         posix_spawn_file_actions_addopen(&fileActions, 0, "/dev/null", O_RDONLY, 0)
         logFile.path.withCString {
             _ = posix_spawn_file_actions_addopen(&fileActions, 1, $0, O_WRONLY | O_CREAT | O_APPEND, 0o600)
@@ -99,7 +124,36 @@ enum ProcessControl {
         if status != 0 {
             throw LaunchError.start("Prozessstart fehlgeschlagen (\(executable.lastPathComponent), errno \(status)).")
         }
-        return SpawnedProcess(pid: pid, pgid: pid, argv: argv)
+        return SpawnedProcess(pid: pid, pgid: pid, argv: argv, startedAt: Date())
+    }
+
+    static func childExitDescription(_ pid: pid_t) -> String? {
+        var status: Int32 = 0
+        let result = waitpid(pid, &status, WNOHANG)
+        guard result == pid else { return nil }
+        let waitStatus = status & 0o177
+        if waitStatus == 0 {
+            return "exit \((status >> 8) & 0xff)"
+        }
+        if waitStatus != 0o177 {
+            return "signal \(waitStatus)"
+        }
+        return "beendet"
+    }
+
+    static func tailFile(_ url: URL, maxBytes: Int = 2500) -> String {
+        guard let handle = try? FileHandle(forReadingFrom: url) else { return "" }
+        defer { try? handle.close() }
+        let size = (try? handle.seekToEnd()) ?? 0
+        let start = size > UInt64(maxBytes) ? size - UInt64(maxBytes) : 0
+        do {
+            try handle.seek(toOffset: start)
+            guard let data = try handle.readToEnd(), !data.isEmpty else { return "" }
+            return String(data: data, encoding: .utf8)?
+                .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        } catch {
+            return ""
+        }
     }
 
     static func stopOwned(_ process: SpawnedProcess, timeoutMs: Int = 2500) {
@@ -114,6 +168,7 @@ enum ProcessControl {
 
         let deadline = Date().addingTimeInterval(Double(timeoutMs) / 1000)
         while Date() < deadline {
+            reap(process.pid)
             let alive = ([process.pid] + descendants).filter(isAlive)
             if alive.isEmpty { return }
             Thread.sleep(forTimeInterval: 0.1)
@@ -123,6 +178,10 @@ enum ProcessControl {
         }
         for pid in ([process.pid] + descendants) where isAlive(pid) {
             _ = kill(pid, SIGKILL)
+        }
+        reap(process.pid)
+        for child in descendants {
+            reap(child)
         }
     }
 
@@ -144,6 +203,11 @@ enum ProcessControl {
             }
         }
         return seen
+    }
+
+    private static func reap(_ pid: pid_t) {
+        var status: Int32 = 0
+        _ = waitpid(pid, &status, WNOHANG)
     }
 
     private static func runCapture(_ launchPath: String, _ arguments: [String]) -> String? {

@@ -9,6 +9,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var config: LaunchConfig?
     private var log: LogWriter?
     private var shuttingDown = false
+    private var didShutdown = false
+    private var uiReady = false
+    private var showingError = false
     private var lockFd: Int32 = -1
     private let workQueue = DispatchQueue(label: "io.elevum.nova.supervisor", qos: .userInitiated)
 
@@ -16,6 +19,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         buildMenu()
         if let existing = SingleInstance.existing(bundleIdentifier: LaunchConfig.defaultBundleIdentifier) {
             existing.activate(options: [.activateIgnoringOtherApps])
+            didShutdown = true
             NSApp.terminate(nil)
             return
         }
@@ -28,13 +32,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             self.log = log
             if !acquireInstanceLock(at: config.novaDir.appendingPathComponent("launcher.lock")) {
                 SingleInstance.existing(bundleIdentifier: config.bundleIdentifier)?.activate(options: [.activateIgnoringOtherApps])
+                didShutdown = true
                 NSApp.terminate(nil)
                 return
             }
             supervisor = ProcessSupervisor(config: config, log: log)
-            showStatus("STARTING", "Dependencies prüfen")
+            showStatus("CHECKING_ENVIRONMENT", "Dependencies prüfen")
             log.info("NOVA.app gestartet", fields: [
                 "microphoneTcc": microphoneTccLabel(AVCaptureDevice.authorizationStatus(for: .audio)),
+                "boot": LaunchConfig.systemBootDate().map { ISO8601DateFormatter().string(from: $0) } ?? "unknown",
             ])
             workQueue.async { [weak self] in
                 self?.bootstrap()
@@ -45,6 +51,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+        if uiReady {
+            webWindow?.window?.makeKeyAndOrderFront(nil)
+            NSApp.activate(ignoringOtherApps: true)
+            return true
+        }
         workQueue.async { [weak self] in
             self?.handleReopen()
         }
@@ -52,12 +63,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
-        if shuttingDown { return .terminateNow }
+        if didShutdown { return .terminateNow }
+        if shuttingDown { return .terminateLater }
         shuttingDown = true
         supervisor?.cancel()
+        closeVisibleWindows(keepAlert: true)
         workQueue.async { [weak self] in
             self?.supervisor?.shutdownOwned()
             DispatchQueue.main.async {
+                self?.didShutdown = true
+                self?.releaseInstanceLock()
+                self?.closeVisibleWindows(keepAlert: false)
                 NSApp.reply(toApplicationShouldTerminate: true)
             }
         }
@@ -65,7 +81,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
-        true
+        uiReady && !showingError && !shuttingDown
     }
 
     private func bootstrap() {
@@ -73,14 +89,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         do {
             try supervisor.start { [weak self] phase in
                 DispatchQueue.main.sync {
-                    self?.showStatus("STARTING", phase)
+                    self?.showStatus(supervisor.state.rawValue.uppercased(), phase)
                 }
             }
             DispatchQueue.main.async { [weak self] in
-                self?.showStatus("READY", "NOVA UI öffnen")
-                self?.openUI()
+                guard let self, !self.shuttingDown, !self.showingError else { return }
+                self.showStatus("READY", "NOVA UI öffnen")
+                self.openUI()
             }
         } catch {
+            if supervisor.wasCancelled || shuttingDown {
+                log?.info("Start nach Beenden still beendet")
+                return
+            }
             DispatchQueue.main.async { [weak self] in
                 self?.presentError(error, logDirectory: self?.config?.logDir, fatal: true)
             }
@@ -88,11 +109,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func handleReopen() {
-        guard let supervisor else { return }
+        guard let supervisor, !showingError, !shuttingDown else { return }
         do {
             try supervisor.reopenOrRepair { [weak self] phase in
                 DispatchQueue.main.sync {
-                    self?.showStatus("STARTING", phase)
+                    self?.showStatus(supervisor.state.rawValue.uppercased(), phase)
                 }
             }
             DispatchQueue.main.async { [weak self] in
@@ -107,21 +128,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func openUI() {
         guard let config else { return }
-        statusWindow?.close()
-        statusWindow = nil
+        closeStatusWindow()
         switch config.uiMode {
         case .browser:
+            uiReady = true
             NSWorkspace.shared.open(config.webURL)
         case .webview:
             if webWindow == nil {
                 webWindow = NovaWebWindowController(startURL: config.webURL, log: log)
             }
+            uiReady = true
             webWindow?.loadUI()
             NSApp.activate(ignoringOtherApps: true)
         }
     }
 
     private func showStatus(_ phase: String, _ detail: String) {
+        if showingError { return }
         if statusWindow == nil {
             statusWindow = StatusWindowController()
         }
@@ -131,7 +154,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func presentError(_ error: Error, logDirectory: URL?, fatal: Bool = true) {
-        showStatus("ERROR", error.localizedDescription)
+        showingError = true
+        uiReady = false
+        closeStatusWindow()
+        webWindow?.close()
+        webWindow = nil
         log?.error(error.localizedDescription)
         let alert = NSAlert()
         alert.alertStyle = .critical
@@ -142,12 +169,57 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if logDirectory != nil {
             alert.addButton(withTitle: "Logs öffnen")
         }
+
+        if ProcessInfo.processInfo.environment["NOVA_TEST_AUTOQUIT_ON_ERROR"] == "1" {
+            log?.info("Testmodus: Fehlerdialog wird automatisch geschlossen")
+            finishAfterError(openLogs: false, fatal: fatal)
+            return
+        }
+
         let response = alert.runModal()
-        if response == .alertSecondButtonReturn, let logDirectory {
+        let openLogs = response == .alertSecondButtonReturn && logDirectory != nil
+        if openLogs, let logDirectory {
             NSWorkspace.shared.open(logDirectory)
         }
-        if fatal {
-            NSApp.terminate(nil)
+        finishAfterError(openLogs: openLogs, fatal: fatal)
+    }
+
+    private func finishAfterError(openLogs: Bool, fatal: Bool) {
+        closeVisibleWindows(keepAlert: false)
+        showingError = false
+        guard fatal else { return }
+        shuttingDown = true
+        workQueue.async { [weak self] in
+            self?.supervisor?.shutdownOwned()
+            DispatchQueue.main.async {
+                self?.didShutdown = true
+                self?.releaseInstanceLock()
+                self?.closeVisibleWindows(keepAlert: false)
+                NSApp.terminate(nil)
+            }
+        }
+    }
+
+    private func closeStatusWindow() {
+        if let window = statusWindow?.window {
+            window.orderOut(nil)
+            window.close()
+        }
+        statusWindow?.close()
+        statusWindow = nil
+    }
+
+    private func closeVisibleWindows(keepAlert: Bool) {
+        closeStatusWindow()
+        webWindow?.window?.orderOut(nil)
+        webWindow?.close()
+        webWindow = nil
+        for window in NSApp.windows {
+            if keepAlert, window.isSheet || window.className.contains("Alert") {
+                continue
+            }
+            window.orderOut(nil)
+            window.close()
         }
     }
 
@@ -161,6 +233,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return false
         }
         return true
+    }
+
+    private func releaseInstanceLock() {
+        if lockFd >= 0 {
+            _ = flock(lockFd, LOCK_UN)
+            close(lockFd)
+            lockFd = -1
+        }
     }
 
     private func buildMenu() {

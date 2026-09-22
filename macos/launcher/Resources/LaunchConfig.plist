@@ -8,6 +8,8 @@
 	<string>webview</string>
 	<key>NOVAProjectRoot</key>
 	<string>/Volumes/My Book 24/NOVA</string>
+	<key>NOVANodeBin</key>
+	<string>/usr/local/bin/node</string>
 	<key>NOVAWebHost</key>
 	<string>127.0.0.1</string>
 	<key>NOVAWebPort</key>

@@ -19,6 +19,7 @@ final class StatusWindowController: NSWindowController {
         window.titleVisibility = .hidden
         window.titlebarAppearsTransparent = true
         window.isReleasedWhenClosed = false
+        window.level = .floating
         window.center()
         self.init(window: window)
         window.contentView = buildView()
@@ -61,6 +62,8 @@ final class NovaWebWindowController: NSWindowController, WKNavigationDelegate, W
     private var webView: WKWebView!
     private let startURL: URL
     private let log: LogWriter?
+    private var loadAttempts = 0
+    private let maxLoadAttempts = 8
 
     init(startURL: URL, log: LogWriter? = nil) {
         self.startURL = startURL
@@ -72,7 +75,7 @@ final class NovaWebWindowController: NSWindowController, WKNavigationDelegate, W
             defer: false
         )
         window.title = "NOVA"
-        window.isReleasedWhenClosed = false
+        window.isReleasedWhenClosed = true
         window.setFrameAutosaveName("NOVAMain")
         window.center()
         super.init(window: window)
@@ -89,13 +92,46 @@ final class NovaWebWindowController: NSWindowController, WKNavigationDelegate, W
     }
 
     func loadUI() {
+        loadAttempts = 0
         // Chrome Web Speech ≠ WKWebView: Safari/WebKit needs Apple Speech TCC
         // before webkitSpeechRecognition can leave not-allowed.
         ensureSpeechRecognitionAccess { [weak self] in
             guard let self else { return }
-            self.webView.load(URLRequest(url: self.startURL, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 30))
+            self.attemptLoad()
             self.window?.makeKeyAndOrderFront(nil)
         }
+    }
+
+    private func attemptLoad() {
+        loadAttempts += 1
+        log?.info("WebView laden", fields: ["attempt": String(loadAttempts), "url": startURL.absoluteString])
+        webView.load(URLRequest(url: startURL, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 45))
+    }
+
+    private func retryLoadIfPossible() {
+        guard loadAttempts < maxLoadAttempts else {
+            log?.error("WebView konnte NOVA nach mehreren Versuchen nicht laden")
+            return
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) { [weak self] in
+            self?.attemptLoad()
+        }
+    }
+
+    func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
+        if isCancelledNavigation(error) { return }
+        log?.warn("WebView-Navigation fehlgeschlagen", fields: ["error": error.localizedDescription])
+        retryLoadIfPossible()
+    }
+
+    func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
+        if isCancelledNavigation(error) { return }
+        log?.warn("WebView-Provisional fehlgeschlagen", fields: ["error": error.localizedDescription])
+        retryLoadIfPossible()
+    }
+
+    private func isCancelledNavigation(_ error: Error) -> Bool {
+        (error as NSError).code == NSURLErrorCancelled
     }
 
     func startVoiceFromPage() {

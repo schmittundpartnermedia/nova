@@ -25,6 +25,7 @@
     "playwright:install": "PLAYWRIGHT_BROWSERS_PATH=.nova/ms-playwright playwright install chromium",
     "desktop-service": "tsx services/desktop-service/index.ts",
     "macos:build": "bash macos/launcher/scripts/build.sh",
+    "verify:launcher": "bash scripts/verify-launcher-startup.sh",
     "generate:dev-rig": "tsx scripts/generate-dev-rig.ts"
   },
   "dependencies": {

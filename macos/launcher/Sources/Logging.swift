@@ -44,11 +44,17 @@ final class LogWriter {
 
     init(url: URL) {
         self.url = url
-        fm.createFile(atPath: url.path, contents: nil, attributes: [.posixPermissions: 0o600])
+        if !fm.fileExists(atPath: url.path) {
+            fm.createFile(atPath: url.path, contents: nil, attributes: [.posixPermissions: 0o600])
+        }
     }
 
     func info(_ message: String, fields: [String: String] = [:]) {
         write(level: "info", message: message, fields: fields)
+    }
+
+    func warn(_ message: String, fields: [String: String] = [:]) {
+        write(level: "warn", message: message, fields: fields)
     }
 
     func error(_ message: String, fields: [String: String] = [:]) {

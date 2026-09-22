@@ -1,3 +1,4 @@
+import Darwin
 import Foundation
 
 enum LaunchMode: String {
@@ -8,6 +9,21 @@ enum LaunchMode: String {
 enum UIMode: String {
     case webview
     case browser
+}
+
+enum SupervisorState: String {
+    case idle
+    case checkingEnvironment
+    case checkingVolume
+    case checkingRuntime
+    case startingApplicationService
+    case waitingApplicationHealth
+    case startingDesktopService
+    case waitingDesktopHealth
+    case checkingNativeHelper
+    case ready
+    case startFailed
+    case shuttingDown
 }
 
 struct LaunchConfig {
@@ -34,6 +50,10 @@ struct LaunchConfig {
         URL(string: "http://\(webHost):\(webPort)/")!
     }
 
+    var webHealthURL: URL {
+        URL(string: "http://\(webHost):\(webPort)/api/nova/ready")!
+    }
+
     var desktopHealthURL: URL {
         URL(string: "http://\(desktopHost):\(desktopPort)/health")!
     }
@@ -58,6 +78,10 @@ struct LaunchConfig {
         novaDir.appendingPathComponent("launcher-session.json")
     }
 
+    var runtimePinFile: URL {
+        novaDir.appendingPathComponent("runtime.json")
+    }
+
     var launcherLogFile: URL {
         logDir.appendingPathComponent("launcher.log")
     }
@@ -68,6 +92,12 @@ struct LaunchConfig {
 
     var desktopLogFile: URL {
         logDir.appendingPathComponent("desktop-service.log")
+    }
+
+    var volumeRoot: URL? {
+        let parts = projectRoot.pathComponents
+        guard parts.count >= 3, parts[1] == "Volumes" else { return nil }
+        return URL(fileURLWithPath: "/" + parts[1] + "/" + parts[2], isDirectory: true)
     }
 
     static let defaultBundleIdentifier = "io.elevum.nova"
@@ -85,7 +115,7 @@ struct LaunchConfig {
         let startAtLogin = bool(plist["NOVAStartAtLogin"], fallback: false)
 
         let projectRoot = try resolveProjectRoot(plist: plist)
-        let nodeBin = try resolveNode(plist: plist)
+        let nodeBin = try resolveNode(plist: plist, projectRoot: projectRoot)
         let nextBin = projectRoot.appendingPathComponent("node_modules/next/dist/bin/next")
         let tsxBin = projectRoot.appendingPathComponent("node_modules/tsx/dist/cli.mjs")
         let helperApp = projectRoot.appendingPathComponent("services/desktop-service/native/bin/NOVA Desktop Helper.app")
@@ -116,8 +146,14 @@ struct LaunchConfig {
         )
     }
 
+    static func systemBootDate() -> Date? {
+        var tv = timeval()
+        var size = MemoryLayout<timeval>.stride
+        guard sysctlbyname("kern.boottime", &tv, &size, nil, 0) == 0 else { return nil }
+        return Date(timeIntervalSince1970: TimeInterval(tv.tv_sec))
+    }
+
     private static func resolveProjectRoot(plist: [String: Any]) throws -> URL {
-        let fm = FileManager.default
         let candidates: [URL] = [
             envURL("NOVA_PROJECT_ROOT"),
             string(plist["NOVAProjectRoot"], fallback: "").isEmpty
@@ -128,42 +164,117 @@ struct LaunchConfig {
         ].compactMap { $0 }
 
         for candidate in candidates {
-            let packageJSON = candidate.appendingPathComponent("package.json")
-            if fm.fileExists(atPath: packageJSON.path),
-               let data = try? Data(contentsOf: packageJSON),
-               let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-               (json["name"] as? String) == "nova"
-            {
+            if isNovaProject(candidate) {
                 return candidate.standardizedFileURL
             }
         }
         throw LaunchError.dependency("NOVA-Projektordner wurde nicht gefunden.")
     }
 
-    private static func resolveNode(plist: [String: Any]) throws -> URL {
+    static func isNovaProject(_ url: URL) -> Bool {
+        let packageJSON = url.appendingPathComponent("package.json")
+        guard FileManager.default.fileExists(atPath: packageJSON.path),
+              let data = try? Data(contentsOf: packageJSON),
+              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              (json["name"] as? String) == "nova"
+        else { return false }
+        return true
+    }
+
+    static func projectAvailability(projectRoot: URL) -> (ready: Bool, message: String) {
         let fm = FileManager.default
-        var paths = [
-            envURL("NOVA_NODE_BIN")?.path,
-            string(plist["NOVANodeBin"], fallback: "").isEmpty ? nil : string(plist["NOVANodeBin"], fallback: ""),
+        let parts = projectRoot.pathComponents
+        if parts.count >= 3, parts[1] == "Volumes" {
+            let volume = URL(fileURLWithPath: "/" + parts[1] + "/" + parts[2], isDirectory: true)
+            var isDir: ObjCBool = false
+            if !fm.fileExists(atPath: volume.path, isDirectory: &isDir) || !isDir.boolValue {
+                return (false, "Das Volume „\(parts[2])“ ist nicht gemountet. Bitte das Laufwerk anschließen und NOVA erneut starten.")
+            }
+            if !isVolumeReadable(volume) {
+                return (false, "Das Volume „\(parts[2])“ ist gemountet, aber noch nicht lesbar.")
+            }
+        }
+        if !fm.fileExists(atPath: projectRoot.path) {
+            return (false, "NOVA-Projektordner fehlt: \(projectRoot.path)")
+        }
+        if !isNovaProject(projectRoot) {
+            return (false, "Unter \(projectRoot.path) liegt kein gültiges NOVA-Projekt.")
+        }
+        return (true, "Projekt verfügbar")
+    }
+
+    private static func isVolumeReadable(_ volume: URL) -> Bool {
+        FileManager.default.isReadableFile(atPath: volume.path)
+    }
+
+    private static func resolveNode(plist: [String: Any], projectRoot: URL) throws -> URL {
+        let fm = FileManager.default
+        var paths: [String] = []
+
+        if let env = envURL("NOVA_NODE_BIN")?.path {
+            paths.append(env)
+        }
+        let pinned = string(plist["NOVANodeBin"], fallback: "")
+        if !pinned.isEmpty {
+            paths.append(pinned)
+        }
+        if let saved = readPinnedNode(projectRoot: projectRoot) {
+            paths.append(saved)
+        }
+        paths.append(contentsOf: [
             "/usr/local/bin/node",
             "/opt/homebrew/bin/node",
             "/usr/bin/node",
-        ].compactMap { $0 }
+        ])
+        paths.append(contentsOf: wellKnownVersionManagerNodes())
 
-        if let login = whichFromLoginShell("node") {
-            paths.append(login)
+        var seen = Set<String>()
+        for path in paths {
+            let standardized = URL(fileURLWithPath: path).standardizedFileURL.path
+            if seen.contains(standardized) { continue }
+            seen.insert(standardized)
+            if fm.isExecutableFile(atPath: standardized), nodeVersion(at: standardized) != nil {
+                return URL(fileURLWithPath: standardized)
+            }
         }
-
-        for path in paths where fm.isExecutableFile(atPath: path) {
-            return URL(fileURLWithPath: path)
-        }
-        throw LaunchError.dependency("Node.js wurde nicht gefunden. Erwartet z. B. /usr/local/bin/node.")
+        throw LaunchError.dependency("Node.js wurde nicht gefunden. NOVA erwartet eine feste Runtime unter /usr/local/bin/node oder dem in LaunchConfig.plist gesetzten NOVANodeBin.")
     }
 
-    private static func whichFromLoginShell(_ command: String) -> String? {
+    private static func readPinnedNode(projectRoot: URL) -> String? {
+        let url = projectRoot.appendingPathComponent(".nova/runtime.json")
+        guard let data = try? Data(contentsOf: url),
+              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let path = json["nodeBin"] as? String,
+              !path.isEmpty
+        else { return nil }
+        return path
+    }
+
+    private static func wellKnownVersionManagerNodes() -> [String] {
+        let home = NSHomeDirectory()
+        let fm = FileManager.default
+        var found: [String] = []
+        let aliases = [
+            "\(home)/.local/share/fnm/aliases/default/bin/node",
+            "\(home)/Library/Application Support/fnm/aliases/default/bin/node",
+        ]
+        found.append(contentsOf: aliases.filter { fm.isExecutableFile(atPath: $0) })
+
+        let nvmRoot = URL(fileURLWithPath: "\(home)/.nvm/versions/node")
+        if let versions = try? fm.contentsOfDirectory(at: nvmRoot, includingPropertiesForKeys: nil) {
+            let nodes = versions
+                .map { $0.appendingPathComponent("bin/node").path }
+                .filter { fm.isExecutableFile(atPath: $0) }
+                .sorted()
+            found.append(contentsOf: nodes.reversed())
+        }
+        return found
+    }
+
+    static func nodeVersion(at path: String) -> String? {
         let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/bin/zsh")
-        process.arguments = ["-lc", "command -v \(command)"]
+        process.executableURL = URL(fileURLWithPath: path)
+        process.arguments = ["-v"]
         let pipe = Pipe()
         process.standardOutput = pipe
         process.standardError = FileHandle.nullDevice
@@ -177,7 +288,7 @@ struct LaunchConfig {
         guard process.terminationStatus == 0 else { return nil }
         let data = pipe.fileHandleForReading.readDataToEndOfFile()
         let value = String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        return value.isEmpty ? nil : value
+        return value.hasPrefix("v") ? value : nil
     }
 
     private static func envURL(_ key: String) -> URL? {
