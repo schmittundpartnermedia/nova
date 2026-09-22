@@ -3,6 +3,8 @@ import { detectComputerIntent } from "@/agents/computer/intent";
 import { runComputerAgent } from "@/agents/computer";
 import { detectCodingIntent } from "@/agents/coding/intent";
 import { runCodingAgent } from "@/agents/coding";
+import { detectKnowledgeIntent } from "@/agents/knowledge/intent";
+import { runKnowledgeAgent } from "@/agents/knowledge";
 import { needsLiveResearch } from "@/lib/research/intent";
 import { needsSpecialistWork } from "@/agents/master/intent";
 import { getDefaultProject, runAgentStep } from "@/agents/runtime";
@@ -12,6 +14,7 @@ import { createApprovalRequest } from "@/services/approvals";
 import { recordActivity } from "@/services/archive";
 import { createSource, upsertDurableMemory } from "@/services/memory";
 import { loadRelevantBusinessContext } from "@/services/retrieval";
+import { requestKnowledgeCancel } from "@/services/knowledge/jobs";
 import { prisma } from "@/lib/prisma";
 import { looksLikeSecret, redactSecrets } from "@/lib/secrets";
 import type { AgentRunContext, AgentRunResult } from "@/types/agents";
@@ -217,13 +220,23 @@ export async function runMaster(input: {
   await emit(input.onEvent, { type: "status", orbState: "THINKING", statusMessage: "Ich denke nach …" });
 
   const computerIntent = detectComputerIntent(input.userRequest);
-  if (computerIntent.kind === "cancel") {
-    return runComputerMasterPath(input, computerIntent.statusMessage);
+  const knowledgeIntent = detectKnowledgeIntent(input.userRequest);
+  if (computerIntent.kind === "cancel" || knowledgeIntent.kind === "cancel") {
+    await requestKnowledgeCancel(input.organizationId);
+    return runComputerMasterPath(input, computerIntent.statusMessage || knowledgeIntent.statusMessage);
   }
 
   const codingIntent = detectCodingIntent(input.userRequest);
   if (codingIntent.kind !== "none") {
     return runCodingMasterPath(input, codingIntent.statusMessage);
+  }
+
+  if (knowledgeIntent.kind === "import") {
+    return runKnowledgeMasterPath(input, knowledgeIntent.statusMessage);
+  }
+
+  if (knowledgeIntent.kind === "query") {
+    return runKnowledgeQueryPath(input, knowledgeIntent.statusMessage);
   }
 
   if (computerIntent.kind !== "none") {
@@ -280,7 +293,7 @@ export async function runMaster(input: {
     model: decision.model,
     schemaName: "master-plan",
     schemaDescription:
-      'JSON mit intent, goal, agents (Teilmenge von research|communication|task|project|coding), needsApproval, remember, searchRequired, externalAction (none|mail.send|calendar|other), replyHint, communicationBrief, taskDraft, projectDraft {create,name,description,list}, memoryItems [{type,title,content}], mock=false wenn echter Provider.',
+      'JSON mit intent, goal, agents (Teilmenge von research|communication|task|project|coding|knowledge), needsApproval, remember, searchRequired, externalAction (none|mail.send|calendar|other), replyHint, communicationBrief, taskDraft, projectDraft {create,name,description,list}, memoryItems [{type,title,content}], mock=false wenn echter Provider.',
     prompt: `Du bist NOVA, persönlicher Business-Assistent der Organization ${contextPack.organizationName}.
 Entscheide anhand von Intent und Kontext, nicht anhand einzelner Keywords, ob du direkt antwortest oder interne Agenten nutzt.
 
@@ -289,6 +302,7 @@ Verfügbare implementierte Agenten: ${available.join(", ")}
 Regeln:
 - Direkt antworten, wenn vorhandenes Memory/Projektwissen reicht.
 - research nur bei Bedarf an externer Recherche.
+- knowledge für Dokumentimport, Ordnerlesen und Fragen an vorhandene Unterlagen. Nicht für Codeänderungen.
 - communication für Mail-/Anschreiben-Entwürfe, niemals Versand.
 - task für Aufgaben/Deadlines.
 - project für Projektübersicht, Status oder neues Projekt.
@@ -733,6 +747,85 @@ Formuliere die Nutzerantwort. Wenn ein Entwurf erzeugt wurde, zeige ihn.${
     await updateJobStatus(input.organizationId, job.id, "failed", { completedAt: new Date() });
     throw error;
   }
+}
+
+async function runKnowledgeMasterPath(
+  input: {
+    organizationId: string;
+    userRequest: string;
+    conversationId?: string;
+    sourceMessageId?: string;
+    onEvent?: (event: MasterEvent) => void;
+  },
+  statusMessage: string,
+): Promise<MasterRunResult> {
+  const project = await getDefaultProject(input.organizationId);
+  const job = await createJob({
+    organizationId: input.organizationId,
+    userRequest: input.userRequest,
+    goal: statusMessage || input.userRequest,
+    projectId: project?.id,
+  });
+  await updateJobStatus(input.organizationId, job.id, "running", { startedAt: new Date() });
+  await emit(input.onEvent, { type: "status", orbState: "WORKING", statusMessage });
+
+  const result = await runKnowledgeAgent({
+    organizationId: input.organizationId,
+    jobId: job.id,
+    userRequest: input.userRequest,
+    projectId: project?.id,
+    onStatus: (message) => {
+      void emit(input.onEvent, { type: "status", orbState: "WORKING", statusMessage: message });
+    },
+  });
+  if (result.reply) {
+    await emit(input.onEvent, { type: "delta", delta: result.reply });
+  }
+  const jobStatus = result.cancelled ? "cancelled" : result.ok ? "completed" : "failed";
+  await updateJobStatus(input.organizationId, job.id, jobStatus, { completedAt: new Date() });
+  return {
+    jobId: job.id,
+    status: jobStatus,
+    orbState: result.ok ? "DONE" : "ERROR",
+    statusMessage: result.statusMessage,
+    reply: result.reply,
+    mock: false,
+    providerMode: "fallback",
+    providerId: "knowledge",
+    model: "nova-knowledge",
+  };
+}
+
+async function runKnowledgeQueryPath(
+  input: {
+    organizationId: string;
+    userRequest: string;
+    conversationId?: string;
+    sourceMessageId?: string;
+    onEvent?: (event: MasterEvent) => void;
+  },
+  statusMessage: string,
+): Promise<MasterRunResult> {
+  await emit(input.onEvent, { type: "status", orbState: "THINKING", statusMessage });
+  const result = await runKnowledgeAgent({
+    organizationId: input.organizationId,
+    userRequest: input.userRequest,
+    query: input.userRequest,
+  });
+  if (result.reply) {
+    await emit(input.onEvent, { type: "delta", delta: result.reply });
+  }
+  return {
+    jobId: "",
+    status: "completed",
+    orbState: "DONE",
+    statusMessage: result.statusMessage,
+    reply: result.reply,
+    mock: false,
+    providerMode: "fallback",
+    providerId: "knowledge",
+    model: "nova-knowledge",
+  };
 }
 
 async function runComputerMasterPath(

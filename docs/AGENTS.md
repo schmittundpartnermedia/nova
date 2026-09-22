@@ -26,6 +26,7 @@ Der Master wählt Agenten dynamisch anhand dieser Metadaten und eines Plans vom 
 | Project | Projektkontext laden |
 | Coding | Softwareentwicklung: plant, delegiert an Cursor Agent CLI, prüft Git/Tests/Browser, iteriert |
 | Computer | Lokale Mac-Steuerung über Desktop Service: Git, Dateien, Shell, Prozesse, Playwright-Browser, Cursor CLI |
+| Knowledge | Dokumente/Ordner verstehen, strukturieren, Knowledge Items erzeugen, hybrid suchen. Memory speichert nur dauerhaft relevantes Wissen. |
 
 ## Vorbereitet (Registry, nicht vollständig)
 

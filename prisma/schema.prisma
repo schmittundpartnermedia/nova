@@ -39,6 +39,12 @@ model Organization {
   computerActions   ComputerAction[]
   projectContexts   ProjectContext[]
   cursorSessions    CursorSession[]
+  knowledgeSources  KnowledgeSource[]
+  knowledgeDocuments KnowledgeParsedDocument[]
+  knowledgeItems    KnowledgeItem[]
+  knowledgeEmbeddings KnowledgeEmbedding[]
+  knowledgeImports  KnowledgeImport[]
+  knowledgeContradictions KnowledgeContradiction[]
 
   @@map("organizations")
 }
@@ -92,8 +98,10 @@ model Project {
   communications Communication[]
   memoryEntries  MemoryEntry[]
   conversations  Conversation[]
-  context        ProjectContext?
-  cursorSessions CursorSession[]
+  context          ProjectContext?
+  cursorSessions   CursorSession[]
+  knowledgeSources KnowledgeSource[]
+  knowledgeItems   KnowledgeItem[]
 
   @@index([organizationId])
   @@map("projects")
@@ -203,6 +211,8 @@ model Job {
   computerActions  ComputerAction[]
   cursorSessions   CursorSession[]
   sources          Source[]
+  knowledgeImports KnowledgeImport[]
+  knowledgeSources KnowledgeSource[]
 
   @@index([organizationId])
   @@index([organizationId, status])
@@ -290,6 +300,7 @@ model MemoryEntry {
   conversationMessage ConversationMessage?  @relation(fields: [conversationMessageId], references: [id], onDelete: SetNull)
   fromRelations       MemoryRelation[]      @relation("RelationFrom")
   toRelations         MemoryRelation[]      @relation("RelationTo")
+  knowledgeItems      KnowledgeItem[]
 
   @@index([organizationId])
   @@index([organizationId, type])
@@ -516,13 +527,16 @@ model Source {
   label          String?
   createdAt      DateTime  @default(now()) @map("created_at")
 
-  organization  Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  job           Job?          @relation(fields: [jobId], references: [id], onDelete: SetNull)
-  memoryEntries MemoryEntry[]
+  organization      Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  job               Job?             @relation(fields: [jobId], references: [id], onDelete: SetNull)
+  memoryEntries     MemoryEntry[]
+  knowledgeSourceId String?          @map("knowledge_source_id")
+  knowledgeSource   KnowledgeSource? @relation(fields: [knowledgeSourceId], references: [id], onDelete: SetNull)
 
   @@index([organizationId])
   @@index([organizationId, jobId])
   @@index([organizationId, url])
+  @@index([knowledgeSourceId])
   @@map("sources")
 }
 
@@ -658,4 +672,185 @@ model CursorSession {
   @@index([organizationId, status])
   @@index([organizationId, jobId])
   @@map("cursor_sessions")
+}
+
+model KnowledgeSource {
+  id                  String    @id @default(cuid())
+  organizationId      String    @map("organization_id")
+  sourceType          String    @map("source_type")
+  name                String
+  originalPath        String?   @map("original_path")
+  mimeType            String?   @map("mime_type")
+  checksum            String
+  size                Int
+  createdAt           DateTime  @default(now()) @map("created_at")
+  importedAt          DateTime? @map("imported_at")
+  modifiedAt          DateTime? @map("modified_at")
+  projectId           String?   @map("project_id")
+  companyId           String?   @map("company_id")
+  contactId           String?   @map("contact_id")
+  conversationId      String?   @map("conversation_id")
+  parentSourceId      String?   @map("parent_source_id")
+  versionGroupId      String?   @map("version_group_id")
+  versionLabel        String?   @map("version_label")
+  versionNumber       Int       @default(1) @map("version_number")
+  metadata            String?
+  status              String    @default("DISCOVERED")
+  error               String?
+  jobId               String?   @map("job_id")
+  importId            String?   @map("import_id")
+  language            String?
+  ocrRequired         Boolean   @default(false) @map("ocr_required")
+  injectionSuspected  Boolean   @default(false) @map("injection_suspected")
+  skippedReason       String?   @map("skipped_reason")
+  duplicateOfId       String?   @map("duplicate_of_id")
+
+  organization Organization            @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  project      Project?                @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  job          Job?                    @relation(fields: [jobId], references: [id], onDelete: SetNull)
+  import       KnowledgeImport?        @relation(fields: [importId], references: [id], onDelete: SetNull)
+  parsed       KnowledgeParsedDocument?
+  items        KnowledgeItem[]
+  embeddings   KnowledgeEmbedding[]
+  sources      Source[]
+
+  @@index([organizationId])
+  @@index([organizationId, checksum])
+  @@index([organizationId, status])
+  @@index([organizationId, versionGroupId])
+  @@index([importId])
+  @@map("knowledge_sources")
+}
+
+model KnowledgeParsedDocument {
+  id             String   @id @default(cuid())
+  organizationId String   @map("organization_id")
+  sourceId       String   @unique @map("source_id")
+  title          String
+  documentType   String   @map("document_type")
+  language       String?
+  metadata       String?
+  sectionsJson   String   @map("sections_json")
+  tablesJson     String   @map("tables_json")
+  entitiesJson   String   @map("entities_json")
+  datesJson      String   @map("dates_json")
+  referencesJson String   @map("references_json")
+  fulltext       String
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  organization Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  source       KnowledgeSource @relation(fields: [sourceId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId])
+  @@index([organizationId, fulltext])
+  @@map("knowledge_parsed_documents")
+}
+
+model KnowledgeItem {
+  id                    String   @id @default(cuid())
+  organizationId        String   @map("organization_id")
+  sourceId              String   @map("source_id")
+  type                  String
+  title                 String
+  content               String
+  normalizedKey         String?  @map("normalized_key")
+  normalizedValue       String?  @map("normalized_value")
+  entityName            String?  @map("entity_name")
+  projectId             String?  @map("project_id")
+  companyId             String?  @map("company_id")
+  contactId             String?  @map("contact_id")
+  locationJson          String   @map("location_json")
+  excerpt               String?
+  extractedAt           DateTime @map("extracted_at")
+  confidence            Float
+  extractor             String
+  verified              Boolean  @default(false)
+  duplicateOfId         String?  @map("duplicate_of_id")
+  contradictionGroupId  String?  @map("contradiction_group_id")
+  memoryEntryId         String?  @map("memory_entry_id")
+  fulltext              String
+  embeddingRef          String?  @map("embedding_ref")
+  createdAt             DateTime @default(now()) @map("created_at")
+  updatedAt             DateTime @updatedAt @map("updated_at")
+
+  organization Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  source       KnowledgeSource @relation(fields: [sourceId], references: [id], onDelete: Cascade)
+  project      Project?        @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  memoryEntry  MemoryEntry?    @relation(fields: [memoryEntryId], references: [id], onDelete: SetNull)
+  embeddings   KnowledgeEmbedding[]
+
+  @@index([organizationId])
+  @@index([organizationId, type])
+  @@index([organizationId, normalizedKey])
+  @@index([organizationId, fulltext])
+  @@index([sourceId])
+  @@index([memoryEntryId])
+  @@map("knowledge_items")
+}
+
+model KnowledgeContradiction {
+  id             String   @id @default(cuid())
+  organizationId String   @map("organization_id")
+  topic          String
+  itemIds        String   @map("item_ids")
+  valuesJson     String   @map("values_json")
+  status         String   @default("open")
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId])
+  @@index([organizationId, topic])
+  @@map("knowledge_contradictions")
+}
+
+model KnowledgeEmbedding {
+  id             String   @id @default(cuid())
+  organizationId String   @map("organization_id")
+  sourceId       String?  @map("source_id")
+  itemId         String?  @map("item_id")
+  provider       String
+  model          String
+  vector         String
+  text           String
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  organization Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  source       KnowledgeSource? @relation(fields: [sourceId], references: [id], onDelete: SetNull)
+  item         KnowledgeItem?   @relation(fields: [itemId], references: [id], onDelete: SetNull)
+
+  @@index([organizationId])
+  @@index([itemId])
+  @@index([sourceId])
+  @@map("knowledge_embeddings")
+}
+
+model KnowledgeImport {
+  id              String    @id @default(cuid())
+  organizationId  String    @map("organization_id")
+  jobId           String?   @map("job_id")
+  userRequest     String    @map("user_request")
+  rootPath        String?   @map("root_path")
+  status          String    @default("DISCOVERING")
+  cancelRequested Boolean   @default(false) @map("cancel_requested")
+  progressJson    String?   @map("progress_json")
+  filesTotal      Int       @default(0) @map("files_total")
+  filesSuccess    Int       @default(0) @map("files_success")
+  filesSkipped    Int       @default(0) @map("files_skipped")
+  filesFailed     Int       @default(0) @map("files_failed")
+  itemsCreated    Int       @default(0) @map("items_created")
+  memoryUpdates   Int       @default(0) @map("memory_updates")
+  relevantFiles   Int       @default(0) @map("relevant_files")
+  startedAt       DateTime  @default(now()) @map("started_at")
+  finishedAt      DateTime? @map("finished_at")
+  error           String?
+  metadata        String?
+
+  organization Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  job          Job?             @relation(fields: [jobId], references: [id], onDelete: SetNull)
+  sources      KnowledgeSource[]
+
+  @@index([organizationId, status])
+  @@index([organizationId, startedAt])
+  @@map("knowledge_imports")
 }

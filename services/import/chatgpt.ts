@@ -90,6 +90,6 @@ export async function importChatGPTExport(input: {
     sourceId: source.id,
     importedConversations,
     extractedInsights,
-    note: "Pipeline vorbereitet. Keine blinde Übernahme aller Chat-Nachrichten als Memory.",
+    note: "Pipeline vorbereitet. Transcript → Conversation Archive. Dauerhaftes Wissen folgt über den Knowledge Agent, nicht als blinde Memory-Übernahme aller Nachrichten.",
   };
 }

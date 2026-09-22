@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { assertOrganizationId } from "@/services/tenant";
 import { searchConversationMessages } from "@/services/conversation";
+import { buildKnowledgeContext } from "@/services/knowledge";
 
 export type RetrievalMode = "structured" | "fulltext" | "semantic" | "relation";
 
@@ -109,6 +110,7 @@ export type BusinessContextPack = {
   tasks: Array<{ id: string; title: string; status: string; dueAt: Date | null }>;
   recentMessages: Array<{ role: string; content: string }>;
   retrievedMessages: Array<{ role: string; content: string; createdAt: string }>;
+  knowledge: string;
   promptBlock: string;
 };
 
@@ -127,7 +129,7 @@ export async function loadRelevantBusinessContext(input: {
     throw new Error("Organization nicht gefunden oder Tenant mismatch.");
   }
 
-  const [memories, projects, companies, contacts, tasks, recentMessages, retrievedMessages] = await Promise.all([
+  const [memories, projects, companies, contacts, tasks, recentMessages, retrievedMessages, knowledge] = await Promise.all([
     searchMemory({ organizationId: input.organizationId, query, limit: 10 }),
     prisma.project.findMany({
       where: { organizationId: input.organizationId },
@@ -197,6 +199,9 @@ export async function loadRelevantBusinessContext(input: {
           limit: 6,
         })
       : Promise.resolve([]),
+    query
+      ? buildKnowledgeContext({ organizationId: input.organizationId, query, limit: 8 })
+      : Promise.resolve({ promptBlock: "", hits: [], contradictions: [], answer: "" }),
   ]);
 
   assertTenantIsolation(input.organizationId, projects, "Projekt");
@@ -250,6 +255,7 @@ export async function loadRelevantBusinessContext(input: {
       content: item.content.slice(0, 400),
       createdAt: item.createdAt,
     })),
+    knowledge: knowledge.promptBlock,
     promptBlock: "",
   };
 
@@ -286,6 +292,10 @@ function formatContextPack(pack: BusinessContextPack): string {
       ? pack.tasks.map((item) => `- ${item.title} (${item.status}${item.dueAt ? `, fällig ${item.dueAt.toISOString().slice(0, 10)}` : ""})`).join("\n")
       : "- keine offenen Treffer",
   ];
+
+  if (pack.knowledge) {
+    lines.push("", pack.knowledge);
+  }
 
   if (pack.recentMessages.length > 0) {
     lines.push("", "Aktuelle Conversation (Ausschnitt, nicht die komplette Historie):");

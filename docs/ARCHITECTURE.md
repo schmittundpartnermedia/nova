@@ -15,7 +15,7 @@ API / Bridge
         ↓
 Master Agent
         ↓
-Agent Registry  →  Research, Communication, Task, Project, … 
+Agent Registry  →  Research, Communication, Task, Project, Knowledge, … 
         ↓
 Search Provider (Web finden) / Browser (Seiten untersuchen)
         ↓
@@ -74,8 +74,8 @@ Vorbereitete Aktionen werden als `prepared` oder `suggested` gespeichert.
 
 - Echte Anthropic- / Local-AI-Anbindung
 - Echte Mail- und Kalender-Connectoren
-- Semantische Suche / Embeddings
-- ChatGPT-Export-Extraktion (Personen, Firmen, Entscheidungen)
+- Semantische Suche / Embeddings über austauschbare Embedding Provider (lokal vorhanden, OpenAI optional)
+- ChatGPT-Export-Extraktion (Personen, Firmen, Entscheidungen) – Parser vorbereitet, vollständiger Import folgt
 - MCP-Server-Prozess
 - Dauerfreigaben mit Limits in der Praxis
 - Watch-Agent (Follow-up-Überwachung)

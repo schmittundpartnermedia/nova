@@ -36,7 +36,8 @@ export type ActivityType =
   | "project_activity"
   | "execution"
   | "computer"
-  | "coding";
+  | "coding"
+  | "knowledge";
 
 export type ApprovalStatus = "pending" | "approved" | "rejected";
 
@@ -77,7 +78,14 @@ export type RelationType =
   | "follow_up"
   | "related"
   | "candidate_for"
-  | "drafted_for";
+  | "drafted_for"
+  | "founder_of"
+  | "product_of"
+  | "mentions"
+  | "has_deadline"
+  | "relates_to"
+  | "version_of"
+  | "contradicts";
 
 export type RiskLevel = "low" | "medium" | "high";
 

@@ -12,6 +12,7 @@ import {
 import { createApprovalRequest } from "@/services/approvals";
 import { recordActivity } from "@/services/archive";
 import { cancelCodingSessions } from "@/services/coding/sessions";
+import { requestKnowledgeCancel } from "@/services/knowledge/jobs";
 import { classifyComputerAction } from "@/lib/computer/risk";
 import { detectHardBlock } from "@/lib/computer/hard-blocks";
 import { isInjectionAttempt, wrapExternalContent } from "@/lib/computer/injection";
@@ -87,6 +88,7 @@ export async function runComputerAgent(input: {
 
   if (intent.kind === "cancel" || consumeCancelOrganization(input.organizationId)) {
     const count = await requestComputerCancel(input.organizationId);
+    await requestKnowledgeCancel(input.organizationId);
     await cancelDesktopJobs();
     return {
       ok: true,
@@ -387,8 +389,9 @@ export async function cancelComputerWork(organizationId: string): Promise<{ coun
   noteCancelOrganization(organizationId);
   const count = await requestComputerCancel(organizationId);
   const coding = await cancelCodingSessions(organizationId);
+  const knowledge = await requestKnowledgeCancel(organizationId);
   await cancelDesktopJobs();
-  return { count: count + coding };
+  return { count: count + coding + knowledge };
 }
 
 function cancelledResult(actions: ActionResult[]): ComputerAgentResult {

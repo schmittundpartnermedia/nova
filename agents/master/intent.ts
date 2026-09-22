@@ -1,4 +1,5 @@
 import { needsLiveResearch } from "@/lib/research/intent";
+import { detectKnowledgeIntent } from "@/agents/knowledge/intent";
 
 /**
  * Spezialisten (Recherche, Mail, Aufgabe, Memory-Schreiben) brauchen den Planer.
@@ -7,7 +8,10 @@ import { needsLiveResearch } from "@/lib/research/intent";
 export function needsSpecialistWork(userRequest: string): boolean {
   const text = userRequest.trim();
   if (!text) return false;
-  if (needsLiveResearch(text)) return true;
+  const knowledge = detectKnowledgeIntent(text);
+  if (knowledge.kind === "import") return true;
+  if (knowledge.kind === "query") return false;
+  if (needsLiveResearch(text) && knowledge.kind === "none") return true;
   if (/\b(?:merk(?:e)?\s+dir|merke\s+dir\s+das|speichere\s+das|behalte\s+das)\b/i.test(text)) return true;
   if (/\b(?:e-?mails?|anschreiben)\b/i.test(text)) return true;
   if (/\b(?:aufgabe|wiedervorlage|todos?)\b/i.test(text) && /erstell|anleg|setz|mach(?:e|en)?|neue[nrs]?\s+(?:aufgabe|todo)/i.test(text)) {

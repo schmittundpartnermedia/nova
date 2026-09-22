@@ -30,6 +30,8 @@ Katalog: `GET /api/bridge`
 
 Pipeline:
 
-Raw Chat → Conversation → Analyse (Platzhalter) → wenige Memory-Insights mit Quelle `chatgpt`
+Raw Chat → Conversation Archive (Full Transcript)
 
-Es werden nicht alle Rohnachrichten als Memory übernommen.
+Parser/Adapter für Conversations, Messages und Source Traceability ist vorbereitet.
+
+Dauerhaft relevantes Wissen folgt über Knowledge Agent / Memory – nicht als blinde Übernahme aller Rohnachrichten.

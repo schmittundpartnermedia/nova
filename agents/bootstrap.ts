@@ -5,6 +5,7 @@ import { communicationAgent } from "@/agents/communication";
 import { taskAgent } from "@/agents/tasks";
 import { projectAgent } from "@/agents/projects";
 import { codingAgent } from "@/agents/coding";
+import { knowledgeAgent } from "@/agents/knowledge";
 import {
   calendarAgent,
   documentAgent,
@@ -23,6 +24,7 @@ export function bootstrapAgents(): void {
   registerAgent(taskAgent);
   registerAgent(projectAgent);
   registerAgent(codingAgent);
+  registerAgent(knowledgeAgent);
   registerAgent(calendarAgent);
   registerAgent(documentAgent);
   registerAgent(meetingAgent);

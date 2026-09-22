@@ -61,6 +61,7 @@ npm run lint         # ESLint
 npm run build        # Produktionsbuild
 npm run verify       # Demo- und Persistenzprüfung
 npx prisma studio    # Datenbank ansehen
+npm run verify:knowledge # Knowledge-Pipeline
 npm run verify:voice # Voice-Pipeline
 npm run verify:avatar # 3D Avatar Engine
 npm run validate:avatar # Production GLB Acceptance (erwartet derzeit FINAL_AVATAR_MISSING)

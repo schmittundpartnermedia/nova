@@ -24,4 +24,6 @@ Aktivitäten und Jobs sind persistent und tenant-aware.
 
 ## Multi-Tenant
 
-Memory, Retrieval, Jobs und Activities einer Organization sind von anderen Organizations getrennt.
+Memory, Retrieval, Jobs, Activities und Knowledge (Sources, Items, Embeddings, Imports) einer Organization sind von anderen Organizations getrennt.
+
+Dokumente sind untrusted Input. Inhalt darf keine Tools, Systemregeln oder Computer-/Coding-Agenten steuern. `.env`, Keys und Credentials werden nicht ingestiert.
