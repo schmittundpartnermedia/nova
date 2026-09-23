@@ -1,7 +1,7 @@
 import { detectKnowledgeIntent } from "@/agents/knowledge/intent";
 import { parseKnowledgeSource } from "@/lib/knowledge/parsers";
 import { extractKnowledgeItems } from "@/lib/knowledge/extract";
-import { inspectUntrustedDocument } from "@/lib/knowledge/security";
+import { inspectUntrustedDocument, detectSourceType } from "@/lib/knowledge/security";
 import { buildSimplePdf } from "@/lib/knowledge/parsers/pdf";
 import { hybridScore } from "@/lib/knowledge/ranking";
 
@@ -41,6 +41,9 @@ export function runKnowledgeUnitTests(): string[] {
     relation: 0,
   });
   if (score.score < 0.2) failures.push("Hybrid-Score zu niedrig");
+  if (detectSourceType("brief.pdf") !== "pdf") failures.push("PDF-Typ nicht erkannt");
+  if (detectSourceType("stimme.mp3") !== "audio") failures.push("Audio-Typ nicht erkannt");
+  if (detectSourceType("film.mp4") !== "video") failures.push("Video-Typ nicht erkannt");
 
   return failures;
 }

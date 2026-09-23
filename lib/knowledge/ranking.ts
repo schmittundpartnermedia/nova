@@ -68,6 +68,7 @@ export function sourceQuality(sourceType?: string): number {
   if (sourceType === "xlsx" || sourceType === "csv" || sourceType === "json") return 0.85;
   if (sourceType === "markdown" || sourceType === "txt") return 0.7;
   if (sourceType === "chatgpt" || sourceType === "chat") return 0.78;
+  if (sourceType === "audio" || sourceType === "video" || sourceType === "image") return 0.55;
   return 0.5;
 }
 

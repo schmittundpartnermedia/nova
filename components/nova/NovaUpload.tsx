@@ -2,45 +2,28 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 
-type ImportPhase = "idle" | "ready" | "running" | "done" | "error";
-
-type ImportReport = {
-  conversations: number;
-  messages: number;
-  items: number;
-  decisions: number;
-  entities: number;
-  contradictions: number;
-};
+type ImportPhase = "idle" | "running" | "done" | "error";
 
 type StatusPayload = {
   ok?: boolean;
   running?: boolean;
   finished?: boolean;
+  kind?: "upload" | "chatgpt";
   jobId?: string;
-  importId?: string;
   percent?: number;
   error?: string | null;
+  filesTotal?: number;
+  filesSuccess?: number;
+  filesSkipped?: number;
+  items?: number;
   conversations?: number;
   messages?: number;
-  items?: number;
   decisions?: number;
   entities?: number;
   contradictions?: number;
 };
 
-function reportFromStatus(data: StatusPayload): ImportReport {
-  return {
-    conversations: data.conversations ?? 0,
-    messages: data.messages ?? 0,
-    items: data.items ?? 0,
-    decisions: data.decisions ?? 0,
-    entities: data.entities ?? 0,
-    contradictions: data.contradictions ?? 0,
-  };
-}
-
-export function NovaChatGptImport({
+export function NovaUpload({
   open,
   onClose,
 }: {
@@ -51,10 +34,10 @@ export function NovaChatGptImport({
   const pollRef = useRef<number | null>(null);
   const jobIdRef = useRef<string | null>(null);
   const [phase, setPhase] = useState<ImportPhase>("idle");
-  const [file, setFile] = useState<File | null>(null);
+  const [files, setFiles] = useState<File[]>([]);
   const [percent, setPercent] = useState(0);
   const [error, setError] = useState("");
-  const [report, setReport] = useState<ImportReport | null>(null);
+  const [status, setStatus] = useState<StatusPayload | null>(null);
 
   const stopPoll = useCallback(() => {
     if (pollRef.current) {
@@ -68,6 +51,7 @@ export function NovaChatGptImport({
       setPhase("running");
       setPercent(typeof data.percent === "number" ? data.percent : 0);
       if (typeof data.jobId === "string") jobIdRef.current = data.jobId;
+      setStatus(data);
       return true;
     }
     if (data.finished && data.ok === false) {
@@ -79,7 +63,7 @@ export function NovaChatGptImport({
     if (data.finished && data.ok) {
       setPhase("done");
       setPercent(100);
-      setReport(reportFromStatus(data));
+      setStatus(data);
       stopPoll();
       return true;
     }
@@ -90,7 +74,7 @@ export function NovaChatGptImport({
     async (nextJobId?: string) => {
       const id = nextJobId ?? jobIdRef.current;
       const query = id ? `?jobId=${encodeURIComponent(id)}` : "";
-      const response = await fetch(`/api/import/chatgpt${query}`);
+      const response = await fetch(`/api/import${query}`);
       const data = (await response.json()) as StatusPayload;
       applyStatus(data);
     },
@@ -100,11 +84,11 @@ export function NovaChatGptImport({
   useEffect(() => {
     void (async () => {
       try {
-        const response = await fetch("/api/import/chatgpt");
+        const response = await fetch("/api/import");
         const data = (await response.json()) as StatusPayload;
         if (data.running) applyStatus(data);
       } catch {
-        // UI bleibt im Ruhezustand
+        // idle
       }
     })();
   }, [applyStatus]);
@@ -124,65 +108,87 @@ export function NovaChatGptImport({
   const reset = useCallback(() => {
     stopPoll();
     setPhase("idle");
-    setFile(null);
+    setFiles([]);
     setPercent(0);
     setError("");
-    setReport(null);
+    setStatus(null);
     jobIdRef.current = null;
   }, [stopPoll]);
 
-  const startImport = useCallback(async (nextFile: File) => {
-    setPhase("running");
-    setPercent(1);
-    setError("");
-    setReport(null);
-    try {
-      const body = new FormData();
-      body.append("file", nextFile);
-      const response = await fetch("/api/import/chatgpt", { method: "POST", body });
-      const data = (await response.json()) as StatusPayload & { started?: boolean; error?: string };
-      if (!response.ok || data.ok === false) {
+  const startImport = useCallback(
+    async (nextFiles: File[]) => {
+      if (!nextFiles.length) return;
+      setFiles(nextFiles);
+      setPhase("running");
+      setPercent(1);
+      setError("");
+      setStatus(null);
+      try {
+        const body = new FormData();
+        for (const file of nextFiles) body.append("file", file);
+        const response = await fetch("/api/import", { method: "POST", body });
+        const data = (await response.json()) as StatusPayload & { started?: boolean; error?: string };
+        if (!response.ok || data.ok === false) {
+          setPhase("error");
+          setError(data.error || "Der Import ist fehlgeschlagen. Du kannst es erneut versuchen.");
+          return;
+        }
+        if (typeof data.jobId === "string") jobIdRef.current = data.jobId;
+        setPercent(2);
+        void poll(data.jobId);
+      } catch {
         setPhase("error");
-        setError(data.error || "Der Import ist fehlgeschlagen. Du kannst es erneut versuchen.");
-        return;
+        setError("Der Import ist fehlgeschlagen. Du kannst es erneut versuchen.");
       }
-      if (typeof data.jobId === "string") jobIdRef.current = data.jobId;
-      setPercent(typeof data.percent === "number" ? data.percent : 2);
-      void poll(data.jobId);
-    } catch {
-      setPhase("error");
-      setError("Der Import ist fehlgeschlagen. Du kannst es erneut versuchen.");
-    }
-  }, [poll]);
+    },
+    [poll],
+  );
 
-  const visible = open || phase === "running" || phase === "done" || phase === "error" || phase === "ready";
-  if (!visible) return null;
+  const visible = open || phase === "running" || phase === "done" || phase === "error";
+  if (!visible) {
+    return (
+      <input
+        ref={fileRef}
+        id="nova-upload-input"
+        type="file"
+        multiple
+        className="nova-file-input"
+        onChange={(event) => {
+          const next = Array.from(event.target.files ?? []);
+          event.target.value = "";
+          if (next.length) void startImport(next);
+        }}
+      />
+    );
+  }
+
+  const chatgpt = status?.kind === "chatgpt" || (status?.conversations ?? 0) > 0;
+  const runningLabel = chatgpt ? "ChatGPT-Verlauf wird importiert …" : "Dateien werden übernommen …";
+  const doneLabel = chatgpt ? "ChatGPT-Verlauf importiert." : "Dateien übernommen.";
 
   return (
     <div className="nova-card nova-panel nova-import-card">
       <input
         ref={fileRef}
+        id="nova-upload-input"
         type="file"
-        accept=".zip,application/zip"
+        multiple
         className="nova-file-input"
         onChange={(event) => {
-          const next = event.target.files?.[0];
+          const next = Array.from(event.target.files ?? []);
           event.target.value = "";
-          if (!next) return;
-          setFile(next);
-          setPhase("ready");
-          setError("");
+          if (next.length) void startImport(next);
         }}
       />
 
       {phase === "idle" ? (
         <>
-          <h3>Einstellungen</h3>
-          <p>ChatGPT-Verlauf importieren</p>
+          <h3>Hochladen</h3>
+          <p>PDF, Text, ChatGPT-ZIP, Audio, Video und andere Dateien. NOVA ordnet sie zu und hebt sie für später auf.</p>
           <div className="nova-import-actions">
-            <button type="button" className="nova-chip nova-import-action" onClick={() => fileRef.current?.click()}>
-              ZIP-Datei wählen
-            </button>
+            <label htmlFor="nova-upload-input" className="nova-chip nova-import-action" style={{ cursor: "pointer" }}>
+              Dateien wählen
+            </label>
             <button
               type="button"
               className="nova-chip"
@@ -197,38 +203,29 @@ export function NovaChatGptImport({
         </>
       ) : null}
 
-      {phase === "ready" && file ? (
-        <>
-          <h3>ChatGPT-Verlauf importieren</h3>
-          <p className="nova-import-file">{file.name}</p>
-          <div className="nova-import-actions">
-            <button type="button" className="nova-chip" onClick={() => fileRef.current?.click()}>
-              Andere Datei
-            </button>
-            <button type="button" className="nova-chip nova-import-action" onClick={() => void startImport(file)}>
-              Import starten
-            </button>
-          </div>
-        </>
-      ) : null}
-
       {phase === "running" ? (
         <>
-          <p>ChatGPT-Verlauf wird importiert …</p>
+          <p>{runningLabel}</p>
           <p className="nova-import-percent">{Math.max(0, Math.min(100, Math.round(percent)))}%</p>
+          {files[0] ? <p className="nova-import-file">{files.map((file) => file.name).join(", ")}</p> : null}
         </>
       ) : null}
 
-      {phase === "done" && report ? (
+      {phase === "done" && status ? (
         <>
-          <p>ChatGPT-Verlauf importiert.</p>
+          <p>{doneLabel}</p>
           <dl className="nova-import-stats">
-            <div><dt>Gespräche</dt><dd>{report.conversations}</dd></div>
-            <div><dt>Nachrichten</dt><dd>{report.messages}</dd></div>
-            <div><dt>Wissenseinträge</dt><dd>{report.items}</dd></div>
-            <div><dt>Entscheidungen</dt><dd>{report.decisions}</dd></div>
-            <div><dt>erkannte Projekte/Firmen</dt><dd>{report.entities}</dd></div>
-            <div><dt>erkannte Widersprüche</dt><dd>{report.contradictions}</dd></div>
+            <div><dt>Dateien</dt><dd>{status.filesSuccess ?? files.length}</dd></div>
+            <div><dt>Wissenseinträge</dt><dd>{status.items ?? 0}</dd></div>
+            {chatgpt ? (
+              <>
+                <div><dt>Gespräche</dt><dd>{status.conversations ?? 0}</dd></div>
+                <div><dt>Nachrichten</dt><dd>{status.messages ?? 0}</dd></div>
+                <div><dt>Entscheidungen</dt><dd>{status.decisions ?? 0}</dd></div>
+                <div><dt>erkannte Projekte/Firmen</dt><dd>{status.entities ?? 0}</dd></div>
+                <div><dt>erkannte Widersprüche</dt><dd>{status.contradictions ?? 0}</dd></div>
+              </>
+            ) : null}
           </dl>
           <button
             type="button"
@@ -247,16 +244,9 @@ export function NovaChatGptImport({
         <>
           <p className="nova-import-error">{error}</p>
           <div className="nova-import-actions">
-            <button
-              type="button"
-              className="nova-chip nova-import-action"
-              onClick={() => {
-                if (file) void startImport(file);
-                else fileRef.current?.click();
-              }}
-            >
+            <label htmlFor="nova-upload-input" className="nova-chip nova-import-action" style={{ cursor: "pointer" }}>
               Erneut starten
-            </button>
+            </label>
             <button
               type="button"
               className="nova-chip"

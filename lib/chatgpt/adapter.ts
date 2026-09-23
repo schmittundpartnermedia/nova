@@ -22,6 +22,16 @@ function looksLikeZip(bytes: Buffer): boolean {
   return bytes.length >= 4 && bytes[0] === 0x50 && bytes[1] === 0x4b;
 }
 
+export function isChatGPTExportZip(bytes: Buffer): boolean {
+  if (!looksLikeZip(bytes)) return false;
+  try {
+    const inspected = inspectChatGPTExport({ zipBytes: bytes });
+    return inspected.kind === "zip" && Boolean(inspected.manifest.conversationsPath);
+  } catch {
+    return false;
+  }
+}
+
 function sanitizeMessage(message: ImportedMessage): ImportedMessage {
   const untrusted = inspectUntrustedDocument(`chatgpt:${message.externalId}`, message.content);
   const redacted = redactKnowledgeText(message.content);

@@ -57,11 +57,11 @@ export function NovaSidebar({
           </button>
         ))}
       </nav>
-      <button type="button" className="nova-user" onClick={onOpenSettings} title="Einstellungen">
+      <button type="button" className="nova-user" onClick={onOpenSettings} title="Dateien hochladen">
         <span className="nova-user-mark">{initial}</span>
         <div>
           <strong>{userName || "NOVA"}</strong>
-          <small>Einstellungen</small>
+          <small>Dateien hochladen</small>
         </div>
       </button>
     </aside>

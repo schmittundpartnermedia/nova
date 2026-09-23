@@ -116,6 +116,9 @@ export function detectSourceType(filePath: string, mimeType?: string): Knowledge
   if (ext === ".eml" || ext === ".mbox") return "email";
   if (ext === ".zip") return "zip";
   if ([".ts", ".tsx", ".js", ".jsx", ".py", ".go", ".rs", ".java"].includes(ext)) return "repository";
+  if ([".mp3", ".wav", ".m4a", ".aac", ".ogg", ".flac"].includes(ext) || mime.startsWith("audio/")) return "audio";
+  if ([".mp4", ".mov", ".webm", ".m4v", ".avi"].includes(ext) || mime.startsWith("video/")) return "video";
+  if ([".png", ".jpg", ".jpeg", ".gif", ".webp", ".heic", ".psd"].includes(ext) || mime.startsWith("image/")) return "image";
   return "unknown";
 }
 

@@ -14,6 +14,7 @@ import {
   requestKnowledgeCancel,
   searchKnowledge,
 } from "@/services/knowledge";
+import { importUploadedFiles } from "@/services/import/upload";
 
 const prisma = new PrismaClient();
 
@@ -77,6 +78,24 @@ async function main() {
   assert(imported.ok, "Import fehlgeschlagen");
   assert(imported.itemsCreated > 0, "Keine Knowledge Items erzeugt");
   assert(imported.filesFailed === 0, `Parse-Fehler: ${imported.filesFailed}`);
+
+  const uploaded = await importUploadedFiles({
+    organizationId: organization.id,
+    userRequest: "Lade diese Datei hoch",
+    files: [
+      {
+        name: "notiz.txt",
+        mimeType: "text/plain",
+        bytes: Buffer.from("Projekt Gamma: Start am 12. Oktober. Preis 250 EUR.", "utf8"),
+      },
+    ],
+  });
+  assert(uploaded.ok, "Upload-Import fehlgeschlagen");
+  const uploadedHit = await searchKnowledge({
+    organizationId: organization.id,
+    query: "Projekt Gamma Preis",
+  });
+  assert(uploadedHit.some((hit) => /Gamma|250/i.test(hit.content + hit.title)), "Hochgeladene Datei nicht wiederfindbar");
 
   const parsedPdf = await parseKnowledgeSource({
     name: "partnerstrategie.pdf",

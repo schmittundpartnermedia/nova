@@ -2,6 +2,7 @@ import { csvParser, htmlParser, jsonParser, markdownParser, txtParser, xmlParser
 import { docxParser, xlsxParser } from "@/lib/knowledge/parsers/office";
 import { pdfParser } from "@/lib/knowledge/parsers/pdf";
 import { chatgptParser, emailParser, projectParser, zipParser } from "@/lib/knowledge/parsers/special";
+import { mediaParser } from "@/lib/knowledge/parsers/media";
 import { detectSourceType, inspectUntrustedDocument, languageOf, redactKnowledgeText } from "@/lib/knowledge/security";
 import type { KnowledgeParser, KnowledgeParserSource, ParsedDocument } from "@/types/knowledge";
 
@@ -18,6 +19,7 @@ const PARSERS: KnowledgeParser[] = [
   emailParser,
   zipParser,
   projectParser,
+  mediaParser,
   txtParser,
 ];
 

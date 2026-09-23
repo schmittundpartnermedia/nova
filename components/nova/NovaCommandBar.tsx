@@ -97,6 +97,14 @@ export function NovaCommandBar({
         autoComplete="off"
       />
       <div className="nova-command-row">
+        <label
+          htmlFor="nova-upload-input"
+          className="nova-icon-btn nova-upload-btn"
+          title="Dateien hochladen"
+          aria-label="Dateien hochladen"
+        >
+          +
+        </label>
         {QUICK_ACTIONS.map((action) => (
           <button
             key={action.id}

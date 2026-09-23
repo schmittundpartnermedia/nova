@@ -14,6 +14,9 @@ export type KnowledgeSourceType =
   | "zip"
   | "folder"
   | "repository"
+  | "audio"
+  | "video"
+  | "image"
   | "unknown";
 
 export type KnowledgeSourceStatus =

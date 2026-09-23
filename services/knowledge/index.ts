@@ -7,6 +7,7 @@ import { relateMemory } from "@/services/memory/relations";
 import { recordActivity } from "@/services/archive";
 import { addJobStep, completeJobStep } from "@/services/jobs";
 import { parseKnowledgeSource } from "@/lib/knowledge/parsers";
+import { mediaCatalogDocument } from "@/lib/knowledge/parsers/media";
 import { entitiesFromExtraction, extractKnowledgeItems, isDurableKnowledge } from "@/lib/knowledge/extract";
 import {
   assertKnowledgePath,
@@ -32,7 +33,7 @@ import {
   type RankedKnowledgeHit,
   type SearchableItem,
 } from "@/lib/knowledge/ranking";
-import type { KnowledgeItemType, KnowledgeParserSource, ParsedDocument } from "@/types/knowledge";
+import type { KnowledgeItemType, KnowledgeParserSource, KnowledgeSourceType, ParsedDocument } from "@/types/knowledge";
 import type { MemoryType, RelationType, SourceType } from "@/types";
 import {
   createKnowledgeImport,
@@ -288,17 +289,23 @@ async function ingestBuffer(input: {
   name: string;
   originalPath?: string;
   bytes: Buffer;
+  mimeType?: string;
+  sourceType?: string;
+  checksum?: string;
+  size?: number;
   parentSourceId?: string;
   modifiedAt?: Date;
+  catalogOnly?: boolean;
 }): Promise<{ sourceId: string; items: number; duplicate: boolean; skipped?: string; relevant: boolean }> {
   assertOrganizationId(input.organizationId);
-  if (isSecretPath(input.originalPath ?? input.name) || documentLooksLikeSecret(input.bytes.toString("utf8").slice(0, 2000))) {
+  if (isSecretPath(input.originalPath ?? input.name) || (!input.catalogOnly && documentLooksLikeSecret(input.bytes.toString("utf8").slice(0, 2000)))) {
     return { sourceId: "", items: 0, duplicate: false, skipped: "secret", relevant: false };
   }
-  if (input.bytes.length > KNOWLEDGE_LIMITS.maxFileBytes) {
+  if (!input.catalogOnly && input.bytes.length > KNOWLEDGE_LIMITS.maxFileBytes) {
     return { sourceId: "", items: 0, duplicate: false, skipped: "too-large", relevant: false };
   }
-  const checksum = checksumBytes(input.bytes);
+  const checksum = input.checksum ?? checksumBytes(input.bytes);
+  const size = input.size ?? input.bytes.length;
   const existing = await prisma.knowledgeSource.findFirst({
     where: { organizationId: input.organizationId, checksum },
     orderBy: { createdAt: "asc" },
@@ -316,11 +323,12 @@ async function ingestBuffer(input: {
     await prisma.knowledgeSource.create({
       data: {
         organizationId: input.organizationId,
-        sourceType: detectSourceType(input.originalPath ?? input.name),
+        sourceType: detectSourceType(input.originalPath ?? input.name, input.mimeType),
         name: input.name,
         originalPath: input.originalPath,
+        mimeType: input.mimeType,
         checksum,
-        size: input.bytes.length,
+        size,
         status: "ARCHIVED",
         duplicateOfId: existing.id,
         importId: input.importId,
@@ -337,15 +345,16 @@ async function ingestBuffer(input: {
     return { sourceId: existing.id, items: 0, duplicate: true, relevant: false };
   }
 
-  const sourceType = detectSourceType(input.originalPath ?? input.name);
+  const sourceType = (input.sourceType ?? detectSourceType(input.originalPath ?? input.name, input.mimeType)) as KnowledgeSourceType;
   const source = await prisma.knowledgeSource.create({
     data: {
       organizationId: input.organizationId,
       sourceType,
       name: input.name,
       originalPath: input.originalPath,
+      mimeType: input.mimeType,
       checksum,
-      size: input.bytes.length,
+      size,
       status: "IMPORTING",
       importId: input.importId,
       jobId: input.jobId,
@@ -362,11 +371,20 @@ async function ingestBuffer(input: {
     name: input.name,
     originalPath: input.originalPath,
     bytes: input.bytes,
+    mimeType: input.mimeType,
     sourceType,
   };
   let parsed: ParsedDocument;
   try {
-    parsed = await parseKnowledgeSource(parserSource);
+    parsed = input.catalogOnly
+      ? mediaCatalogDocument({
+          name: input.name,
+          sourceType,
+          mimeType: input.mimeType,
+          size,
+          originalPath: input.originalPath,
+        })
+      : await parseKnowledgeSource(parserSource);
   } catch (error) {
     await prisma.knowledgeSource.update({
       where: { id: source.id },

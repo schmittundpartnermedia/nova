@@ -1,5 +1,5 @@
 import { reconstructConversation, asRawConversations } from "@/lib/chatgpt/graph";
-import { parseChatGPTExport } from "@/lib/chatgpt/adapter";
+import { parseChatGPTExport, isChatGPTExportZip } from "@/lib/chatgpt/adapter";
 import { extractConversationKnowledge, isLowValueMessage } from "@/lib/chatgpt/extract";
 import { createChatGPTExportConversations, createChatGPTExportZip, CHATGPT_FIXTURE_IDS } from "@/lib/chatgpt/fixtures";
 import { inspectUntrustedDocument } from "@/lib/knowledge/security";
@@ -56,6 +56,8 @@ export function runChatGPTUnitTests(): string[] {
   }
   if (parsed.manifest.conversationsPath !== "conversations.json") failures.push("conversations.json nicht erkannt");
   if (!parsed.manifest.htmlPath) failures.push("chat.html sollte gefunden, aber nicht benötigt sein");
+  if (!isChatGPTExportZip(zip)) failures.push("ChatGPT-ZIP nicht als Export erkannt");
+  if (isChatGPTExportZip(Buffer.from("not-a-zip"))) failures.push("Zufallsdaten wurden als ChatGPT-ZIP erkannt");
 
   if (chatgptImportPercent({ phase: "VALIDATING", conversationsTotal: 0, processedExternalIds: [], conversationsSkipped: 0 }) !== 2) {
     failures.push("Progress VALIDATING falsch");

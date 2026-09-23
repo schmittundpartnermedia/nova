@@ -10,7 +10,7 @@ import { NovaVoiceWave } from "@/components/nova/NovaVoiceWave";
 import { NovaSidebar, type NovaSection } from "@/components/nova/NovaSidebar";
 import { NovaContextPanel, type NovaJobSummary } from "@/components/nova/NovaContextPanel";
 import { ApprovalCard } from "@/components/nova/ApprovalCard";
-import { NovaChatGptImport } from "@/components/nova/NovaChatGptImport";
+import { NovaUpload } from "@/components/nova/NovaUpload";
 import { ArchivePanel, type ArchiveItem } from "@/components/archive/ArchivePanel";
 import { performanceForState } from "@/components/nova/avatar-performance";
 import { useVoiceSession } from "@/features/voice/useVoiceSession";
@@ -675,7 +675,7 @@ export function NovaShell() {
                 onReject={() => void decide("rejected")}
               />
             ) : null}
-            <NovaChatGptImport open={importOpen} onClose={() => setImportOpen(false)} />
+            <NovaUpload open={importOpen} onClose={() => setImportOpen(false)} />
             <NovaStatus text={shownStatus} />
             <NovaCommandBar
               disabled={busy}
