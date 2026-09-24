@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { assertOrganizationId } from "@/services/tenant";
 import { redactUnknown } from "@/lib/computer/redaction";
+import { parseComputerPlan, RESUMABLE_COMPUTER_STATUSES, serializeComputerPlan, type ComputerPlan } from "@/lib/computer/plan";
 import type { ActionResult, ComputerJobStatus } from "@/lib/computer/types";
 
 export async function createComputerJob(input: {
@@ -113,5 +114,57 @@ export async function listTodayComputerActions(organizationId: string) {
     where: { organizationId, startedAt: { gte: start } },
     orderBy: { startedAt: "desc" },
     take: 100,
+  });
+}
+
+export async function interruptStaleComputerJobs(organizationId?: string) {
+  const staleBefore = new Date(Date.now() - 90_000);
+  return prisma.computerJob.updateMany({
+    where: {
+      ...(organizationId ? { organizationId } : {}),
+      status: "EXECUTING",
+      cancelRequested: false,
+      startedAt: { lt: staleBefore },
+      finishedAt: null,
+    },
+    data: {
+      status: "INTERRUPTED",
+      error: "Der Prozess wurde unterbrochen. Sag „mach weiter“, dann setze ich am letzten Schritt an.",
+    },
+  });
+}
+
+export async function findResumableComputerJob(organizationId: string) {
+  assertOrganizationId(organizationId);
+  await interruptStaleComputerJobs(organizationId);
+  const job = await prisma.computerJob.findFirst({
+    where: {
+      organizationId,
+      cancelRequested: false,
+      status: { in: [...RESUMABLE_COMPUTER_STATUSES] },
+    },
+    orderBy: { startedAt: "desc" },
+  });
+  if (!job) return null;
+  const plan = parseComputerPlan(job.plan);
+  if (!plan || plan.cursor >= plan.steps.length) return null;
+  return { job, plan };
+}
+
+export async function saveComputerPlan(input: {
+  organizationId: string;
+  id: string;
+  status: ComputerJobStatus;
+  plan: ComputerPlan;
+  error?: string;
+  finished?: boolean;
+}) {
+  return updateComputerJob({
+    organizationId: input.organizationId,
+    id: input.id,
+    status: input.status,
+    plan: serializeComputerPlan(input.plan),
+    error: input.error,
+    finished: input.finished,
   });
 }

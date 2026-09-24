@@ -106,6 +106,10 @@ export function useNovaVoice() {
   }, []);
 
   useEffect(() => {
+    void fetch("/api/nova/facial", { cache: "no-store" }).catch(() => undefined);
+  }, []);
+
+  useEffect(() => {
     if (!enabled && speakingRef.current) {
       stop("idle");
     }

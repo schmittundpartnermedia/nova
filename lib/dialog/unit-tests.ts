@@ -60,6 +60,7 @@ export function runDialogUnitTests(): string[] {
     assert.equal(needsSpecialistWork("Hallo NOVA, wie ist der Stand?"), false);
     assert.equal(needsSpecialistWork("Was steht an?"), true);
     assert.equal(needsSpecialistWork("Lege morgen um 10 Uhr einen Termin an"), true);
+    assert.equal(needsSpecialistWork("Speicher Kontakt Clara"), true);
   });
 
   check("tone beyond greetings", () => {

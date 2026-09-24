@@ -78,7 +78,7 @@ export class VoiceSessionController {
     return {
       state,
       active: isVoiceSessionActive(state),
-      capturing: isVoiceCapturing(state) || (state === "NOVA_SPEAKING" && this.config.bargeInEnabled),
+      capturing: isVoiceCapturing(state) || ((state === "NOVA_SPEAKING" || state === "PROCESSING") && this.config.bargeInEnabled),
       listening: isVoiceCapturing(state),
       userSpeaking: state === "USER_SPEAKING" || state === "INTERRUPTED",
       supported: this.supported,
@@ -150,7 +150,11 @@ export class VoiceSessionController {
 
   notifyProcessing() {
     if (this.model.state === "OFF" || this.model.state === "ERROR") return;
-    this.pauseInput();
+    if (this.config.bargeInEnabled) {
+      this.armBargeIn();
+    } else {
+      this.pauseInput();
+    }
     if (this.model.state !== "PROCESSING" && this.model.state !== "NOVA_SPEAKING") {
       this.dispatch({ type: "EXTERNAL_PROCESS" });
     }
@@ -160,10 +164,7 @@ export class VoiceSessionController {
     if (!isVoiceSessionActive(this.model.state) && this.model.state !== "PROCESSING") return;
     this.clearGuard();
     if (this.config.bargeInEnabled) {
-      this.capture?.setCollecting(true);
-      this.bargeInSince = this.clock.now();
-      this.bargeInSpeechMs = 0;
-      this.vad.wake(this.clock.now());
+      this.armBargeIn();
     } else {
       this.pauseInput();
     }
@@ -217,8 +218,7 @@ export class VoiceSessionController {
   }
 
   private onFrame(frame: VadFrame) {
-    if (this.model.state === "PROCESSING") return;
-    if (this.model.state === "NOVA_SPEAKING") {
+    if (this.model.state === "PROCESSING" || this.model.state === "NOVA_SPEAKING") {
       this.considerBargeIn(frame);
       return;
     }
@@ -240,7 +240,8 @@ export class VoiceSessionController {
   }
 
   private considerBargeIn(frame: VadFrame) {
-    if (!this.config.bargeInEnabled || this.model.state !== "NOVA_SPEAKING") return;
+    if (!this.config.bargeInEnabled) return;
+    if (this.model.state !== "NOVA_SPEAKING" && this.model.state !== "PROCESSING") return;
     const energy = Math.max(frame.rms, frame.peak * 0.45);
     this.level = Math.max(0, Math.min(1, energy / 0.12));
     this.emit();
@@ -402,6 +403,14 @@ export class VoiceSessionController {
     this.finalizing = false;
     this.emit();
     this.listener.onTurn?.(turn);
+    if (this.config.bargeInEnabled) this.armBargeIn();
+  }
+
+  private armBargeIn() {
+    this.capture?.setCollecting(true);
+    this.bargeInSince = this.clock.now();
+    this.bargeInSpeechMs = 0;
+    this.vad.wake(this.clock.now());
   }
 
   private pauseInput() {

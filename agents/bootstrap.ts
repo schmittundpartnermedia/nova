@@ -8,7 +8,8 @@ import { codingAgent } from "@/agents/coding";
 import { knowledgeAgent } from "@/agents/knowledge";
 import { calendarAgent } from "@/agents/calendar";
 import { watchAgent } from "@/agents/watch";
-import { documentAgent, meetingAgent, contactAgent, qualityAgent } from "@/agents/stubs";
+import { contactAgent } from "@/agents/contacts";
+import { documentAgent, meetingAgent, qualityAgent } from "@/agents/stubs";
 
 let bootstrapped = false;
 

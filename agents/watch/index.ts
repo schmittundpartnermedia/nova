@@ -6,7 +6,10 @@ export type WatchScan = {
   overdueTasks: Array<{ id: string; title: string; dueAt: Date | null }>;
   staleDrafts: Array<{ id: string; subject: string; createdAt: Date }>;
   upcomingMeetings: Array<{ id: string; title: string; startsAt: Date }>;
+  soonMeetings: Array<{ id: string; title: string; startsAt: Date }>;
 };
+
+const SOON_MS = 15 * 60 * 1000;
 
 export async function scanWatch(organizationId: string): Promise<WatchScan> {
   assertOrganizationId(organizationId);
@@ -50,10 +53,13 @@ export async function scanWatch(organizationId: string): Promise<WatchScan> {
     overdueTasks: overdueTasks.filter((item) => item.organizationId === organizationId),
     staleDrafts: staleDrafts.filter((item) => item.organizationId === organizationId),
     upcomingMeetings: upcomingMeetings.filter((item) => item.organizationId === organizationId),
+    soonMeetings: upcomingMeetings.filter(
+      (item) => item.organizationId === organizationId && item.startsAt.getTime() - now.getTime() <= SOON_MS,
+    ),
   };
 }
 
-function formatScan(scan: WatchScan): string {
+export function formatWatchScan(scan: WatchScan): string {
   const parts: string[] = [];
   if (scan.overdueTasks.length) {
     parts.push(
@@ -80,6 +86,45 @@ function formatScan(scan: WatchScan): string {
   return parts.join("\n\n");
 }
 
+export function watchAlertFingerprint(scan: WatchScan): string {
+  const overdue = scan.overdueTasks.map((item) => item.id).sort().join(",");
+  const soon = scan.soonMeetings.map((item) => item.id).sort().join(",");
+  return `o:${overdue}|s:${soon}`;
+}
+
+export function buildWatchAlert(scan: WatchScan): {
+  fingerprint: string;
+  speak: boolean;
+  message: string;
+  overdue: number;
+  soon: number;
+} {
+  const fingerprint = watchAlertFingerprint(scan);
+  const lines: string[] = [];
+  if (scan.soonMeetings.length) {
+    lines.push(
+      `Gleich: ${scan.soonMeetings
+        .map((item) => `${item.title} um ${item.startsAt.toISOString().slice(11, 16)}`)
+        .join("; ")}`,
+    );
+  }
+  if (scan.overdueTasks.length) {
+    lines.push(
+      `Überfällig: ${scan.overdueTasks
+        .slice(0, 3)
+        .map((item) => item.title)
+        .join("; ")}`,
+    );
+  }
+  return {
+    fingerprint,
+    speak: lines.length > 0,
+    message: lines.join(". ") || "Nichts Dringendes.",
+    overdue: scan.overdueTasks.length,
+    soon: scan.soonMeetings.length,
+  };
+}
+
 export const watchAgent: NovaAgent = {
   definition: {
     id: "watch",
@@ -94,7 +139,7 @@ export const watchAgent: NovaAgent = {
   },
   async run(_input, context) {
     const scan = await scanWatch(context.organizationId);
-    const summary = formatScan(scan);
+    const summary = formatWatchScan(scan);
     return {
       ok: true,
       summary,
@@ -102,6 +147,7 @@ export const watchAgent: NovaAgent = {
         overdue: scan.overdueTasks.length,
         staleDrafts: scan.staleDrafts.length,
         upcoming: scan.upcomingMeetings.length,
+        soon: scan.soonMeetings.length,
         scan,
       },
     };

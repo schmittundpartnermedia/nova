@@ -3,6 +3,7 @@ import path from "node:path";
 import type { BrowserContext, Download, Page } from "playwright";
 import {
   applyPlaywrightBrowsersPath,
+  browserCdpUrl,
   browserDownloadsDir,
   browserHeaded,
   browserProfileDir,
@@ -160,6 +161,19 @@ export function downloadsDirectory(): string {
 async function launchPersistentContext(): Promise<BrowserContext> {
   applyPlaywrightBrowsersPath();
   const { chromium } = await import("playwright");
+  const cdp = browserCdpUrl();
+  if (cdp) {
+    const browser = await chromium.connectOverCDP(cdp);
+    const existing = browser.contexts()[0];
+    if (!existing) {
+      throw new Error("Chrome am Debug-Port hat keinen Kontext. Starte Chrome mit --remote-debugging-port=9222.");
+    }
+    existing.on("page", bindPage);
+    for (const page of existing.pages()) bindPage(page);
+    activePage = existing.pages()[0] ?? (await existing.newPage());
+    if (activePage) bindPage(activePage);
+    return existing;
+  }
   const executable = chromium.executablePath();
   if (!executable || !fs.existsSync(executable)) {
     throw new Error("Playwright-Chromium ist nicht installiert. Bitte npm run playwright:install ausführen.");

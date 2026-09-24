@@ -179,6 +179,12 @@ export function planComputerTask(input: {
       if (control) {
         steps.push({
           tool: "accessibility",
+          payload: { action: "inspect", app: app || undefined, maxDepth: 3 },
+          purpose: "UI lesen, dann klicken",
+          userCommissioned: true,
+        });
+        steps.push({
+          tool: "accessibility",
           payload: { action: "press", identifier: control, app: app || undefined },
           purpose: `${control} bedienen`,
           userCommissioned: true,
@@ -227,6 +233,8 @@ export function planComputerTask(input: {
         },
       ];
     }
+    case "resume":
+      return [];
     default:
       return [];
   }

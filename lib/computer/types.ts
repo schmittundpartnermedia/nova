@@ -86,9 +86,11 @@ export type ComputerJobStatus =
   | "PREPARED"
   | "EXECUTING"
   | "WAITING_FOR_APPROVAL"
+  | "WAITING_FOR_HUMAN"
   | "EXECUTED"
   | "VERIFIED"
   | "FAILED"
+  | "INTERRUPTED"
   | "CANCELLED"
   | "CANCELLED_BY_USER";
 

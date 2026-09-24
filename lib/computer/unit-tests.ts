@@ -19,7 +19,10 @@ import {
 import { browserActionSchema, filesystemActionSchema, shellActionSchema } from "@/lib/computer/schemas";
 import { CAPABILITY_IDS } from "@/lib/computer/types";
 import { capabilitiesFrom } from "@/lib/computer/capabilities";
-import { assertUploadAllowed, isIrreversibleBrowserAction, parseSelectorDsl } from "@/lib/computer/browser-policy";
+import { looksLikeHumanGate, assertUploadAllowed, isIrreversibleBrowserAction, parseSelectorDsl } from "@/lib/computer/browser-policy";
+import { pickControlFromInspect } from "@/lib/computer/ax-pick";
+import { parseComputerPlan } from "@/lib/computer/plan";
+import { browserCdpUrl } from "@/lib/computer/config";
 
 export function runComputerUnitTests(): string[] {
   const failures: string[] = [];
@@ -326,6 +329,25 @@ export function runComputerUnitTests(): string[] {
     if (other.exists) {
       assert.equal(other.withinAllowed, false);
     }
+  });
+
+  check("resume and human gate", () => {
+    assert.equal(detectComputerIntent("mach weiter").kind, "resume");
+    assert.equal(detectComputerIntent("Ich habe das Captcha gelöst").kind, "resume");
+    assert.equal(looksLikeHumanGate("reCAPTCHA I'm not a robot"), "captcha");
+    assert.equal(looksLikeHumanGate("Sign in password email"), "login");
+    assert.equal(looksLikeHumanGate("Welcome to the docs"), null);
+    const picked = pickControlFromInspect({ children: [{ title: "Speichern", children: [] }] }, "Klick auf Speichern");
+    assert.equal(picked, "Speichern");
+    const plan = parseComputerPlan(JSON.stringify({ steps: [{ tool: "screen" }], cursor: 1 }));
+    assert.equal(plan?.cursor, 1);
+    const prev = process.env.NOVA_BROWSER_CDP;
+    process.env.NOVA_BROWSER_CDP = "http://evil.example:9222";
+    assert.equal(browserCdpUrl(), null);
+    process.env.NOVA_BROWSER_CDP = "http://127.0.0.1:9222";
+    assert.equal(browserCdpUrl(), "http://127.0.0.1:9222");
+    if (prev === undefined) delete process.env.NOVA_BROWSER_CDP;
+    else process.env.NOVA_BROWSER_CDP = prev;
   });
 
   return failures;

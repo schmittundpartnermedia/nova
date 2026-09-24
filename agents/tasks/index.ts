@@ -24,16 +24,18 @@ export const taskAgent: NovaAgent = {
       dueAt.setDate(dueAt.getDate() + dueDays);
     }
 
+    const title = String(input.title ?? "Follow-up");
+    const isTicket = Boolean(input.ticket) || /^ticket:/i.test(title);
     const task = await prisma.task.create({
       data: {
         organizationId: context.organizationId,
         projectId: context.projectId,
         companyId: typeof input.companyId === "string" ? input.companyId : undefined,
         contactId: typeof input.contactId === "string" ? input.contactId : undefined,
-        title: String(input.title ?? "Follow-up"),
-        description: String(input.description ?? "Wiedervorlage nach vorbereiteter Ansprache."),
+        title: isTicket && !/^ticket:/i.test(title) ? `Ticket: ${title}` : title,
+        description: String(input.description ?? (isTicket ? "Lokales Ticket in NOVA, kein externes CRM." : "Wiedervorlage nach vorbereiteter Ansprache.")),
         status: "open",
-        priority: String(input.priority ?? "medium"),
+        priority: String(input.priority ?? (isTicket ? "high" : "medium")),
         dueAt,
         followUpAt: dueAt,
       },
@@ -41,7 +43,9 @@ export const taskAgent: NovaAgent = {
 
     return {
       ok: true,
-      summary: `Aufgabe erstellt: ${task.title}${task.dueAt ? ` (fällig ${task.dueAt.toISOString().slice(0, 10)})` : ""}`,
+      summary: isTicket
+        ? `Ticket angelegt: ${task.title}`
+        : `Aufgabe erstellt: ${task.title}${task.dueAt ? ` (fällig ${task.dueAt.toISOString().slice(0, 10)})` : ""}`,
       data: { taskId: task.id, title: task.title, dueAt: task.dueAt },
     };
   },

@@ -4,11 +4,16 @@ import { planComputerTask } from "@/agents/computer/planner";
 import { cancelDesktopJobs, fetchCapabilities, runDesktopAction } from "@/agents/computer/client";
 import {
   createComputerJob,
+  findResumableComputerJob,
   hasCancelRequest,
+  interruptStaleComputerJobs,
   recordComputerAction,
   requestComputerCancel,
+  saveComputerPlan,
   updateComputerJob,
 } from "@/services/computer/audit";
+import { pickControlFromInspect } from "@/lib/computer/ax-pick";
+import { guessAppName, guessControlName, type PlannedStep } from "@/agents/computer/planner";
 import { createApprovalRequest } from "@/services/approvals";
 import { recordActivity } from "@/services/archive";
 import { cancelCodingSessions } from "@/services/coding/sessions";
@@ -27,6 +32,7 @@ export type ComputerAgentResult = {
   summary: string;
   reply: string;
   approvalId?: string;
+  humanRequired?: "captcha" | "login";
   actions: ActionResult[];
   verified: boolean;
   statusMessage: string;
@@ -86,6 +92,7 @@ export async function runComputerAgent(input: {
 }): Promise<ComputerAgentResult> {
   const intent = detectComputerIntent(input.userRequest);
   input.onStatus?.(intent.statusMessage || "Computeraktion wird vorbereitet");
+  await interruptStaleComputerJobs(input.organizationId);
 
   if (intent.kind === "cancel" || consumeCancelOrganization(input.organizationId)) {
     const count = await requestComputerCancel(input.organizationId);
@@ -119,7 +126,7 @@ export async function runComputerAgent(input: {
   }
 
   const volume = detectNamedVolume(input.userRequest);
-  if (volume && !volume.mounted) {
+  if (volume && !volume.mounted && intent.kind !== "resume") {
     return {
       ok: false,
       status: "FAILED",
@@ -131,43 +138,74 @@ export async function runComputerAgent(input: {
     };
   }
   const workspace = volume?.path ?? process.cwd();
-  const computerJob = await createComputerJob({
-    organizationId: input.organizationId,
-    jobId: input.jobId,
-    goal: intent.statusMessage || input.userRequest,
-    userRequest: input.userRequest,
-    status: "PLANNED",
-  });
-
   const caps = await fetchCapabilities();
-  const steps = planComputerTask({ kind: intent.kind, userRequest: input.userRequest, workspace });
-  if (intent.kind === "run_script" && steps.length === 0) {
-    await updateComputerJob({
+
+  let computerJob;
+  let steps: PlannedStep[] = [];
+  let allSteps: PlannedStep[] = [];
+  let startAt = 0;
+
+  if (intent.kind === "resume") {
+    const resumable = await findResumableComputerJob(input.organizationId);
+    if (!resumable) {
+      return {
+        ok: false,
+        status: "FAILED",
+        summary: "Kein unterbrochener Auftrag.",
+        reply: "Es liegt kein unterbrochener Computerauftrag vor, den ich fortsetzen könnte.",
+        actions: [],
+        verified: true,
+        statusMessage: "Nichts fortzusetzen",
+      };
+    }
+    computerJob = resumable.job;
+    allSteps = resumable.plan.steps;
+    startAt = resumable.plan.cursor;
+    steps = allSteps.slice(startAt);
+    await saveComputerPlan({
       organizationId: input.organizationId,
       id: computerJob.id,
-      status: "FAILED",
-      error: "invalid_applescript",
-      finished: true,
+      status: "EXECUTING",
+      plan: { steps: resumable.plan.steps, cursor: startAt },
     });
-    return {
-      ok: false,
-      status: "FAILED",
-      summary: "Kein ausführbares AppleScript.",
-      reply:
-        "Ohne ein gültiges tell application … führe ich kein AppleScript aus. do shell script und fremde Apps sind blockiert.",
-      actions: [],
-      verified: true,
-      statusMessage: "Skript abgelehnt",
-    };
+  } else {
+    computerJob = await createComputerJob({
+      organizationId: input.organizationId,
+      jobId: input.jobId,
+      goal: intent.statusMessage || input.userRequest,
+      userRequest: input.userRequest,
+      status: "PLANNED",
+    });
+    steps = planComputerTask({ kind: intent.kind, userRequest: input.userRequest, workspace });
+    allSteps = steps;
+    if (intent.kind === "run_script" && steps.length === 0) {
+      await updateComputerJob({
+        organizationId: input.organizationId,
+        id: computerJob.id,
+        status: "FAILED",
+        error: "invalid_applescript",
+        finished: true,
+      });
+      return {
+        ok: false,
+        status: "FAILED",
+        summary: "Kein ausführbares AppleScript.",
+        reply:
+          "Ohne ein gültiges tell application … führe ich kein AppleScript aus. do shell script und fremde Apps sind blockiert.",
+        actions: [],
+        verified: true,
+        statusMessage: "Skript abgelehnt",
+      };
+    }
+    await saveComputerPlan({
+      organizationId: input.organizationId,
+      id: computerJob.id,
+      status: "EXECUTING",
+      plan: { steps, cursor: 0 },
+    });
   }
-  await updateComputerJob({
-    organizationId: input.organizationId,
-    id: computerJob.id,
-    status: "EXECUTING",
-    plan: steps,
-  });
 
-  if (intent.kind === "delete_dangerous" || hard?.code === "delete_repository") {
+  if (intent.kind !== "resume" && (intent.kind === "delete_dangerous" || hard?.code === "delete_repository")) {
     const approval = await createApprovalRequest({
       organizationId: input.organizationId,
       jobId: input.jobId,
@@ -211,8 +249,11 @@ export async function runComputerAgent(input: {
   }
 
   const actions: ActionResult[] = [];
+  let cursor = startAt;
   try {
-    for (const step of steps) {
+    const queue = [...steps];
+    while (queue.length) {
+      const step = queue.shift()!;
       if (await hasCancelRequest(input.organizationId, computerJob.id)) {
         await cancelDesktopJobs();
         return cancelledResult(actions);
@@ -237,10 +278,11 @@ export async function runComputerAgent(input: {
           description: risk.reason,
           payload: { step, executed: false },
         });
-        await updateComputerJob({
+        await saveComputerPlan({
           organizationId: input.organizationId,
           id: computerJob.id,
           status: "WAITING_FOR_APPROVAL",
+          plan: { steps: allSteps, cursor },
           finished: true,
         });
         return {
@@ -278,6 +320,61 @@ export async function runComputerAgent(input: {
         jobId: input.jobId,
         action: result,
       });
+      cursor += 1;
+      if (!allSteps.includes(step)) allSteps.push(step);
+      await saveComputerPlan({
+        organizationId: input.organizationId,
+        id: computerJob.id,
+        status: "EXECUTING",
+        plan: { steps: allSteps, cursor },
+      });
+
+      const human = String(result.metadata?.humanRequired ?? (result.result as { humanRequired?: string } | undefined)?.humanRequired ?? "");
+      if (human === "captcha" || human === "login") {
+        await saveComputerPlan({
+          organizationId: input.organizationId,
+          id: computerJob.id,
+          status: "WAITING_FOR_HUMAN",
+          plan: { steps: allSteps, cursor },
+          error: human,
+        });
+        return {
+          ok: true,
+          status: "WAITING_FOR_HUMAN",
+          summary: human === "captcha" ? "Captcha in der Seite." : "Login in der Seite.",
+          reply:
+            human === "captcha"
+              ? "Da ist ein Captcha. Bitte im NOVA-Browser lösen, dann sag „mach weiter“."
+              : "Da ist ein Login. Bitte im NOVA-Browser anmelden, dann sag „mach weiter“.",
+          actions,
+          verified: true,
+          statusMessage: "Du bist dran",
+          humanRequired: human === "captcha" ? "captcha" : "login",
+        };
+      }
+
+      if (
+        result.success &&
+        step.tool === "accessibility" &&
+        String((step.payload as { action?: string }).action) === "inspect" &&
+        !queue.some((item) => item.tool === "accessibility" && String((item.payload as { action?: string }).action) === "press")
+      ) {
+        const picked = pickControlFromInspect(result.result, input.userRequest) || guessControlName(input.userRequest);
+        if (picked) {
+          queue.push({
+            tool: "accessibility",
+            payload: { action: "press", identifier: picked, app: guessAppName(input.userRequest) || undefined },
+            purpose: `${picked} nach UI-Lesen bedienen`,
+            userCommissioned: true,
+          });
+          queue.push({
+            tool: "screen",
+            payload: { action: "capture", persist: false },
+            purpose: "Selbstprüfung nach UI-Klick",
+            userCommissioned: true,
+          });
+        }
+      }
 
       if (!result.success && result.error?.code === "approval_required") {
         const approval = await createApprovalRequest({
@@ -287,10 +384,11 @@ export async function runComputerAgent(input: {
           description: result.error.message,
           payload: { step, executed: false },
         });
-        await updateComputerJob({
+        await saveComputerPlan({
           organizationId: input.organizationId,
           id: computerJob.id,
           status: "WAITING_FOR_APPROVAL",
+          plan: { steps: allSteps, cursor: Math.max(0, cursor - 1) },
           finished: true,
         });
         return {
@@ -342,12 +440,12 @@ export async function runComputerAgent(input: {
       }
 
       if (!result.success && intent.kind !== "cursor_ask") {
-        await updateComputerJob({
+        await saveComputerPlan({
           organizationId: input.organizationId,
           id: computerJob.id,
           status: "FAILED",
+          plan: { steps: allSteps, cursor: Math.max(0, cursor - 1) },
           error: result.error?.message,
-          result: { actions },
           finished: true,
         });
         return {
@@ -398,23 +496,38 @@ export async function runComputerAgent(input: {
     };
   } catch (error) {
     const message = error instanceof Error ? error.message : "Computer Agent Fehler";
-    await updateComputerJob({
+    await saveComputerPlan({
       organizationId: input.organizationId,
       id: computerJob.id,
-      status: "FAILED",
+      status: "INTERRUPTED",
+      plan: { steps: allSteps, cursor },
       error: message,
       finished: true,
     });
     return {
       ok: false,
-      status: "FAILED",
+      status: "INTERRUPTED",
       summary: message,
-      reply: `Die Computeraktion ist fehlgeschlagen: ${message}`,
+      reply: `Der Auftrag ist unterbrochen: ${message} Sag „mach weiter“, dann setze ich am letzten Schritt an.`,
       actions,
       verified: false,
-      statusMessage: "Fehlgeschlagen",
+      statusMessage: "Unterbrochen",
     };
   }
+}
+
+export async function resumeComputerWork(input: {
+  organizationId: string;
+  jobId?: string;
+  userRequest?: string;
+  onStatus?: (message: string) => void;
+}): Promise<ComputerAgentResult> {
+  return runComputerAgent({
+    organizationId: input.organizationId,
+    jobId: input.jobId,
+    userRequest: input.userRequest?.trim() || "mach weiter",
+    onStatus: input.onStatus,
+  });
 }
 
 export async function cancelComputerWork(organizationId: string): Promise<{ count: number }> {

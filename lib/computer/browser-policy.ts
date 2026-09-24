@@ -21,6 +21,24 @@ const IRREVERSIBLE_PATTERN =
 
 const SUBMIT_ACTIONS = new Set(["submit", "purchase", "pay", "post", "send"]);
 
+export function looksLikeHumanGate(text: string): "captcha" | "login" | null {
+  const value = text.toLowerCase();
+  if (
+    /recaptcha|hcaptcha|h-captcha|cf-turnstile|ich bin kein roboter|i'?m not a robot|verify you are human|cloudflare.*checking|attention required|challenge-platform/.test(
+      value,
+    )
+  ) {
+    return "captcha";
+  }
+  if (
+    /\b(?:anmelden|sign in|log in|login)\b/.test(value) &&
+    /\b(?:passwort|password|e-?mail|username|benutzername)\b/.test(value)
+  ) {
+    return "login";
+  }
+  return null;
+}
+
 export function looksLikeIrreversibleBrowserSideEffect(text: string): boolean {
   return IRREVERSIBLE_PATTERN.test(text);
 }

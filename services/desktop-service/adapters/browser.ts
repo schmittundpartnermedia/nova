@@ -6,6 +6,7 @@ import {
   assertUploadAllowed,
   elementLooksLikeSubmit,
   locatorTargetText,
+  looksLikeHumanGate,
   resolveLocatorSpec,
   typingLooksLikeSecretExfil,
   type BrowserLocatorSpec,
@@ -210,6 +211,7 @@ async function handleRead(startedAt: Date): Promise<ActionResult> {
   const page = await getActivePage();
   const after = await snapshot(page);
   const untrusted = wrapExternalContent(after.url, after.text);
+  const human = looksLikeHumanGate(`${after.title} ${after.text}`);
   return createActionResult({
     tool: "browser",
     action: "read",
@@ -224,15 +226,22 @@ async function handleRead(startedAt: Date): Promise<ActionResult> {
       text: after.text,
       injectionSuspected: untrusted.injectionSuspected,
       untrusted,
+      humanRequired: human,
     },
     verification: {
       verified: after.title.length > 0 || after.text.length > 0 || /^https?:/i.test(after.url),
       method: "playwright_dom",
-      details: untrusted.injectionSuspected
-        ? "Seiteninhalt ist untrusted; Injection-Muster erkannt und nicht als Anweisung behandelt."
-        : `Titel ${after.title || "(leer)"}`,
+      details: human
+        ? `Menschliche Aktion nötig: ${human}`
+        : untrusted.injectionSuspected
+          ? "Seiteninhalt ist untrusted; Injection-Muster erkannt und nicht als Anweisung behandelt."
+          : `Titel ${after.title || "(leer)"}`,
     },
-    metadata: untrusted.injectionSuspected ? { untrusted: true, injectionSuspected: true } : undefined,
+    metadata: human
+      ? { humanRequired: human }
+      : untrusted.injectionSuspected
+        ? { untrusted: true, injectionSuspected: true }
+        : undefined,
   });
 }
 
@@ -242,6 +251,7 @@ async function handleInspect(maxItems: number, startedAt: Date): Promise<ActionR
   const tree = await inspectDom(page, maxItems);
   const consoleEntries = pageConsoleEntries(page);
   const untrusted = wrapExternalContent(after.url, JSON.stringify(tree).slice(0, 4000));
+  const human = looksLikeHumanGate(`${after.title} ${after.text} ${JSON.stringify(tree).slice(0, 1500)}`);
   return createActionResult({
     tool: "browser",
     action: "inspect",
@@ -258,12 +268,16 @@ async function handleInspect(maxItems: number, startedAt: Date): Promise<ActionR
       consoleErrors: consoleEntries.filter((item) => item.type === "error" || item.type === "pageerror"),
       injectionSuspected: untrusted.injectionSuspected,
       untrusted,
+      humanRequired: human,
     },
     verification: {
       verified: true,
       method: "playwright_dom_inspect",
-      details: `${tree.links.length} Links, ${tree.inputs.length} Felder, ${tree.buttons.length} Buttons, ${consoleEntries.length} Console-Einträge`,
+      details: human
+        ? `Menschliche Aktion nötig: ${human}`
+        : `${tree.links.length} Links, ${tree.inputs.length} Felder, ${tree.buttons.length} Buttons, ${consoleEntries.length} Console-Einträge`,
     },
+    metadata: human ? { humanRequired: human } : untrusted.injectionSuspected ? { untrusted: true, injectionSuspected: true } : undefined,
   });
 }
 

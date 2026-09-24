@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import { parseWhen, guessTitle } from "@/lib/calendar/when";
 import { detectCalendarIntent } from "@/agents/calendar/intent";
 import { detectWatchIntent } from "@/agents/watch/intent";
+import { detectContactIntent } from "@/agents/contacts/intent";
+import { detectTicketIntent } from "@/agents/tickets/intent";
 import { needsSpecialistWork } from "@/agents/master/intent";
 import { planComputerTask } from "@/agents/computer/planner";
 import { detectComputerIntent } from "@/agents/computer/intent";
@@ -65,6 +67,15 @@ export function runOpsUnitTests(): string[] {
     assert.equal(needsSpecialistWork("Was steht an?"), true);
     assert.equal(needsSpecialistWork("Lege morgen um 10 Uhr einen Termin an"), true);
     assert.equal(needsSpecialistWork("Was hatten wir zu ELEVUM beschlossen?"), false);
+    assert.equal(needsSpecialistWork("Speicher Kontakt Clara Hetzner"), true);
+    assert.equal(needsSpecialistWork("Neues Ticket für Hetzner Rechnung"), true);
+  });
+
+  check("contact and ticket intent", () => {
+    assert.equal(detectContactIntent("Speicher Kontakt Clara Hetzner"), "create");
+    assert.equal(detectContactIntent("Wer ist Clara"), "search");
+    assert.equal(detectTicketIntent("Neues Ticket für Hetzner Rechnung"), true);
+    assert.equal(detectTicketIntent("Was steht an?"), false);
   });
 
   check("ui click plans a self-check screenshot", () => {
@@ -74,6 +85,8 @@ export function runOpsUnitTests(): string[] {
       workspace: "/tmp",
     });
     assert.equal(steps.some((step) => step.tool === "screen"), true);
+    assert.equal(steps.some((step) => step.tool === "accessibility" && (step.payload as { action?: string }).action === "inspect"), true);
+    assert.equal(steps.some((step) => step.tool === "accessibility" && (step.payload as { action?: string }).action === "press"), true);
   });
 
   check("elevum is local disk, not google", () => {

@@ -79,7 +79,7 @@ export function reduceVoiceSession(model: VoiceSessionModel, event: VoiceSession
       }
       return { ...model, state: "LISTENING", turnStartedAt: null, lastVoiceEndAt: null };
     case "BARGE_IN":
-      if (model.state !== "NOVA_SPEAKING") return model;
+      if (model.state !== "NOVA_SPEAKING" && model.state !== "PROCESSING") return model;
       return {
         state: "INTERRUPTED",
         error: null,

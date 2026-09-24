@@ -112,6 +112,7 @@ export async function POST(request: Request) {
             providerId: result.providerId,
             model: result.model,
             needsFile: result.needsFile ?? null,
+            humanRequired: result.humanRequired ?? null,
           };
         } catch (error) {
           resultReply = publicErrorMessage(error);

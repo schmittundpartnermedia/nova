@@ -46,6 +46,7 @@ export class SpeechPlaybackController {
   private analyser: AnalyserNode | null = null;
   private gain: GainNode | null = null;
   private facial = new HeuristicFacialProvider();
+  // Browser-Lip-Sync bleibt Heuristik. /api/nova/facial sagt, ob Audio2Face erreichbar ist.
   private timeline = new AvatarTimelineController();
   private listener: SpeechPlaybackListener = {};
   private chunkOriginMs = 0;

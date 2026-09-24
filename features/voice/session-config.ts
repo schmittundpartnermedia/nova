@@ -15,7 +15,7 @@ export const VOICE_SESSION_CONFIG = {
   vadNoiseAdaptSpeech: 0.04,
   vadNoiseAdaptSilence: 0.12,
   vadNoiseCeiling: 0.06,
-  postTtsGuardMs: 350,
+  postTtsGuardMs: 180,
   bargeInEnabled: true,
   bargeInWarmupMs: 180,
   bargeInMinSpeechRms: 0.028,

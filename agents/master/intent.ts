@@ -6,6 +6,8 @@ import { detectComputerIntent } from "@/agents/computer/intent";
 import { isPureSocial } from "@/lib/dialog/intent";
 import { detectCalendarIntent } from "@/agents/calendar/intent";
 import { detectWatchIntent } from "@/agents/watch/intent";
+import { detectContactIntent } from "@/agents/contacts/intent";
+import { detectTicketIntent } from "@/agents/tickets/intent";
 
 /**
  * Spezialisten (Recherche, Mail, Aufgabe, Memory-Schreiben) brauchen den Planer.
@@ -30,6 +32,8 @@ export function needsSpecialistWork(userRequest: string): boolean {
   }
   if (detectCalendarIntent(text)) return true;
   if (detectWatchIntent(text)) return true;
+  if (detectContactIntent(text)) return true;
+  if (detectTicketIntent(text)) return true;
   return false;
 }
 

@@ -128,6 +128,8 @@ export async function runVoiceSessionChecks() {
   assert(empty.state === "LISTENING", "Leerer Silence-Timeout bleibt LISTENING.");
   const waitingFull = reduceVoiceSession(waitingAgain, { type: "SILENCE_TIMEOUT", hasTranscript: true });
   assert(waitingFull.state === "PROCESSING", "Silence mit Transcript → PROCESSING");
+  const bargedWhileThinking = reduceVoiceSession(waitingFull, { type: "BARGE_IN", at: 3500 });
+  assert(bargedWhileThinking.state === "INTERRUPTED", "BARGE_IN aus PROCESSING → INTERRUPTED");
   const speakingNova = reduceVoiceSession(waitingFull, { type: "NOVA_SPEAKING" });
   assert(speakingNova.state === "NOVA_SPEAKING", "PROCESSING → NOVA_SPEAKING");
   const barged = reduceVoiceSession(speakingNova, { type: "BARGE_IN", at: 4000 });
@@ -190,7 +192,7 @@ export async function runVoiceSessionChecks() {
   assert(turns[0]?.transcript === "Hallo NOVA, gib mir den Status.", turns[0]?.transcript ?? "kein Turn");
   assert(turns[0]?.sttEngine === "whisper", String(turns[0]?.sttEngine));
   assert(controller.getSnapshot().state === "PROCESSING", "Nach Turn: PROCESSING");
-  assert(!capture.collecting, "Capture während PROCESSING pausiert.");
+  assert(capture.collecting, "Mit Barge-In bleibt das Mikrofon während PROCESSING offen.");
   assert(capture.slices >= 1, "Utterance muss geschnitten werden.");
 
   controller.notifyNovaSpeaking();

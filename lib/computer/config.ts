@@ -98,6 +98,15 @@ function expandMaybe(input: string): string {
   return input;
 }
 
+export function browserCdpUrl(): string | null {
+  const raw = process.env.NOVA_BROWSER_CDP?.trim();
+  if (!raw) return null;
+  if (!/^https?:\/\/(127\.0\.0\.1|localhost|\[::1\])(:\d+)?(\/|$)/i.test(raw)) {
+    return null;
+  }
+  return raw;
+}
+
 export function assertLoopbackHost(host: string): void {
   if (host !== "127.0.0.1" && host !== "localhost" && host !== "::1") {
     throw new Error("NOVA Desktop Service darf nur lokal lauschen.");

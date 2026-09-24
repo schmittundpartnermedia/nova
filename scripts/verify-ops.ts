@@ -27,6 +27,7 @@ async function main() {
   bootstrapAgents();
   assert(getAgent("calendar")?.definition.implemented === true, "Calendar Agent nicht implementiert");
   assert(getAgent("watch")?.definition.implemented === true, "Watch Agent nicht implementiert");
+  assert(getAgent("contact")?.definition.implemented === true, "Contact Agent nicht implementiert");
 
   const organization = await prisma.organization.upsert({
     where: { slug: "ops-verify" },
@@ -35,6 +36,7 @@ async function main() {
   });
   await prisma.meeting.deleteMany({ where: { organizationId: organization.id } });
   await prisma.task.deleteMany({ where: { organizationId: organization.id } });
+  await prisma.contact.deleteMany({ where: { organizationId: organization.id } });
   await prisma.communication.deleteMany({ where: { organizationId: organization.id } });
   await prisma.approvalRequest.deleteMany({ where: { organizationId: organization.id } });
   await prisma.approvalPolicy.deleteMany({ where: { organizationId: organization.id } });
@@ -71,6 +73,32 @@ async function main() {
   });
   const scan = await scanWatch(organization.id);
   assert(scan.overdueTasks.some((item) => item.title.includes("Follow-up")), "Watch sieht überfällige Aufgabe nicht");
+
+  const contactRun = await getAgent("contact")!.run(
+    { userRequest: "Speicher Kontakt Clara Hetzner" },
+    {
+      organizationId: organization.id,
+      jobId: "ops-verify-contact",
+      userRequest: "Speicher Kontakt Clara Hetzner",
+      goal: "Kontakt anlegen",
+    },
+  );
+  assert(contactRun.ok && /Clara/i.test(contactRun.summary), contactRun.summary);
+  const stored = await prisma.contact.findFirst({
+    where: { organizationId: organization.id, firstName: "Clara" },
+  });
+  assert(stored && stored.isMock === false, "Kontakt muss lokal und nicht Mock sein");
+
+  const ticketRun = await getAgent("task")!.run(
+    { title: "Hetzner Rechnung", ticket: true },
+    {
+      organizationId: organization.id,
+      jobId: "ops-verify-ticket",
+      userRequest: "Neues Ticket für Hetzner Rechnung",
+      goal: "Ticket",
+    },
+  );
+  assert(ticketRun.ok && /Ticket:/i.test(ticketRun.summary), ticketRun.summary);
 
   const mail = new MockMailProvider();
   const send = await mail.send({

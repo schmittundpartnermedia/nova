@@ -33,6 +33,22 @@ type Approval = {
   actionType?: string;
 };
 
+type ResumableComputer = {
+  id: string;
+  status: string;
+  goal: string;
+  remainingSteps: number;
+  humanRequired: string | null;
+};
+
+type WatchAlert = {
+  fingerprint: string;
+  speak: boolean;
+  message: string;
+  overdue: number;
+  soon: number;
+};
+
 function humanStatus(state: OrbState, text: string): string {
   if (state === "LISTENING") return text || "Zuhören";
   if (state === "THINKING") return text || "Ich denke nach …";
@@ -96,6 +112,10 @@ export function NovaShell() {
   const [job, setJob] = useState<NovaJobSummary | null>(null);
   const [standingPolicies, setStandingPolicies] = useState<NovaStandingPolicy[]>([]);
   const [standingBusy, setStandingBusy] = useState(false);
+  const [resumable, setResumable] = useState<ResumableComputer | null>(null);
+  const [humanGate, setHumanGate] = useState<string | null>(null);
+  const [watchBanner, setWatchBanner] = useState<string | null>(null);
+  const watchFpRef = useRef<string | null>(null);
   const [navOpen, setNavOpen] = useState(false);
   const [contextOpen, setContextOpen] = useState(false);
   const [commOpen, setCommOpen] = useState(false);
@@ -109,6 +129,14 @@ export function NovaShell() {
   const commOpenRef = useRef(false);
   const sessionActiveRef = useRef(false);
   const sendVoiceTurnRef = useRef<(turn: VoiceTurn) => void>(() => undefined);
+  const watchSpeakRef = useRef({
+    voiceEnabled: false,
+    idle: true,
+    speechPlaying: false,
+    busy: false,
+    beginTurn: (_text: string) => undefined as void,
+    flush: (_text?: string) => undefined as void,
+  });
 
   const clearIdleTimer = useCallback(() => {
     if (idleTimer.current) {
@@ -335,6 +363,7 @@ export function NovaShell() {
             }
           }
           setProviderMode((payload.providerMode as ProviderMode) ?? null);
+          const nextState = (payload.orbState as OrbState) ?? "DONE";
           if (payload.approvalId) {
             setApproval({
               id: String(payload.approvalId),
@@ -345,6 +374,11 @@ export function NovaShell() {
           } else {
             setApproval(null);
           }
+          if (typeof payload.humanRequired === "string" && payload.humanRequired) {
+            setHumanGate(payload.humanRequired);
+          } else if (nextState !== "WAITING_FOR_APPROVAL") {
+            setHumanGate(null);
+          }
           if (typeof payload.jobId === "string" && payload.jobId) {
             setJob({
               id: payload.jobId,
@@ -353,7 +387,6 @@ export function NovaShell() {
               userRequest: message,
             });
           }
-          const nextState = (payload.orbState as OrbState) ?? "DONE";
           if (payload.needsFile === "chatgpt-export") {
             setImportOpen(true);
           }
@@ -445,43 +478,114 @@ export function NovaShell() {
     }
   }, []);
 
+  watchSpeakRef.current = {
+    voiceEnabled,
+    idle: orbState === "IDLE" || orbState === "LISTENING",
+    speechPlaying,
+    busy,
+    beginTurn,
+    flush,
+  };
+
+  const applyStatusPayload = useCallback(
+    (data: {
+      ok?: boolean;
+      tenant?: { userName?: string };
+      pendingApprovals?: Approval[];
+      standingPolicies?: NovaStandingPolicy[];
+      latestJob?: { id?: string; goal?: string; status?: string; userRequest?: string };
+      resumableComputerJob?: ResumableComputer | null;
+      watchAlert?: WatchAlert | null;
+    }, options?: { speakWatch?: boolean }) => {
+      setOnline(Boolean(data.ok));
+      if (data.tenant?.userName) setUserName(data.tenant.userName);
+      const pending = data.pendingApprovals?.[0];
+      if (pending) {
+        setApproval({
+          id: pending.id,
+          description: pending.description,
+          status: pending.status,
+          actionType: pending.actionType,
+        });
+        setOrbState("WAITING_FOR_APPROVAL");
+        setStatus(/computer|löschen|freigabe/i.test(String(pending.description ?? ""))
+          ? "Freigabe erforderlich"
+          : "Ich brauche deine Freigabe, bevor etwas versendet werden könnte.");
+      }
+      if (Array.isArray(data.standingPolicies)) {
+        setStandingPolicies(data.standingPolicies);
+      }
+      if (data.latestJob) {
+        setJob({
+          id: String(data.latestJob.id),
+          goal: String(data.latestJob.goal ?? ""),
+          status: String(data.latestJob.status ?? ""),
+          userRequest: String(data.latestJob.userRequest ?? ""),
+        });
+      }
+      const nextResumable = data.resumableComputerJob ?? null;
+      setResumable(nextResumable);
+      if (nextResumable?.humanRequired) setHumanGate(nextResumable.humanRequired);
+      else if (!nextResumable) setHumanGate(null);
+
+      const alert = data.watchAlert;
+      if (alert?.speak && alert.fingerprint) {
+        const stored = watchFpRef.current ?? (typeof sessionStorage !== "undefined" ? sessionStorage.getItem("nova-watch-fp") : null);
+        if (stored !== alert.fingerprint) {
+          watchFpRef.current = alert.fingerprint;
+          try {
+            sessionStorage.setItem("nova-watch-fp", alert.fingerprint);
+          } catch {
+            // ignore
+          }
+          setWatchBanner(alert.message);
+          const speak = watchSpeakRef.current;
+          const maySpeak =
+            options?.speakWatch !== false &&
+            speak.voiceEnabled &&
+            speak.idle &&
+            !speak.speechPlaying &&
+            !speak.busy;
+          if (maySpeak) {
+            speak.beginTurn(alert.message);
+            speak.flush(alert.message);
+          }
+        }
+      } else if (alert && !alert.speak) {
+        setWatchBanner(null);
+      }
+    },
+    [],
+  );
+
   useEffect(() => {
     void (async () => {
       try {
         const response = await fetch("/api/nova/status");
         const data = await response.json();
-        setOnline(Boolean(data.ok));
-        if (data.tenant?.userName) setUserName(data.tenant.userName);
-        const pending = data.pendingApprovals?.[0];
-        if (pending) {
-          setApproval({
-            id: pending.id,
-            description: pending.description,
-            status: pending.status,
-            actionType: pending.actionType,
-          });
-          setOrbState("WAITING_FOR_APPROVAL");
-          setStatus(/computer|löschen|freigabe/i.test(String(pending.description ?? ""))
-            ? "Freigabe erforderlich"
-            : "Ich brauche deine Freigabe, bevor etwas versendet werden könnte.");
-        }
-        if (Array.isArray(data.standingPolicies)) {
-          setStandingPolicies(data.standingPolicies);
-        }
-        if (data.latestJob) {
-          setJob({
-            id: String(data.latestJob.id),
-            goal: String(data.latestJob.goal ?? ""),
-            status: String(data.latestJob.status ?? ""),
-            userRequest: String(data.latestJob.userRequest ?? ""),
-          });
-        }
+        applyStatusPayload(data, { speakWatch: false });
       } catch {
         setOnline(false);
       }
       void loadArchive();
     })();
-  }, [loadArchive]);
+  }, [applyStatusPayload, loadArchive]);
+
+  useEffect(() => {
+    const tick = () => {
+      void (async () => {
+        try {
+          const response = await fetch("/api/nova/status", { cache: "no-store" });
+          const data = await response.json();
+          applyStatusPayload(data, { speakWatch: true });
+        } catch {
+          setOnline(false);
+        }
+      })();
+    };
+    const id = window.setInterval(tick, 90_000);
+    return () => window.clearInterval(id);
+  }, [applyStatusPayload]);
 
   const decide = async (decision: "approved" | "rejected", standing = false) => {
     if (!approval) return;
@@ -547,6 +651,12 @@ export function NovaShell() {
     setArchiveOpen(false);
     if (next !== "chat") setContextOpen(true);
   };
+
+  const resumeComputer = useCallback(() => {
+    setHumanGate(null);
+    setResumable(null);
+    void sendMessage(humanGate ? "Ich habe es gelöst" : "mach weiter", "text");
+  }, [humanGate, sendMessage]);
 
   const stopSpeech = useCallback(() => {
     interruptedRef.current = true;
@@ -714,6 +824,30 @@ export function NovaShell() {
 
           <div className="nova-command-dock">
             {unavailableHint ? <p className="nova-voice-hint">{unavailableHint}</p> : null}
+            {watchBanner ? (
+              <div className="nova-card nova-panel" style={{ width: "min(92%, 480px)", textAlign: "center", marginBottom: 12 }}>
+                <h3>Watch</h3>
+                <p className="nova-quote">{watchBanner}</p>
+                <button type="button" className="nova-chip" onClick={() => setWatchBanner(null)}>
+                  Alles klar
+                </button>
+              </div>
+            ) : null}
+            {humanGate || resumable ? (
+              <div className="nova-card nova-panel" style={{ width: "min(92%, 480px)", textAlign: "center", marginBottom: 12 }}>
+                <h3>{humanGate ? "Du bist dran" : "Auftrag unterbrochen"}</h3>
+                <p className="nova-quote">
+                  {humanGate === "captcha"
+                    ? "Bitte Captcha im Browser lösen, dann hier fortsetzen."
+                    : humanGate === "login"
+                      ? "Bitte anmelden, dann hier fortsetzen."
+                      : resumable?.goal || "Ich kann am letzten Schritt weitermachen."}
+                </p>
+                <button type="button" disabled={busy} onClick={resumeComputer} className="nova-chip" style={{ background: "rgba(227, 154, 78, 0.18)", color: "#f3d2aa" }}>
+                  {humanGate ? "Ich hab’s gelöst" : "Fortsetzen"}
+                </button>
+              </div>
+            ) : null}
             {approval ? (
               <ApprovalCard
                 description={approval.description}

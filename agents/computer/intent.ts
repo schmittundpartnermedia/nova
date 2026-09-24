@@ -14,6 +14,7 @@ export type ComputerIntentKind =
   | "screenshot"
   | "run_script"
   | "find_file"
+  | "resume"
   | "generic"
   | "none";
 
@@ -29,6 +30,14 @@ export function detectComputerIntent(userRequest: string): ComputerIntent {
 
   if (/^(nova[,.\s]*)?(stopp?|stop|abbrechen|hör\s*auf|hoer\s*auf)\.?$/i.test(text)) {
     return { kind: "cancel", userCommissioned: true, statusMessage: "Ich breche ab." };
+  }
+
+  if (
+    /^(nova[,.\s]*)?(mach weiter|setz(?:e)? fort|auftrag fortsetzen|weiter am auftrag|ich habe? (?:es |das )?(?:captcha |login )?gelöst|ich habe? mich angemeldet)\.?$/i.test(
+      text,
+    )
+  ) {
+    return { kind: "resume", userCommissioned: true, statusMessage: "Auftrag wird fortgesetzt" };
   }
 
   if (detectHardBlock(text)?.code === "delete_repository" || /lösch(?:e|en)?\s+(?:das\s+)?nova/i.test(lower)) {

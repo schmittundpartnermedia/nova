@@ -13,6 +13,8 @@ import { needsLiveResearch } from "@/lib/research/intent";
 import { needsFlagshipModel, needsSpecialistWork } from "@/agents/master/intent";
 import { detectCalendarIntent } from "@/agents/calendar/intent";
 import { detectWatchIntent } from "@/agents/watch/intent";
+import { detectContactIntent } from "@/agents/contacts/intent";
+import { detectTicketIntent, guessTicketTitle } from "@/agents/tickets/intent";
 import { createApprovalRequest, standingApprovalAllows, consumeStandingApproval } from "@/services/approvals";
 import { getOrganizationConnectors, isRealConnectorEnabled } from "@/connectors/registry";
 import { getDefaultProject, runAgentStep } from "@/agents/runtime";
@@ -83,6 +85,7 @@ export type MasterRunResult = {
   reply: string;
   approvalId?: string;
   actionType?: string;
+  humanRequired?: string | null;
   mock: boolean;
   providerMode: ProviderMode;
   providerId: string;
@@ -385,7 +388,7 @@ export async function runMaster(input: {
     model: decision.model,
     schemaName: "master-plan",
     schemaDescription:
-      'JSON mit intent, goal, agents (Teilmenge von research|communication|task|project|coding|knowledge|calendar|watch), needsApproval, remember, searchRequired, externalAction (none|mail.send|calendar|other), replyHint, communicationBrief, taskDraft, projectDraft {create,name,description,list}, memoryItems [{type,title,content}], mock=false wenn echter Provider.',
+      'JSON mit intent, goal, agents (Teilmenge von research|communication|task|project|coding|knowledge|calendar|watch|contact), needsApproval, remember, searchRequired, externalAction (none|mail.send|calendar|other), replyHint, communicationBrief, taskDraft, projectDraft {create,name,description,list}, memoryItems [{type,title,content}], mock=false wenn echter Provider.',
     prompt: `Du bist NOVA, persönlicher Business-Assistent der Organization ${contextPack.organizationName}.
 Entscheide anhand von Intent und Kontext, nicht anhand einzelner Keywords, ob du direkt antwortest oder interne Agenten nutzt.
 
@@ -396,7 +399,8 @@ Regeln:
 - research nur bei Bedarf an externer Recherche.
 - knowledge für Dokumentimport, Ordnerlesen und Fragen an vorhandene Unterlagen. Nicht für Codeänderungen.
 - communication für Mail-/Anschreiben-Entwürfe, niemals Versand ohne Connector.
-- task für Aufgaben/Deadlines.
+- task für Aufgaben/Deadlines und lokale Tickets. Kein externes CRM.
+- contact für das lokale NOVA-Adressbuch, kein HubSpot/Google.
 - calendar für Termine im NOVA-Kalender (anlegen/listen), nicht Google.
 - watch für überfällige Aufgaben, alte Entwürfe, anstehende Termine.
 - project für Projektübersicht, Status oder neues Projekt.
@@ -423,6 +427,15 @@ ${input.userRequest}`,
   }
   if (detectWatchIntent(input.userRequest) && !requestedAgents.includes("watch")) {
     requestedAgents.push("watch");
+  }
+  if (detectContactIntent(input.userRequest) && !requestedAgents.includes("contact")) {
+    requestedAgents.push("contact");
+  }
+  if (detectTicketIntent(input.userRequest) && !requestedAgents.includes("task")) {
+    requestedAgents.push("task");
+    if (!plan.taskDraft?.title) {
+      plan.taskDraft = { title: guessTicketTitle(input.userRequest), description: input.userRequest, dueDays: 1 };
+    }
   }
   const allowMockCatalog = provider.id === "mock" && plan.mock === true;
 
@@ -671,6 +684,7 @@ ${input.userRequest}`,
           description: plan.taskDraft?.description ?? input.userRequest,
           dueDays: plan.taskDraft?.dueDays ?? 1,
           dueAt: plan.taskDraft?.dueAt,
+          ticket: detectTicketIntent(input.userRequest),
         },
         context,
       });
@@ -707,6 +721,34 @@ ${input.userRequest}`,
         jobId: job.id,
         projectId: project?.id,
         metadata: { executed: Boolean(result.result.data.executed), action: result.result.data.action ?? null, local: true },
+      });
+    }
+  }
+
+  if (shouldRun("contact") || detectContactIntent(input.userRequest)) {
+    const contact = getAgent("contact");
+    if (contact) {
+      const result = await runAgentStep({
+        agent: contact,
+        action: "contact",
+        payload: { userRequest: input.userRequest },
+        context,
+      });
+      agentNotes.push(`Contact Agent: ${result.result.summary}`);
+      await recordActivity({
+        organizationId: input.organizationId,
+        type: "communication",
+        title: result.result.data.action === "create" ? "Kontakt gespeichert" : "Adressbuch gelesen",
+        description: result.result.summary,
+        status: "prepared",
+        jobId: job.id,
+        projectId: project?.id,
+        metadata: {
+          executed: Boolean(result.result.data.executed),
+          action: result.result.data.action ?? null,
+          local: true,
+          externalCrm: false,
+        },
       });
     }
   }
@@ -1042,19 +1084,20 @@ async function runComputerMasterPath(
     await emit(input.onEvent, { type: "delta", delta: result.reply });
   }
 
+  const waitingHuman = result.status === "WAITING_FOR_HUMAN";
   const orbState: OrbState =
-    result.status === "WAITING_FOR_APPROVAL"
+    result.status === "WAITING_FOR_APPROVAL" || waitingHuman
       ? "WAITING_FOR_APPROVAL"
-      : result.status === "FAILED"
+      : result.status === "FAILED" || result.status === "INTERRUPTED"
         ? "ERROR"
         : "DONE";
 
   const jobStatus =
-    result.status === "WAITING_FOR_APPROVAL"
+    result.status === "WAITING_FOR_APPROVAL" || waitingHuman
       ? "waiting_for_approval"
       : result.status === "CANCELLED_BY_USER" || result.status === "CANCELLED"
         ? "cancelled"
-        : result.status === "FAILED"
+        : result.status === "FAILED" || result.status === "INTERRUPTED"
           ? "failed"
           : "completed";
 
@@ -1067,6 +1110,7 @@ async function runComputerMasterPath(
     statusMessage: result.statusMessage,
     reply: result.reply,
     approvalId: result.approvalId,
+    humanRequired: result.humanRequired ?? null,
     mock: false,
     providerMode: "fallback",
     providerId: "computer",

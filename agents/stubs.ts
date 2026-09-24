@@ -39,14 +39,6 @@ export const meetingAgent = stub(
   "medium",
 );
 
-export const contactAgent = stub(
-  "contact",
-  "Contact Agent",
-  "Personen, Firmen, Beziehungen, Kommunikationshistorie.",
-  ["contacts", "relationships", "history"],
-  "low",
-);
-
 export const qualityAgent = stub(
   "quality",
   "Quality Agent",
