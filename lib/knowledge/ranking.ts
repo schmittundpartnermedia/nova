@@ -37,7 +37,7 @@ function tokensOf(query: string): string[] {
 
 export function fulltextScore(query: string, item: SearchableItem): number {
   const q = query.toLowerCase();
-  const hay = `${item.title} ${item.content} ${item.fulltext}`.toLowerCase();
+  const hay = `${item.title} ${item.content} ${item.fulltext} ${item.sourceName ?? ""}`.toLowerCase();
   if (!q) return 0;
   if (hay.includes(q)) return 1;
   const tokens = tokensOf(query);
@@ -48,14 +48,25 @@ export function fulltextScore(query: string, item: SearchableItem): number {
 
 export function entityScore(query: string, item: SearchableItem): number {
   const q = query.toLowerCase();
-  if (item.entityName && q.includes(item.entityName.toLowerCase())) return 1;
-  if (item.type === "PERSON" && /ansprechpartner|kontakt|wer ist/i.test(query)) return 0.8;
-  if (item.type === "PRICE" && /preis|kostet|wie hoch/i.test(query)) return 0.9;
-  if (item.type === "DEADLINE" && /deadline|frist|wann/i.test(query)) return 0.9;
-  if (item.type === "DECISION" && /entscheid/i.test(query)) return 0.9;
-  if (item.type === "METRIC" && /umsatz|kennzahl|märz|marz|march/i.test(query)) return 0.85;
-  if (item.type === "COMPANY" && /firma|unternehmen/i.test(query)) return 0.6;
-  return 0;
+  const documentAsk = /was stand|unterlagen|angebot|vertrag|aus der pdf/i.test(query);
+  const factType = /^(PRICE|DECISION|DEADLINE|PERSON|PRODUCT|METRIC|CONTACT)$/.test(item.type);
+  let score = 0;
+  if (item.entityName && q.includes(item.entityName.toLowerCase())) {
+    score = Math.max(score, item.type === "COMPANY" && documentAsk ? 0.45 : 1);
+  }
+  if (item.type === "PERSON" && /ansprechpartner|kontakt|wer ist/i.test(query)) score = Math.max(score, 0.8);
+  if (item.type === "PRICE" && /preis|kostet|wie hoch|angebot|was stand/i.test(query)) score = Math.max(score, 0.9);
+  if (item.type === "DEADLINE" && /deadline|frist|wann|angebot|was stand/i.test(query)) score = Math.max(score, 0.9);
+  if (item.type === "DECISION" && /entscheid|was stand|unterlagen/i.test(query)) score = Math.max(score, 0.9);
+  if (item.type === "METRIC" && /umsatz|kennzahl|märz|marz|march/i.test(query)) score = Math.max(score, 0.85);
+  if (documentAsk && factType) score = Math.max(score, 0.82);
+  if (item.sourceName && /angebot|vertrag|pdf/i.test(item.sourceName) && documentAsk) {
+    score = Math.max(score, item.type === "COMPANY" ? 0.4 : 0.75);
+  }
+  if (item.type === "COMPANY" && /firma|unternehmen/i.test(query)) {
+    score = Math.max(score, documentAsk ? 0.35 : 0.6);
+  }
+  return score;
 }
 
 export function recencyScore(item: SearchableItem, now = Date.now()): number {

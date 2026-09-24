@@ -1,6 +1,7 @@
 import { needsLiveResearch } from "@/lib/research/intent";
 import { detectKnowledgeIntent } from "@/agents/knowledge/intent";
 import { detectChatGPTImportIntent } from "@/lib/chatgpt/intent";
+import { isPureSocial } from "@/lib/dialog/intent";
 
 /**
  * Spezialisten (Recherche, Mail, Aufgabe, Memory-Schreiben) brauchen den Planer.
@@ -9,6 +10,7 @@ import { detectChatGPTImportIntent } from "@/lib/chatgpt/intent";
 export function needsSpecialistWork(userRequest: string): boolean {
   const text = userRequest.trim();
   if (!text) return false;
+  if (isPureSocial(text)) return false;
   const knowledge = detectKnowledgeIntent(text);
   if (detectChatGPTImportIntent(text).kind !== "none") return true;
   if (knowledge.kind === "import") return true;

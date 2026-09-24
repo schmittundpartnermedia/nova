@@ -9,6 +9,9 @@ async function main() {
   if (needsSpecialistWork("Hallo NOVA, wie ist der Stand?")) {
     throw new Error("Gespräch darf keinen Spezialisten-Planer brauchen.");
   }
+  if (needsSpecialistWork("Schönen Feierabend")) {
+    throw new Error("Sozialer Wunsch darf keinen Spezialisten-Planer brauchen.");
+  }
   if (needsSpecialistWork("Was hatten wir zu ELEVUM beschlossen?")) {
     throw new Error("Archiv-Rückfrage darf direkt beantwortet werden.");
   }

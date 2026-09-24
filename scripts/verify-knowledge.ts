@@ -225,6 +225,23 @@ async function main() {
     userRequest: "Was stand im Angebot von Firma Nordstern?",
   });
   assert(/199|229|Clara|Partner/i.test(queryMaster.reply), `Master-Query ohne Knowledge: ${queryMaster.reply}`);
+  assert(
+    /nordstern|angebot|\.pdf|seite|quelle/i.test(queryMaster.reply),
+    `Master-Query ohne Quelle: ${queryMaster.reply}`,
+  );
+
+  const social = await runMaster({
+    organizationId: organization.id,
+    userRequest: "Schönen Feierabend",
+  });
+  assert(
+    !/bedeutet|definition|arbeitsende|schluss der arbeit|feierabend ist/i.test(social.reply),
+    `Feierabend wurde erklärt statt erwidert: ${social.reply}`,
+  );
+  assert(
+    /(danke|dir auch|ebenfalls|ebenso|gleichfalls)/i.test(social.reply),
+    `Feierabend ohne menschliche Erwiderung: ${social.reply}`,
+  );
 
   const cancelImport = await prisma.knowledgeImport.create({
     data: {

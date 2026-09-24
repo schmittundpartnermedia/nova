@@ -2,6 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { assertOrganizationId } from "@/services/tenant";
 import { searchConversationMessages } from "@/services/conversation";
 import { buildKnowledgeContext } from "@/services/knowledge";
+import { CONTEXT_WINDOW_SIZE } from "@/types/conversation";
 
 export type RetrievalMode = "structured" | "fulltext" | "semantic" | "relation";
 
@@ -118,9 +119,10 @@ export async function loadRelevantBusinessContext(input: {
   organizationId: string;
   query: string;
   conversationId?: string;
+  mode?: "full" | "social";
 }): Promise<BusinessContextPack> {
   assertOrganizationId(input.organizationId);
-  const query = input.query.trim();
+  const query = input.mode === "social" ? "" : input.query.trim();
 
   const organization = await prisma.organization.findUnique({
     where: { id: input.organizationId },
@@ -129,59 +131,68 @@ export async function loadRelevantBusinessContext(input: {
     throw new Error("Organization nicht gefunden oder Tenant mismatch.");
   }
 
+  const social = input.mode === "social";
   const [memories, projects, companies, contacts, tasks, recentMessages, retrievedMessages, knowledge] = await Promise.all([
-    searchMemory({ organizationId: input.organizationId, query, limit: 10 }),
-    prisma.project.findMany({
-      where: { organizationId: input.organizationId },
-      orderBy: { updatedAt: "desc" },
-      take: 15,
-    }),
-    prisma.company.findMany({
-      where: {
-        organizationId: input.organizationId,
-        ...(query
-          ? {
-              OR: [
-                { name: { contains: query } },
-                { notes: { contains: query } },
-                { industry: { contains: query } },
-              ],
-            }
-          : {}),
-      },
-      orderBy: { updatedAt: "desc" },
-      take: 8,
-    }),
-    prisma.contact.findMany({
-      where: {
-        organizationId: input.organizationId,
-        ...(query
-          ? {
-              OR: [
-                { firstName: { contains: query } },
-                { lastName: { contains: query } },
-                { notes: { contains: query } },
-                { role: { contains: query } },
-              ],
-            }
-          : {}),
-      },
-      include: { company: true },
-      orderBy: { updatedAt: "desc" },
-      take: 8,
-    }),
-    prisma.task.findMany({
-      where: {
-        organizationId: input.organizationId,
-        ...(query
-          ? {
-              OR: [{ title: { contains: query } }, { description: { contains: query } }],
-            }
-          : { status: "open" }),
-      },
-      orderBy: { updatedAt: "desc" },
-      take: 8,
-    }),
+    social ? Promise.resolve([]) : searchMemory({ organizationId: input.organizationId, query, limit: 10 }),
+    social
+      ? Promise.resolve([])
+      : prisma.project.findMany({
+          where: { organizationId: input.organizationId },
+          orderBy: { updatedAt: "desc" },
+          take: 15,
+        }),
+    social
+      ? Promise.resolve([])
+      : prisma.company.findMany({
+          where: {
+            organizationId: input.organizationId,
+            ...(query
+              ? {
+                  OR: [
+                    { name: { contains: query } },
+                    { notes: { contains: query } },
+                    { industry: { contains: query } },
+                  ],
+                }
+              : {}),
+          },
+          orderBy: { updatedAt: "desc" },
+          take: 8,
+        }),
+    social
+      ? Promise.resolve([])
+      : prisma.contact.findMany({
+          where: {
+            organizationId: input.organizationId,
+            ...(query
+              ? {
+                  OR: [
+                    { firstName: { contains: query } },
+                    { lastName: { contains: query } },
+                    { notes: { contains: query } },
+                    { role: { contains: query } },
+                  ],
+                }
+              : {}),
+          },
+          include: { company: true },
+          orderBy: { updatedAt: "desc" },
+          take: 8,
+        }),
+    social
+      ? Promise.resolve([])
+      : prisma.task.findMany({
+          where: {
+            organizationId: input.organizationId,
+            ...(query
+              ? {
+                  OR: [{ title: { contains: query } }, { description: { contains: query } }],
+                }
+              : { status: "open" }),
+          },
+          orderBy: { updatedAt: "desc" },
+          take: 8,
+        }),
     input.conversationId
       ? prisma.conversationMessage.findMany({
           where: {
@@ -189,7 +200,7 @@ export async function loadRelevantBusinessContext(input: {
             conversationId: input.conversationId,
           },
           orderBy: { createdAt: "desc" },
-          take: 4,
+          take: CONTEXT_WINDOW_SIZE,
         })
       : Promise.resolve([]),
     query
@@ -264,34 +275,43 @@ export async function loadRelevantBusinessContext(input: {
 }
 
 function formatContextPack(pack: BusinessContextPack): string {
-  const lines: string[] = [
-    `Organization: ${pack.organizationName}`,
-    "",
-    "Projekte:",
-    pack.projects.length
-      ? pack.projects.map((item) => `- ${item.name} (${item.status})${item.description ? `: ${item.description}` : ""}`).join("\n")
-      : "- keine gespeichert",
-    "",
-    "Memory (Retrieval, nicht vollständig):",
-    pack.memories.length
-      ? pack.memories.map((item) => `- [${item.type}] ${item.title}: ${item.content}`).join("\n")
-      : "- nichts passendes gefunden",
-    "",
-    "Firmen (Treffer/aktuell):",
-    pack.companies.length
-      ? pack.companies.map((item) => `- ${item.name}${item.industry ? ` (${item.industry})` : ""}`).join("\n")
-      : "- keine Treffer",
-    "",
-    "Kontakte (Treffer/aktuell):",
-    pack.contacts.length
-      ? pack.contacts.map((item) => `- ${item.name}${item.role ? `, ${item.role}` : ""}${item.company ? ` @ ${item.company}` : ""}`).join("\n")
-      : "- keine Treffer",
-    "",
-    "Aufgaben:",
-    pack.tasks.length
-      ? pack.tasks.map((item) => `- ${item.title} (${item.status}${item.dueAt ? `, fällig ${item.dueAt.toISOString().slice(0, 10)}` : ""})`).join("\n")
-      : "- keine offenen Treffer",
-  ];
+  const socialOnly =
+    pack.projects.length === 0 &&
+    pack.memories.length === 0 &&
+    pack.companies.length === 0 &&
+    pack.contacts.length === 0 &&
+    pack.tasks.length === 0 &&
+    !pack.knowledge;
+  const lines: string[] = [`Organization: ${pack.organizationName}`];
+  if (!socialOnly) {
+    lines.push(
+      "",
+      "Projekte:",
+      pack.projects.length
+        ? pack.projects.map((item) => `- ${item.name} (${item.status})${item.description ? `: ${item.description}` : ""}`).join("\n")
+        : "- keine gespeichert",
+      "",
+      "Memory (Retrieval, nicht vollständig):",
+      pack.memories.length
+        ? pack.memories.map((item) => `- [${item.type}] ${item.title}: ${item.content}`).join("\n")
+        : "- nichts passendes gefunden",
+      "",
+      "Firmen (Treffer/aktuell):",
+      pack.companies.length
+        ? pack.companies.map((item) => `- ${item.name}${item.industry ? ` (${item.industry})` : ""}`).join("\n")
+        : "- keine Treffer",
+      "",
+      "Kontakte (Treffer/aktuell):",
+      pack.contacts.length
+        ? pack.contacts.map((item) => `- ${item.name}${item.role ? `, ${item.role}` : ""}${item.company ? ` @ ${item.company}` : ""}`).join("\n")
+        : "- keine Treffer",
+      "",
+      "Aufgaben:",
+      pack.tasks.length
+        ? pack.tasks.map((item) => `- ${item.title} (${item.status}${item.dueAt ? `, fällig ${item.dueAt.toISOString().slice(0, 10)}` : ""})`).join("\n")
+        : "- keine offenen Treffer",
+    );
+  }
 
   if (pack.knowledge) {
     lines.push("", pack.knowledge);

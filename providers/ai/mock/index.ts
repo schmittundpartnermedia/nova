@@ -10,6 +10,7 @@ import type {
   ToolCallInput,
   ToolCallOutput,
 } from "@/types/ai";
+import { detectDialogMove } from "@/lib/dialog/intent";
 
 function detectSponsorIntent(text: string): boolean {
   const lower = text.toLowerCase();
@@ -25,11 +26,61 @@ function extractCount(text: string, fallback = 10): number {
   return fallback;
 }
 
+function extractUserTurn(prompt: string): string {
+  const match = prompt.match(/Benutzer:\s*([^\n]+)/);
+  return (match?.[1] ?? prompt).trim();
+}
+
+function socialReply(act: string): string {
+  if (act === "wish") return "Danke, dir auch.";
+  if (act === "thanks") return "Gern.";
+  if (act === "greeting") return "Hey, ich bin da.";
+  if (act === "farewell") return "Bis bald.";
+  return "Alles klar.";
+}
+
+function conversationalKnowledge(prompt: string, user: string): string | null {
+  if (!/Knowledge \(kompakt, mit Quellen\):/.test(prompt)) return null;
+  if (!/\?|\b(was|wer|wo|wann|wie|welche|warum|preis|angebot|deadline|unterlagen|pdf|entscheid)\b/i.test(user)) {
+    return null;
+  }
+  const block = prompt.split("Knowledge (kompakt, mit Quellen):")[1]?.split(/\n\n[A-ZÄÖÜ]/)[0] ?? "";
+  const lines = block
+    .split("\n")
+    .map((line) => line.trim())
+    .filter((line) => line.startsWith("- "));
+  if (!lines.length) return null;
+  const preferred = lines.filter((line) => /\[(PRICE|DECISION|PERSON|DEADLINE|METRIC|PRODUCT|CONTACT)\]/.test(line));
+  const chosen = (preferred.length ? [...preferred, ...lines.filter((line) => !preferred.includes(line))] : lines)
+    .slice(0, 6)
+    .map((line) => line.replace(/^- \[[^\]]+\]\s*/, ""));
+  return `Das steht in den Unterlagen: ${chosen.join(" ")}`;
+}
+
 export class MockAIProvider implements AIProvider {
   id = "mock";
   name = "MockAIProvider";
 
   async generate(input: GenerateInput): Promise<GenerateOutput> {
+    const user = extractUserTurn(input.prompt);
+    const dialog = detectDialogMove(user);
+    if (dialog.kind === "social") {
+      return {
+        text: socialReply(dialog.act),
+        provider: this.id,
+        model: "mock-master",
+      };
+    }
+
+    const knowledge = conversationalKnowledge(input.prompt, user);
+    if (knowledge) {
+      return {
+        text: knowledge,
+        provider: this.id,
+        model: "mock-master",
+      };
+    }
+
     if (detectSponsorIntent(input.prompt)) {
       const count = extractCount(input.prompt);
       return {

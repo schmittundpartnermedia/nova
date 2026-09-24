@@ -20,4 +20,4 @@ export type StoredConversationMessage = {
   metadata: Record<string, unknown> | null;
 };
 
-export const CONTEXT_WINDOW_SIZE = 4;
+export const CONTEXT_WINDOW_SIZE = 8;

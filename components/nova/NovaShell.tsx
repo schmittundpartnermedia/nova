@@ -18,10 +18,11 @@ import { useNovaVoice } from "@/features/voice/useNovaVoice";
 import type { VoiceTurn } from "@/features/voice/session-types";
 import type { OrbState } from "@/types";
 import type { ProviderMode } from "@/types/ai";
+import { CONTEXT_WINDOW_SIZE } from "@/types/conversation";
 
 const IDLE_STATUS = "Bereit für deine Anfrage";
 const COMM_HIDE_MS = 14000;
-const CONTEXT_WINDOW = 4;
+const CONTEXT_WINDOW = CONTEXT_WINDOW_SIZE;
 
 type InteractionMode = "voice" | "text" | "hybrid";
 

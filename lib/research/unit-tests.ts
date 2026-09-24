@@ -20,6 +20,8 @@ export function runResearchUnitTests(): string[] {
     assert.equal(needsLiveResearch("Was kostet Anbieter X aktuell?"), true);
     assert.equal(needsLiveResearch("Finde aktuelle Unternehmen, die als Sponsor passen."), true);
     assert.equal(needsLiveResearch("Wer ist derzeit Bundeskanzler?"), true);
+    assert.equal(needsLiveResearch("Schönen Feierabend"), false);
+    assert.equal(needsLiveResearch("Danke"), false);
     assert.equal(detectResearchIntent("Analysiere die besten 30 potenziellen Sponsoren für rankPilot.").deep, true);
     assert.equal(detectResearchIntent("Was ist Kapital?").knowledgeKind, "stable");
     assert.equal(detectResearchIntent("Recherchiere die Firma rankPilot Website Branche Standort").companyFocus, true);

@@ -6,6 +6,7 @@ import { runCodingAgent } from "@/agents/coding";
 import { detectKnowledgeIntent } from "@/agents/knowledge/intent";
 import { detectChatGPTImportIntent } from "@/lib/chatgpt/intent";
 import { runKnowledgeAgent } from "@/agents/knowledge";
+import { detectDialogMove, dialogInstruction, type DialogMove } from "@/lib/dialog/intent";
 import { needsLiveResearch } from "@/lib/research/intent";
 import { needsSpecialistWork } from "@/agents/master/intent";
 import { getDefaultProject, runAgentStep } from "@/agents/runtime";
@@ -152,17 +153,31 @@ async function persistDurableMemory(input: {
 function novaReplySystem(input: {
   organizationName: string;
   mock: boolean;
+  dialog: DialogMove;
   researchAnswer?: string;
   researchBlocked?: boolean;
   researchFailed?: boolean;
 }) {
-  return `Du bist NOVA, der persönliche KI-Business-Assistent von ${input.organizationName}.
-Du bist nicht rankPilot und nicht SURI.
-Antworte auf Deutsch, klar und knapp. Im Gespräch wenige Sätze, außer die Sache braucht mehr.
-Erfinde keine Fakten. Wenn Memory nichts enthält, sage das ehrlich.
+  return `Du bist NOVA, das Gegenüber von ${input.organizationName}. Nicht rankPilot, nicht SURI.
+Du führst ein Gespräch auf Augenhöhe. Du bist kein Lexikon, kein Formular und kein Ticket-System.
+
+Dialog zuerst:
+- Wünsche, Dank, Begrüßung, Smalltalk erwiderst du menschlich. Erkläre keine Wörter, wenn jemand mit dir spricht.
+- „Schönen Feierabend“ → „Danke, dir auch.“ Nicht, was Feierabend bedeutet.
+- Du triffst die Absicht, nicht die Wörter.
+
+Wissen im Gespräch:
+- Knowledge und Memory sind stiller Kontext. Wenn etwas zur Frage passt, nutze es.
+- Nenne die Quelle natürlich im Satz: Dateiname, Seite, Gespräch. Keine Aktenzeile, kein Agenten-Jargon.
+- Erfinde keine Dateien und keine Fakten. Wenn nichts passt, sag das ehrlich.
+- Bei einem sozialen Zug Knowledge nicht vorlesen, außer zusätzlich gefragt wird.
+
+Stil: Deutsch, lebendig, klar. So lang wie nötig. Keine Prozessberichte.
+Kein Präfix wie „NOVA:“. Nach Wunsch oder Dank keine Servicefrage („Wie kann ich helfen?“), außer jemand hat etwas aufgetragen.
 Behaupte niemals, E-Mails seien gesendet, wenn das nicht der Fall ist.
 Conversation Archive ist die vollständige Kommunikation. Business Memory ist extrahiertes Wissen mit Quelle.
 Aktuelle Fakten nur aus der Recherche mit Quellen.
+${dialogInstruction(input.dialog)}
 ${input.researchAnswer ? "Eine echte Webrecherche ist erfolgt. Verwende deren Ergebnis." : ""}
 ${input.researchBlocked ? "Es ist kein echter Search Connector verbunden. Sage klar, dass aktuelle Informationen gerade nicht zuverlässig prüfbar sind. Erfinde keine Treffer." : ""}
 ${input.researchFailed ? "Die Webrecherche konnte die aktuelle Information nicht zuverlässig prüfen. Sage genau das. Erfinde keine Ergebnisse." : ""}
@@ -171,6 +186,7 @@ ${input.mock ? "Du bist im Mock-Modus. Kennzeichne das, täusche keine echte Mod
 
 async function runDirectReply(input: {
   userRequest: string;
+  dialog: DialogMove;
   onEvent?: (event: MasterEvent) => void;
   provider: { id: string; stream: (value: GenerateInput) => AsyncIterable<{ delta: string; done: boolean }> };
   decision: { model: string };
@@ -181,16 +197,18 @@ async function runDirectReply(input: {
     provider: input.provider,
     generateInput: {
       model: input.decision.model,
-      temperature: 0.4,
+      temperature: input.dialog.kind === "social" ? 0.75 : 0.6,
       system: novaReplySystem({
         organizationName: input.contextPack.organizationName,
         mock: input.provider.id === "mock",
+        dialog: input.dialog,
       }),
       prompt: `Benutzer: ${input.userRequest}
 
 Kontext:
 ${input.contextPack.promptBlock}
 
+${dialogInstruction(input.dialog)}
 Formuliere die Nutzerantwort direkt. Keine Agenten, kein Plan, kein Prozessbericht.`,
     },
     onDelta: (delta) => {
@@ -221,6 +239,7 @@ export async function runMaster(input: {
   bootstrapAgents();
   await emit(input.onEvent, { type: "status", orbState: "THINKING", statusMessage: "Ich denke nach …" });
 
+  const dialog = detectDialogMove(input.userRequest);
   const computerIntent = detectComputerIntent(input.userRequest);
   const knowledgeIntent = detectKnowledgeIntent(input.userRequest);
   const chatgptIntent = detectChatGPTImportIntent(input.userRequest);
@@ -230,7 +249,7 @@ export async function runMaster(input: {
   }
 
   const codingIntent = detectCodingIntent(input.userRequest);
-  if (codingIntent.kind !== "none") {
+  if (dialog.kind !== "social" && codingIntent.kind !== "none") {
     return runCodingMasterPath(input, codingIntent.statusMessage);
   }
 
@@ -257,15 +276,11 @@ export async function runMaster(input: {
     return runKnowledgeMasterPath(input, chatgptIntent.statusMessage);
   }
 
-  if (knowledgeIntent.kind === "import") {
+  if (dialog.kind !== "social" && knowledgeIntent.kind === "import") {
     return runKnowledgeMasterPath(input, knowledgeIntent.statusMessage);
   }
 
-  if (knowledgeIntent.kind === "query") {
-    return runKnowledgeQueryPath(input, knowledgeIntent.statusMessage);
-  }
-
-  if (computerIntent.kind !== "none") {
+  if (dialog.kind !== "social" && computerIntent.kind !== "none") {
     return runComputerMasterPath(input, computerIntent.statusMessage);
   }
 
@@ -277,6 +292,7 @@ export async function runMaster(input: {
       organizationId: input.organizationId,
       query: input.userRequest,
       conversationId: input.conversationId,
+      mode: dialog.kind === "social" ? "social" : "full",
     }),
   ]);
   const mode = providerModeOf(decision);
@@ -306,6 +322,7 @@ export async function runMaster(input: {
   if (!specialist) {
     return runDirectReply({
       userRequest: input.userRequest,
+      dialog,
       onEvent: input.onEvent,
       provider,
       decision,
@@ -678,6 +695,7 @@ ${input.userRequest}`,
         system: novaReplySystem({
           organizationName: contextPack.organizationName,
           mock: provider.id === "mock",
+          dialog,
           researchAnswer,
           researchBlocked,
           researchFailed,
@@ -820,38 +838,6 @@ async function runKnowledgeMasterPath(
     providerId: "knowledge",
     model: "nova-knowledge",
     needsFile: result.needsFile,
-  };
-}
-
-async function runKnowledgeQueryPath(
-  input: {
-    organizationId: string;
-    userRequest: string;
-    conversationId?: string;
-    sourceMessageId?: string;
-    onEvent?: (event: MasterEvent) => void;
-  },
-  statusMessage: string,
-): Promise<MasterRunResult> {
-  await emit(input.onEvent, { type: "status", orbState: "THINKING", statusMessage });
-  const result = await runKnowledgeAgent({
-    organizationId: input.organizationId,
-    userRequest: input.userRequest,
-    query: input.userRequest,
-  });
-  if (result.reply) {
-    await emit(input.onEvent, { type: "delta", delta: result.reply });
-  }
-  return {
-    jobId: "",
-    status: "completed",
-    orbState: "DONE",
-    statusMessage: result.statusMessage,
-    reply: result.reply,
-    mock: false,
-    providerMode: "fallback",
-    providerId: "knowledge",
-    model: "nova-knowledge",
   };
 }
 
