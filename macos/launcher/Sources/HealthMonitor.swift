@@ -84,22 +84,31 @@ enum HealthMonitor {
         return soError == 0
     }
 
-    static func isApplicationHealthy(config: LaunchConfig) -> Result<Void, LaunchError> {
+    static func isApplicationHealthy(
+        config: LaunchConfig,
+        timeout: TimeInterval = 15,
+        requireNovaWeb: Bool = false
+    ) -> Result<Void, LaunchError> {
         if !tcpIsOpen(host: config.webHost, port: config.webPort) {
             return .failure(.health("Application Service hört noch nicht auf \(config.webHost):\(config.webPort)."))
         }
-        let response = httpGet(config.webHealthURL, timeout: 15)
+        let response = httpGet(config.webHealthURL, timeout: timeout)
         if let error = response.error {
             return .failure(.health("Application-Health \(config.webHealthURL.path) fehlgeschlagen: \(error)"))
         }
+        let novaWeb = response.body.contains("\"service\":\"nova-web\"") || response.body.contains("nova-web")
         if let status = response.status,
            (200...299).contains(status),
            response.body.contains("\"ok\":true"),
-           response.body.contains("nova-web")
+           novaWeb
         {
             return .success(())
         }
-        if let status = response.status, (200...299).contains(status), response.body.contains("\"ok\":true") {
+        if !requireNovaWeb,
+           let status = response.status,
+           (200...299).contains(status),
+           response.body.contains("\"ok\":true")
+        {
             return .success(())
         }
         return .failure(.health("Application Service antwortet auf \(config.webHealthURL.path) mit HTTP \(response.status ?? -1)."))

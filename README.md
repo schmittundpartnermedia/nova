@@ -38,7 +38,9 @@ Oder weiterhin manuell:
 npm run dev
 ```
 
-Dann im Browser: [http://localhost:3000](http://localhost:3000)
+Dann im Browser: [http://localhost:3100](http://localhost:3100)
+
+Seedance und andere Next-Apps können `3000` behalten. NOVA nutzt `3100` und weicht im Bereich `3100–3199` aus, wenn der Port belegt ist.
 
 ## Demo (V1)
 

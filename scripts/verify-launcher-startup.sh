@@ -6,7 +6,8 @@ APP="${NOVA_APP_PATH:-/Applications/NOVA.app}"
 BIN="$APP/Contents/MacOS/NOVA"
 PROJECT="$ROOT"
 LOG_DIR="$PROJECT/.nova/logs"
-READY_URL="http://127.0.0.1:3000/api/nova/ready"
+PREFERRED_WEB_PORT=3100
+READY_URL=""
 DESKTOP_URL="http://127.0.0.1:47821/health"
 FAKE_PROJECT="/tmp/nova-fake-project-$$"
 
@@ -57,6 +58,13 @@ stop_nova() {
   sleep 2
 }
 
+read_web_port() {
+  local file="$PROJECT/.nova/web-port"
+  if [[ -f "$file" ]]; then
+    tr -d '[:space:]' < "$file"
+  fi
+}
+
 wait_http() {
   local url="$1"
   local timeout="${2:-90}"
@@ -74,15 +82,33 @@ wait_http() {
 }
 
 wait_ready() {
-  wait_http "$READY_URL" "${1:-90}"
+  local timeout="${1:-90}"
+  local started port
+  started="$(date +%s)"
+  while true; do
+    port="$(read_web_port)"
+    if [[ -n "$port" ]]; then
+      READY_URL="http://127.0.0.1:${port}/api/nova/ready"
+      if curl -fsS --max-time 5 "$READY_URL" 2>/dev/null | grep -q '"ok":true'; then
+        return 0
+      fi
+    fi
+    if (( "$(date +%s)" - started >= timeout )); then
+      return 1
+    fi
+    sleep 0.5
+  done
 }
 
 wait_desktop() {
   local timeout="${1:-60}"
-  local started token
+  local started token port
   started="$(date +%s)"
   while true; do
     token="$(tr -d '[:space:]' < "$PROJECT/.nova/desktop-token" 2>/dev/null || true)"
+    port="$(tr -d '[:space:]' < "$PROJECT/.nova/desktop-port" 2>/dev/null || true)"
+    port="${port:-47821}"
+    DESKTOP_URL="http://127.0.0.1:${port}/health"
     if [[ -n "$token" ]] && curl -fsS --max-time 5 -H "Authorization: Bearer $token" "$DESKTOP_URL" 2>/dev/null | grep -q '"ok":true'; then
       return 0
     fi
@@ -224,6 +250,34 @@ if ! grep -q '"path":"/usr/local/bin:/usr/local/bin:/opt/homebrew/bin:/usr/bin:/
   fail "Child-PATH ist nicht deterministisch"
 fi
 ok "NOVA startet ohne Terminal-PATH und ohne zshrc"
+
+echo
+echo "-- TEST I: Belegter Vorzugsport --"
+stop_nova
+sleep 1
+python3 -m http.server "$PREFERRED_WEB_PORT" --bind 127.0.0.1 >/tmp/nova-port-block.log 2>&1 &
+block_pid=$!
+sleep 0.6
+if ! kill -0 "$block_pid" >/dev/null 2>&1; then
+  fail "Konnte Port $PREFERRED_WEB_PORT nicht belegen"
+fi
+start_nova_app
+if ! wait_ready 90; then
+  kill "$block_pid" >/dev/null 2>&1 || true
+  fail "Application Service startete nicht, obwohl nur der Vorzugsport belegt war"
+fi
+bound="$(read_web_port)"
+if [[ "$bound" == "$PREFERRED_WEB_PORT" ]]; then
+  kill "$block_pid" >/dev/null 2>&1 || true
+  fail "NOVA hat den belegten Port $PREFERRED_WEB_PORT nicht verlassen"
+fi
+if ! curl -fsS --max-time 5 "http://127.0.0.1:${bound}/api/nova/ready" | grep -q 'nova-web'; then
+  kill "$block_pid" >/dev/null 2>&1 || true
+  fail "NOVA-Health auf Ausweichport $bound fehlgeschlagen"
+fi
+kill "$block_pid" >/dev/null 2>&1 || true
+wait "$block_pid" >/dev/null 2>&1 || true
+ok "NOVA ist auf Port $bound gestartet, weil $PREFERRED_WEB_PORT belegt war"
 
 echo
 echo "-- Aufräumen --"

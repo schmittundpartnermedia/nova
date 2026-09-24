@@ -1,6 +1,7 @@
 import type { ComputerIntentKind } from "@/agents/computer/intent";
 import type { ComputerActionEnvelope } from "@/lib/computer/schemas";
 import { compileAppleScript, extractAppleScript } from "@/lib/computer/applescript";
+import { getWebBaseUrl } from "@/lib/computer/config";
 import { detectNamedVolume } from "@/lib/computer/volumes";
 
 export type PlannedStep = {
@@ -68,7 +69,7 @@ export function planComputerTask(input: {
         },
         {
           tool: "browser",
-          payload: { action: "open", url: "http://127.0.0.1:3000" },
+          payload: { action: "open", url: getWebBaseUrl() },
           purpose: "Lokale NOVA-Seite öffnen und Erreichbarkeit prüfen",
           userCommissioned: true,
         },

@@ -13,7 +13,7 @@
 	<key>NOVAWebHost</key>
 	<string>127.0.0.1</string>
 	<key>NOVAWebPort</key>
-	<integer>3000</integer>
+	<integer>3100</integer>
 	<key>NOVADesktopHost</key>
 	<string>127.0.0.1</string>
 	<key>NOVADesktopPort</key>

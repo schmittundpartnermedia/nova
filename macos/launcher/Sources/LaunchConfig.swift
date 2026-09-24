@@ -33,9 +33,11 @@ struct LaunchConfig {
     let mode: LaunchMode
     let uiMode: UIMode
     let webHost: String
-    let webPort: Int
+    let preferredWebPort: Int
+    var webPort: Int
     let desktopHost: String
-    let desktopPort: Int
+    let preferredDesktopPort: Int
+    var desktopPort: Int
     let nodeBin: URL
     let nextBin: URL
     let tsxBin: URL
@@ -82,6 +84,22 @@ struct LaunchConfig {
         novaDir.appendingPathComponent("runtime.json")
     }
 
+    var webPortFile: URL {
+        novaDir.appendingPathComponent("web-port")
+    }
+
+    var desktopPortFile: URL {
+        novaDir.appendingPathComponent("desktop-port")
+    }
+
+    var webPortRange: ClosedRange<Int> {
+        Self.portRange(preferred: preferredWebPort, span: 100)
+    }
+
+    var desktopPortRange: ClosedRange<Int> {
+        Self.portRange(preferred: preferredDesktopPort, span: 20)
+    }
+
     var launcherLogFile: URL {
         logDir.appendingPathComponent("launcher.log")
     }
@@ -110,8 +128,8 @@ struct LaunchConfig {
         let uiMode = UIMode(rawValue: string(plist["NOVAUIMode"], fallback: "webview")) ?? .webview
         let webHost = string(plist["NOVAWebHost"], fallback: "127.0.0.1")
         let desktopHost = string(plist["NOVADesktopHost"], fallback: "127.0.0.1")
-        let webPort = int(plist["NOVAWebPort"], fallback: 3000)
-        let desktopPort = int(plist["NOVADesktopPort"], fallback: 47821)
+        let preferredWebPort = int(plist["NOVAWebPort"], fallback: 3100)
+        let preferredDesktopPort = int(plist["NOVADesktopPort"], fallback: 47821)
         let startAtLogin = bool(plist["NOVAStartAtLogin"], fallback: false)
 
         let projectRoot = try resolveProjectRoot(plist: plist)
@@ -131,9 +149,11 @@ struct LaunchConfig {
             mode: mode,
             uiMode: uiMode,
             webHost: webHost,
-            webPort: webPort,
+            preferredWebPort: preferredWebPort,
+            webPort: preferredWebPort,
             desktopHost: desktopHost,
-            desktopPort: desktopPort,
+            preferredDesktopPort: preferredDesktopPort,
+            desktopPort: preferredDesktopPort,
             nodeBin: nodeBin,
             nextBin: nextBin,
             tsxBin: tsxBin,
@@ -289,6 +309,12 @@ struct LaunchConfig {
         let data = pipe.fileHandleForReading.readDataToEndOfFile()
         let value = String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         return value.hasPrefix("v") ? value : nil
+    }
+
+    private static func portRange(preferred: Int, span: Int) -> ClosedRange<Int> {
+        let start = min(max(preferred, 1), 65535)
+        let end = min(start + max(span - 1, 0), 65535)
+        return start...end
     }
 
     private static func envURL(_ key: String) -> URL? {

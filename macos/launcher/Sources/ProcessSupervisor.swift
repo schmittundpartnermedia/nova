@@ -211,13 +211,14 @@ final class ProcessSupervisor {
     }
 
     private func ensureWeb() throws {
-        if case .success = HealthMonitor.isApplicationHealthy(config: config) {
+        try claimWebPort()
+        persistBoundPorts()
+        if case .success = HealthMonitor.isApplicationHealthy(config: config, timeout: 2, requireNovaWeb: true) {
             reusedWeb = true
-            log.info("NOVA Application Service läuft bereits und bleibt unangetastet")
+            log.info("NOVA Application Service läuft bereits und bleibt unangetastet", fields: [
+                "port": String(config.webPort),
+            ])
             return
-        }
-        if let pid = ProcessControl.listeningPid(port: config.webPort) {
-            throw LaunchError.start("Port \(config.webPort) ist belegt (PID \(pid)), antwortet aber nicht als NOVA Application Service. Der Prozess wird nicht beendet.")
         }
         let spawned = try ProcessControl.spawn(
             executable: config.nodeBin,
@@ -233,6 +234,7 @@ final class ProcessSupervisor {
         ProcessControl.writePidFile(config.webPidFile, pid: spawned.pid)
         log.info("Application Service gestartet", fields: [
             "pid": String(spawned.pid),
+            "port": String(config.webPort),
             "mode": config.mode.rawValue,
             "executable": config.nodeBin.path,
             "cwd": config.projectRoot.path,
@@ -240,13 +242,14 @@ final class ProcessSupervisor {
     }
 
     private func ensureDesktop() throws {
+        try claimDesktopPort()
+        persistBoundPorts()
         if case .success = HealthMonitor.isDesktopHealthy(config: config, token: HealthMonitor.readDesktopToken(config: config)) {
             reusedDesktop = true
-            log.info("Desktop Service läuft bereits und bleibt unangetastet")
+            log.info("Desktop Service läuft bereits und bleibt unangetastet", fields: [
+                "port": String(config.desktopPort),
+            ])
             return
-        }
-        if let pid = ProcessControl.listeningPid(port: config.desktopPort) {
-            throw LaunchError.start("Port \(config.desktopPort) ist belegt (PID \(pid)), der Desktop Service ist aber nicht gesund. Der Prozess wird nicht beendet.")
         }
         let spawned = try ProcessControl.spawn(
             executable: config.nodeBin,
@@ -262,27 +265,114 @@ final class ProcessSupervisor {
         ProcessControl.writePidFile(config.desktopPidFile, pid: spawned.pid)
         log.info("Desktop Service gestartet", fields: [
             "pid": String(spawned.pid),
+            "port": String(config.desktopPort),
             "executable": config.nodeBin.path,
             "cwd": config.projectRoot.path,
         ])
     }
 
+    private func claimWebPort() throws {
+        if let existing = findHealthyNovaWebPort() {
+            if existing != config.preferredWebPort {
+                log.info("Bestehenden NOVA-Web-Port wiederverwendet", fields: [
+                    "preferred": String(config.preferredWebPort),
+                    "port": String(existing),
+                ])
+            }
+            config.webPort = existing
+            return
+        }
+        let chosen = try firstFreePort(in: config.webPortRange, preferred: config.preferredWebPort, label: "NOVA-Web")
+        if chosen != config.preferredWebPort {
+            log.warn("Port \(config.preferredWebPort) ist belegt. NOVA weicht auf \(chosen) aus, ohne den anderen Prozess zu beenden.")
+        }
+        config.webPort = chosen
+    }
+
+    private func claimDesktopPort() throws {
+        if case .success = HealthMonitor.isDesktopHealthy(config: config, token: HealthMonitor.readDesktopToken(config: config)) {
+            return
+        }
+        if let last = readBoundPort(config.desktopPortFile), last != config.desktopPort {
+            var probe = config
+            probe.desktopPort = last
+            if case .success = HealthMonitor.isDesktopHealthy(config: probe, token: HealthMonitor.readDesktopToken(config: probe)) {
+                config.desktopPort = last
+                return
+            }
+        }
+        let listening = ProcessControl.listeningTcpPorts()
+        if listening[config.desktopPort] == nil {
+            return
+        }
+        let chosen = try firstFreePort(in: config.desktopPortRange, preferred: config.preferredDesktopPort, label: "Desktop-Service")
+        if chosen != config.preferredDesktopPort {
+            log.warn("Port \(config.preferredDesktopPort) ist belegt. Desktop Service weicht auf \(chosen) aus, ohne den anderen Prozess zu beenden.")
+        }
+        config.desktopPort = chosen
+    }
+
+    private func findHealthyNovaWebPort() -> Int? {
+        var ordered: [Int] = []
+        if let last = readBoundPort(config.webPortFile) {
+            ordered.append(last)
+        }
+        ordered.append(config.preferredWebPort)
+        let listening = ProcessControl.listeningTcpPorts()
+        for port in config.webPortRange where listening[port] != nil {
+            ordered.append(port)
+        }
+        for (port, pid) in listening {
+            guard let command = ProcessControl.commandLine(pid: pid),
+                  command.contains(config.projectRoot.path),
+                  ProcessControl.looksLikeNovaWeb(command)
+            else { continue }
+            ordered.append(port)
+        }
+        var seen = Set<Int>()
+        for port in ordered {
+            if seen.contains(port) { continue }
+            seen.insert(port)
+            var probe = config
+            probe.webPort = port
+            if case .success = HealthMonitor.isApplicationHealthy(config: probe, timeout: 1.5, requireNovaWeb: true) {
+                return port
+            }
+        }
+        return nil
+    }
+
+    private func firstFreePort(in range: ClosedRange<Int>, preferred: Int, label: String) throws -> Int {
+        let listening = ProcessControl.listeningTcpPorts()
+        let ordered = [preferred] + range.filter { $0 != preferred }
+        for port in ordered where listening[port] == nil {
+            return port
+        }
+        throw LaunchError.start("Kein freier \(label)-Port im Bereich \(range.lowerBound)–\(range.upperBound). Fremde Prozesse werden nicht beendet.")
+    }
+
+    private func readBoundPort(_ url: URL) -> Int? {
+        guard let raw = try? String(contentsOf: url, encoding: .utf8) else { return nil }
+        let value = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let port = Int(value), (1...65535).contains(port) else { return nil }
+        return port
+    }
+
+    private func persistBoundPorts() {
+        try? String(config.webPort).write(to: config.webPortFile, atomically: true, encoding: .utf8)
+        try? String(config.desktopPort).write(to: config.desktopPortFile, atomically: true, encoding: .utf8)
+    }
+
     private func restartMissingOwnedOrStart() throws {
-        if case .failure = HealthMonitor.isApplicationHealthy(config: config) {
+        if case .failure = HealthMonitor.isApplicationHealthy(config: config, requireNovaWeb: true) {
             if let web = ownedWeb, !ProcessControl.isAlive(web.pid) {
                 ownedWeb = nil
-            }
-            if ProcessControl.listeningPid(port: config.webPort) != nil {
-                throw LaunchError.start("NOVA auf Port \(config.webPort) ist ungesund. Der fremde Prozess wird nicht beendet.")
             }
             try ensureWeb()
         }
         if case .failure = HealthMonitor.isDesktopHealthy(config: config, token: HealthMonitor.readDesktopToken(config: config)) {
             if let desktop = ownedDesktop, !ProcessControl.isAlive(desktop.pid) {
                 ownedDesktop = nil
-            }
-            if ProcessControl.listeningPid(port: config.desktopPort) != nil {
-                throw LaunchError.start("Desktop Service auf Port \(config.desktopPort) ist ungesund. Der fremde Prozess wird nicht beendet.")
             }
             try ensureDesktop()
         }
@@ -296,7 +386,7 @@ final class ProcessSupervisor {
             if let crash = crashedOwned(ownedWeb, name: "Application Service", logFile: config.webLogFile) {
                 throw crash
             }
-            switch HealthMonitor.isApplicationHealthy(config: config) {
+            switch HealthMonitor.isApplicationHealthy(config: config, requireNovaWeb: true) {
             case .success:
                 if let web = ownedWeb, !ProcessControl.isOwnedListener(port: config.webPort, root: web.pid) {
                     log.warn("Port \(config.webPort) antwortet, Listener ist aber nicht der gestartete NOVA-Prozess")
@@ -428,6 +518,8 @@ final class ProcessSupervisor {
         env["NODE_ENV"] = config.mode == .production ? "production" : "development"
         env["PORT"] = String(config.webPort)
         env["HOSTNAME"] = config.webHost
+        env["NOVA_WEB_HOST"] = config.webHost
+        env["NOVA_WEB_PORT"] = String(config.webPort)
         env["NOVA_DESKTOP_HOST"] = config.desktopHost
         env["NOVA_DESKTOP_PORT"] = String(config.desktopPort)
         env["NEXT_TELEMETRY_DISABLED"] = "1"
@@ -446,6 +538,10 @@ final class ProcessSupervisor {
         let payload: [String: Any] = [
             "nodeBin": config.nodeBin.path,
             "projectRoot": config.projectRoot.path,
+            "webHost": config.webHost,
+            "webPort": config.webPort,
+            "desktopHost": config.desktopHost,
+            "desktopPort": config.desktopPort,
             "resolvedAt": ISO8601DateFormatter().string(from: Date()),
         ]
         if let data = try? JSONSerialization.data(withJSONObject: payload, options: [.prettyPrinted]) {
@@ -461,6 +557,8 @@ final class ProcessSupervisor {
             "state": state.rawValue,
             "node": config.nodeBin.path,
             "cwd": config.projectRoot.path,
+            "webPort": config.webPort,
+            "desktopPort": config.desktopPort,
             "owned": [
                 "web": jsonPid(ownedWeb),
                 "desktop": jsonPid(ownedDesktop),
@@ -482,6 +580,8 @@ final class ProcessSupervisor {
             "executable": Bundle.main.executablePath ?? "NOVA",
             "cwd": config.projectRoot.path,
             "node": config.nodeBin.path,
+            "webPort": String(config.webPort),
+            "desktopPort": String(config.desktopPort),
         ]
         if let web = ownedWeb {
             fields["webPid"] = String(web.pid)

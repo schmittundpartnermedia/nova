@@ -64,6 +64,7 @@ final class NovaWebWindowController: NSWindowController, WKNavigationDelegate, W
     private let log: LogWriter?
     private var loadAttempts = 0
     private let maxLoadAttempts = 8
+    var pageURL: URL { startURL }
 
     init(startURL: URL, log: LogWriter? = nil) {
         self.startURL = startURL

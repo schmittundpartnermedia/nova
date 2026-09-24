@@ -20,9 +20,33 @@ enum ProcessControl {
     }
 
     static func listeningPid(port: Int) -> pid_t? {
-        let output = runCapture("/usr/sbin/lsof", ["-nP", "-iTCP:\(port)", "-sTCP:LISTEN", "-t"]) ?? ""
-        let first = output.split(whereSeparator: \.isNewline).first.flatMap { Int32($0.trimmingCharacters(in: .whitespaces)) }
-        return first.flatMap { $0 > 0 ? $0 : nil }
+        listeningTcpPorts()[port]
+    }
+
+    static func listeningTcpPorts() -> [Int: pid_t] {
+        let output = runCapture("/usr/sbin/lsof", ["-nP", "-iTCP", "-sTCP:LISTEN", "-F", "pn"]) ?? ""
+        var map: [Int: pid_t] = [:]
+        var currentPid: pid_t?
+        for rawLine in output.split(whereSeparator: \.isNewline) {
+            let line = String(rawLine)
+            if line.hasPrefix("p"), let pid = Int32(line.dropFirst()), pid > 0 {
+                currentPid = pid
+                continue
+            }
+            guard line.hasPrefix("n"), let pid = currentPid else { continue }
+            if let port = tcpListenPort(from: String(line.dropFirst())) {
+                map[port] = pid
+            }
+        }
+        return map
+    }
+
+    private static func tcpListenPort(from name: String) -> Int? {
+        let trimmed = name.replacingOccurrences(of: " (LISTEN)", with: "")
+        guard let colon = trimmed.lastIndex(of: ":") else { return nil }
+        let suffix = trimmed[trimmed.index(after: colon)...]
+        guard let port = Int(suffix), (1...65535).contains(port) else { return nil }
+        return port
     }
 
     static func isOwnedListener(port: Int, root: pid_t) -> Bool {

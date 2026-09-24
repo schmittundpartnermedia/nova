@@ -94,6 +94,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
             DispatchQueue.main.async { [weak self] in
                 guard let self, !self.shuttingDown, !self.showingError else { return }
+                self.config = supervisor.config
                 self.showStatus("READY", "NOVA UI öffnen")
                 self.openUI()
             }
@@ -117,6 +118,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 }
             }
             DispatchQueue.main.async { [weak self] in
+                self?.config = supervisor.config
                 self?.openUI()
             }
         } catch {
@@ -127,13 +129,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func openUI() {
-        guard let config else { return }
+        guard let config = supervisor?.config ?? config else { return }
+        self.config = config
         closeStatusWindow()
         switch config.uiMode {
         case .browser:
             uiReady = true
             NSWorkspace.shared.open(config.webURL)
         case .webview:
+            if webWindow?.pageURL != config.webURL {
+                webWindow?.close()
+                webWindow = nil
+            }
             if webWindow == nil {
                 webWindow = NovaWebWindowController(startURL: config.webURL, log: log)
             }

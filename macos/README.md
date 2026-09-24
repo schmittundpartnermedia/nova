@@ -10,7 +10,7 @@ NOVA.app
     → CHECKING_ENVIRONMENT
     → CHECKING_VOLUME
     → CHECKING_RUNTIME
-    → Application Service  (Next.js, Health: /api/nova/ready)
+    → Application Service  (Next.js auf 127.0.0.1:3100, Health: /api/nova/ready)
     → Desktop Service      (127.0.0.1:47821 /health)
     → Native Helper        (bestehendes signiertes Helper-Bundle)
   → NOVA UI                (bestehende Oberfläche, kein neues Frontend)
@@ -34,6 +34,7 @@ Gesteuert über `macos/launcher/Resources/LaunchConfig.plist`:
 
 - `NOVALaunchMode=development` → `next dev`
 - `NOVALaunchMode=production` → `next start` oder `.next/standalone/server.js`, falls vorhanden
+- `NOVAWebPort=3100` → eigener Port, nicht der Next-Default 3000. Ist 3100 belegt, nimmt der Launcher den nächsten freien Port bis 3199 und beendet keine fremden Prozesse
 - `NOVAStartAtLogin=false` → Autostart bei macOS-Login ist vorbereitet, aber absichtlich nicht aktiv
 
 Später kann eine paketierte Version denselben Supervisor nutzen, ohne diesen Entwicklungsordner. Dafür `NOVAProjectRoot` auf das gebündelte Ressourcenverzeichnis setzen und `NOVALaunchMode=production` verwenden.

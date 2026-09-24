@@ -5,6 +5,9 @@ import path from "node:path";
 
 export const DESKTOP_DEFAULT_PORT = 47821;
 export const DESKTOP_DEFAULT_HOST = "127.0.0.1";
+export const WEB_DEFAULT_PORT = 3100;
+export const WEB_DEFAULT_HOST = "127.0.0.1";
+export const WEB_PORT_SPAN = 100;
 
 function novaDir(): string {
   return path.join(process.cwd(), ".nova");
@@ -30,6 +33,43 @@ export function getDesktopListenPort(): number {
 
 export function getDesktopBaseUrl(): string {
   return `http://${getDesktopListenHost()}:${getDesktopListenPort()}`;
+}
+
+export function getWebListenHost(): string {
+  return process.env.NOVA_WEB_HOST?.trim() || WEB_DEFAULT_HOST;
+}
+
+export function getWebListenPort(): number {
+  const raw = process.env.NOVA_WEB_PORT?.trim() || process.env.PORT?.trim();
+  if (raw) {
+    const parsed = Number(raw);
+    if (Number.isInteger(parsed) && parsed >= 1 && parsed <= 65535) {
+      return parsed;
+    }
+  }
+  const fromFile = readBoundPortFile("web-port");
+  if (fromFile) return fromFile;
+  return WEB_DEFAULT_PORT;
+}
+
+export function getWebBaseUrl(): string {
+  return `http://${getWebListenHost()}:${getWebListenPort()}`;
+}
+
+export function isNovaWebPort(port: number): boolean {
+  return port >= WEB_DEFAULT_PORT && port < WEB_DEFAULT_PORT + WEB_PORT_SPAN;
+}
+
+function readBoundPortFile(name: string): number | null {
+  try {
+    const file = path.join(process.cwd(), ".nova", name);
+    if (!fs.existsSync(file)) return null;
+    const parsed = Number(fs.readFileSync(file, "utf8").trim());
+    if (!Number.isInteger(parsed) || parsed < 1 || parsed > 65535) return null;
+    return parsed;
+  } catch {
+    return null;
+  }
 }
 
 export function readOrCreateDesktopToken(): string {

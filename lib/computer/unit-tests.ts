@@ -22,7 +22,7 @@ import { capabilitiesFrom } from "@/lib/computer/capabilities";
 import { looksLikeHumanGate, assertUploadAllowed, isIrreversibleBrowserAction, parseSelectorDsl } from "@/lib/computer/browser-policy";
 import { pickControlFromInspect } from "@/lib/computer/ax-pick";
 import { parseComputerPlan } from "@/lib/computer/plan";
-import { browserCdpUrl } from "@/lib/computer/config";
+import { browserCdpUrl, getWebBaseUrl } from "@/lib/computer/config";
 
 export function runComputerUnitTests(): string[] {
   const failures: string[] = [];
@@ -125,6 +125,17 @@ export function runComputerUnitTests(): string[] {
     assert.equal(ui.some((step) => step.tool === "accessibility" && (step.payload as { action?: string }).action === "press"), true);
     assert.equal(ui.some((step) => step.tool === "screen"), true);
     assert.equal(detectComputerIntent('Führe AppleScript aus: tell application "Finder" to get name').kind, "run_script");
+  });
+
+  check("open_local uses dedicated nova web port", () => {
+    const steps = planComputerTask({
+      kind: "open_local",
+      userRequest: "öffne die lokale NOVA-Seite",
+      workspace: "/tmp",
+    });
+    const browser = steps.find((step) => step.tool === "browser");
+    assert.equal((browser?.payload as { url?: string }).url, getWebBaseUrl());
+    assert.ok(getWebBaseUrl().startsWith("http://127.0.0.1:"));
   });
 
   check("schema rejects raw shell strings", () => {

@@ -22,6 +22,7 @@ import { classifyComputerAction } from "@/lib/computer/risk";
 import { detectHardBlock } from "@/lib/computer/hard-blocks";
 import { isInjectionAttempt, wrapExternalContent } from "@/lib/computer/injection";
 import { redactSecrets } from "@/lib/computer/redaction";
+import { getWebListenPort, isNovaWebPort } from "@/lib/computer/config";
 import { detectNamedVolume, unmountedVolumeMessage } from "@/lib/computer/volumes";
 import type { NovaAgent } from "@/types/agents";
 import type { ActionResult, ComputerJobStatus } from "@/lib/computer/types";
@@ -539,6 +540,11 @@ export async function cancelComputerWork(organizationId: string): Promise<{ coun
   return { count: count + coding + knowledge };
 }
 
+function isNovaDevListener(item: { command: string; ports: number[] }): boolean {
+  const expected = getWebListenPort();
+  return item.ports.some((port) => port === expected || isNovaWebPort(port));
+}
+
 function cancelledResult(actions: ActionResult[]): ComputerAgentResult {
   return {
     ok: true,
@@ -559,11 +565,7 @@ async function maybeStartNovaDev(input: {
 }): Promise<ActionResult[]> {
   const processes = ((input.listed.result as { processes?: Array<{ pid: number; command: string; ports: number[] }> })
     ?.processes ?? []);
-  const existing = processes.find(
-    (item) =>
-      item.ports.includes(3000) ||
-      /next-server|next dev|next\s+dev/i.test(item.command),
-  );
+  const existing = processes.find(isNovaDevListener);
   if (existing) {
     return [];
   }
@@ -594,7 +596,7 @@ async function maybeStartNovaDev(input: {
       userCommissioned: true,
     });
     const found = ((listed.result as { processes?: Array<{ command: string; ports: number[] }> })?.processes ?? []).some(
-      (item) => item.ports.includes(3000) || /next/i.test(item.command),
+      isNovaDevListener,
     );
     if (found) break;
   }
@@ -626,7 +628,7 @@ function userReply(
   if (intent.kind === "start_dev") {
     const listed = [...actions].reverse().find((item) => item.tool === "process" && item.action === "list");
     const processes = ((listed?.result as { processes?: Array<{ pid: number; command: string; ports: number[] }> })?.processes ?? []);
-    const match = processes.find((item) => item.ports.includes(3000) || /next/i.test(item.command));
+    const match = processes.find(isNovaDevListener);
     if (match) {
       return `NOVA läuft lokal. Verifiziert: PID ${match.pid}, Ports ${match.ports.join(", ") || "unbekannt"}.`;
     }
