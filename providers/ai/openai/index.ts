@@ -11,7 +11,7 @@ import type {
   ToolCallInput,
   ToolCallOutput,
 } from "@/types/ai";
-import { OPENAI_DEFAULT_MODEL } from "@/providers/ai/models";
+import { OPENAI_DEFAULT_MODEL, modelAllowsCustomTemperature } from "@/providers/ai/models";
 import { hasOpenAIApiKey, publicErrorMessage, redactSecrets } from "@/lib/secrets";
 
 const HEALTH_TTL_MS = 30_000;
@@ -23,6 +23,14 @@ type CachedHealth = {
 
 function resolveModel(input?: { model?: string }): string {
   return input?.model?.trim() || OPENAI_DEFAULT_MODEL;
+}
+
+function completionParams(input?: { model?: string; temperature?: number }) {
+  const model = resolveModel(input);
+  return {
+    model,
+    ...(modelAllowsCustomTemperature(model) ? { temperature: input?.temperature ?? 0.3 } : {}),
+  };
 }
 
 function buildMessages(input: GenerateInput): OpenAI.Chat.ChatCompletionMessageParam[] {
@@ -52,18 +60,17 @@ export class OpenAIProvider implements AIProvider {
   }
 
   async generate(input: GenerateInput): Promise<GenerateOutput> {
-    const model = resolveModel(input);
+    const params = completionParams(input);
     try {
       const completion = await this.getClient().chat.completions.create({
-        model,
-        temperature: input.temperature ?? 0.3,
+        ...params,
         messages: buildMessages(input),
       });
       const text = completion.choices[0]?.message?.content?.trim() ?? "";
       return {
         text,
         provider: this.id,
-        model: completion.model ?? model,
+        model: completion.model ?? params.model,
       };
     } catch (error) {
       throw new Error(publicErrorMessage(error));
@@ -99,11 +106,10 @@ export class OpenAIProvider implements AIProvider {
   }
 
   async structuredOutput<T>(input: StructuredInput): Promise<T> {
-    const model = resolveModel(input);
+    const params = completionParams({ model: input.model, temperature: 0.1 });
     try {
       const completion = await this.getClient().chat.completions.create({
-        model,
-        temperature: 0.1,
+        ...params,
         response_format: { type: "json_object" },
         messages: [
           {
@@ -124,11 +130,10 @@ export class OpenAIProvider implements AIProvider {
   }
 
   async toolCall(input: ToolCallInput): Promise<ToolCallOutput> {
-    const model = resolveModel(input);
+    const params = completionParams({ model: input.model, temperature: 0.1 });
     try {
       const completion = await this.getClient().chat.completions.create({
-        model,
-        temperature: 0.1,
+        ...params,
         messages: [{ role: "user", content: input.prompt }],
         tools: input.tools.map((tool) => ({
           type: "function" as const,
@@ -161,11 +166,10 @@ export class OpenAIProvider implements AIProvider {
   }
 
   async *stream(input: GenerateInput): AsyncIterable<StreamChunk> {
-    const model = resolveModel(input);
+    const params = completionParams(input);
     try {
       const streamed = await this.getClient().chat.completions.create({
-        model,
-        temperature: input.temperature ?? 0.3,
+        ...params,
         stream: true,
         messages: buildMessages(input),
       });

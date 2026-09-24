@@ -32,9 +32,9 @@ Default-Modelle liegen zentral in `providers/ai/models.ts` und können pro Organ
 
 Aktuell (Joachim):
 
-- `master` → OpenAI `gpt-4o`
-- `simple` → OpenAI `gpt-4o-mini`
-- `sensitive` → OpenAI `gpt-4o-mini`
+- `master` → OpenAI `gpt-6-astra`
+- `simple` → OpenAI `gpt-6-astra`
+- `sensitive` → OpenAI `gpt-6-astra`
 - `fallback` → Mock
 
 Wenn ein konfigurierter Provider nicht gesund ist, wird der Fallback der Organization verwendet. Eine Fallback-Antwort darf keine echte Modellantwort vortäuschen. Die UI unterscheidet `openai`, `mock`, `fallback` und `error`.
