@@ -8,6 +8,10 @@ export const THREAD_DIGEST_TITLE = "NOVA Gesprächsfaden";
 export const RELATION_TITLE = "NOVA Beziehung";
 export const OPEN_THREADS_TITLE = "NOVA offene Fäden";
 
+export function episodeTitle(conversationId: string): string {
+  return `NOVA Episode ${conversationId}`;
+}
+
 const TURNS_RE = /^Turns:\s*(\d+)/i;
 const REFRESH_EVERY = 6;
 
@@ -15,6 +19,8 @@ export type ConversationContinuity = {
   digest: string;
   relation: string;
   openThreads: string;
+  episode: string;
+  biography: string;
   insights: Array<{ title: string; content: string }>;
   recent: Array<{ role: string; content: string }>;
   promptBlock: string;
@@ -27,18 +33,31 @@ function parseTurnCount(content: string | undefined): number {
 }
 
 function formatContinuity(input: Omit<ConversationContinuity, "promptBlock">): string {
-  if (!input.digest && !input.relation && !input.openThreads && input.insights.length === 0) {
+  if (
+    !input.digest &&
+    !input.relation &&
+    !input.openThreads &&
+    !input.episode &&
+    !input.biography &&
+    input.insights.length === 0
+  ) {
     return "";
   }
   const lines = ["Gesprächskontinuität (über Sessions, nicht nur die letzten Zeilen):"];
   if (input.digest) {
     lines.push("", "Faden:", input.digest.replace(TURNS_RE, "").trim() || input.digest);
   }
+  if (input.episode) {
+    lines.push("", "Diese Episode:", input.episode.replace(TURNS_RE, "").trim() || input.episode);
+  }
   if (input.relation) {
     lines.push("", "Wie ihr redet:", input.relation);
   }
   if (input.openThreads) {
     lines.push("", "Offen:", input.openThreads);
+  }
+  if (input.biography) {
+    lines.push("", input.biography);
   }
   if (input.insights.length) {
     lines.push("", "Was über das Gespräch bleibt:");
@@ -55,7 +74,7 @@ export async function loadConversationContinuity(input: {
 }): Promise<ConversationContinuity> {
   assertOrganizationId(input.organizationId);
 
-  const [digest, relation, open, insights, recent, messageCount] = await Promise.all([
+  const [digest, relation, open, insights, recent, messageCount, episode, chatgpt] = await Promise.all([
     prisma.memoryEntry.findFirst({
       where: { organizationId: input.organizationId, type: "summary", title: THREAD_DIGEST_TITLE },
       orderBy: { updatedAt: "desc" },
@@ -88,12 +107,39 @@ export async function loadConversationContinuity(input: {
           where: { organizationId: input.organizationId, conversationId: input.conversationId },
         })
       : Promise.resolve(0),
+    input.conversationId
+      ? prisma.memoryEntry.findFirst({
+          where: {
+            organizationId: input.organizationId,
+            type: "summary",
+            title: episodeTitle(input.conversationId),
+          },
+        })
+      : Promise.resolve(null),
+    prisma.conversation.findMany({
+      where: { organizationId: input.organizationId, origin: "chatgpt_import" },
+      orderBy: { lastActivityAt: "desc" },
+      take: 6,
+      select: { title: true, lastActivityAt: true },
+    }),
   ]);
+
+  const chatgptTitles = chatgpt
+    .map((item) => item.title?.trim())
+    .filter((title): title is string => Boolean(title))
+    .slice(0, 4);
+  const biography = chatgpt.length
+    ? `Dieselbe Biografie: ${chatgpt.length >= 6 ? "mehrere" : chatgpt.length} importierte ChatGPT-Gespräche gehören zu diesem Leben, nicht in eine extra Schublade.${
+        chatgptTitles.length ? ` Zuletzt: ${chatgptTitles.join("; ")}.` : ""
+      }`
+    : "";
 
   const pack: Omit<ConversationContinuity, "promptBlock"> = {
     digest: digest?.content ?? "",
     relation: relation?.content ?? "",
     openThreads: open?.content ?? "",
+    episode: episode?.content ?? "",
+    biography,
     insights: insights.map((item) => ({ title: item.title, content: item.content.slice(0, 280) })),
     recent: [...recent].reverse().map((item) => ({
       role: item.role,
@@ -166,6 +212,14 @@ ${thread}`,
     organizationId: input.organizationId,
     type: "summary",
     title: THREAD_DIGEST_TITLE,
+    content: digest,
+    sourceType: "conversation_message",
+    sourceReference: input.conversationId,
+  });
+  await upsertDurableMemory({
+    organizationId: input.organizationId,
+    type: "summary",
+    title: episodeTitle(input.conversationId),
     content: digest,
     sourceType: "conversation_message",
     sourceReference: input.conversationId,

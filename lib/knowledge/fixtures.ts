@@ -9,6 +9,35 @@ export type KnowledgeFixtureRoot = {
   files: Record<string, string>;
 };
 
+const PIXEL_PNG = Buffer.from(
+  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==",
+  "base64",
+);
+
+export function buildSilentWav(totalBytes = 512): Buffer {
+  const size = Math.max(totalBytes, 200);
+  const dataSize = size - 44;
+  const buf = Buffer.alloc(size);
+  buf.write("RIFF", 0);
+  buf.writeUInt32LE(size - 8, 4);
+  buf.write("WAVE", 8);
+  buf.write("fmt ", 12);
+  buf.writeUInt32LE(16, 16);
+  buf.writeUInt16LE(1, 20);
+  buf.writeUInt16LE(1, 22);
+  buf.writeUInt32LE(8000, 24);
+  buf.writeUInt32LE(16000, 28);
+  buf.writeUInt16LE(2, 32);
+  buf.writeUInt16LE(16, 34);
+  buf.write("data", 36);
+  buf.writeUInt32LE(dataSize, 40);
+  return buf;
+}
+
+export function pixelPng(): Buffer {
+  return Buffer.from(PIXEL_PNG);
+}
+
 const OFFER_V1_LINES = [
   "Angebot rankPilot Partnerprogramm",
   "Firma: Nordstern Media GmbH",
@@ -127,6 +156,14 @@ export function createKnowledgeFixtures(baseDir?: string): KnowledgeFixtureRoot 
   const txt = path.join(root, "notizen.txt");
   fs.writeFileSync(txt, "Firma: Nordstern Media GmbH\nAnsprechpartner: Clara Berg\nPreis: 199 EUR\n");
   files.txt = txt;
+
+  const png = path.join(root, "scan.png");
+  fs.writeFileSync(png, pixelPng());
+  files.image = png;
+
+  const wav = path.join(root, "memo.wav");
+  fs.writeFileSync(wav, buildSilentWav());
+  files.audio = wav;
 
   return { root, files };
 }

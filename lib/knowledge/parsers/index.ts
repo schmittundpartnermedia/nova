@@ -3,6 +3,7 @@ import { docxParser, xlsxParser } from "@/lib/knowledge/parsers/office";
 import { pdfParser } from "@/lib/knowledge/parsers/pdf";
 import { chatgptParser, emailParser, projectParser, zipParser } from "@/lib/knowledge/parsers/special";
 import { mediaParser } from "@/lib/knowledge/parsers/media";
+import { enrichDocumentContent } from "@/lib/knowledge/enrich";
 import { detectSourceType, inspectUntrustedDocument, languageOf, redactKnowledgeText } from "@/lib/knowledge/security";
 import type { KnowledgeParser, KnowledgeParserSource, ParsedDocument } from "@/types/knowledge";
 
@@ -71,12 +72,13 @@ export function chooseParser(source: KnowledgeParserSource): KnowledgeParser {
 
 export async function parseKnowledgeSource(source: KnowledgeParserSource): Promise<ParsedDocument> {
   const parser = chooseParser(source);
-  const parsed = await parser.parse({
+  const typed = {
     ...source,
     sourceType: source.sourceType ?? detectSourceType(source.originalPath ?? source.name, source.mimeType),
-  });
+  };
+  const parsed = await parser.parse(typed);
   parsed.metadata = { ...parsed.metadata, parser: parsed.metadata.parser ?? parser.id };
-  return parsed;
+  return enrichDocumentContent(typed, parsed);
 }
 
 export function listKnowledgeParsers(): string[] {

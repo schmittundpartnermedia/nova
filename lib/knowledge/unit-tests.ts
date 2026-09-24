@@ -4,6 +4,9 @@ import { extractKnowledgeItems } from "@/lib/knowledge/extract";
 import { inspectUntrustedDocument, detectSourceType } from "@/lib/knowledge/security";
 import { buildSimplePdf } from "@/lib/knowledge/parsers/pdf";
 import { hybridScore } from "@/lib/knowledge/ranking";
+import { pixelPng, buildSilentWav } from "@/lib/knowledge/fixtures";
+import { setOcrAdapterForTests } from "@/lib/knowledge/ocr";
+import { setTranscribeAdapterForTests } from "@/lib/knowledge/transcribe";
 
 export function runKnowledgeUnitTests(): string[] {
   const failures: string[] = [];
@@ -102,5 +105,40 @@ export async function parseRoundtripSmoke(): Promise<string[]> {
   const items = extractKnowledgeItems(parsed);
   if (!items.some((item) => item.type === "COMPANY")) failures.push("Firma nicht extrahiert");
   if (!items.some((item) => item.type === "PRICE")) failures.push("Preis nicht extrahiert");
+
+  setOcrAdapterForTests({
+    id: "test-ocr",
+    available: () => true,
+    async recognize() {
+      return "Scan: Preis 199 EUR Firma Nordstern Media GmbH";
+    },
+  });
+  setTranscribeAdapterForTests({
+    id: "test-stt",
+    available: () => true,
+    async transcribe() {
+      return "Firma: Hetzner\nEntscheidung: Pilot startet mit drei Monaten.";
+    },
+  });
+  try {
+    const scan = await parseKnowledgeSource({
+      name: "scan.png",
+      bytes: pixelPng(),
+      mimeType: "image/png",
+      sourceType: "image",
+    });
+    if (!/199/.test(scan.fulltext)) failures.push("OCR-Text fehlt im Bild");
+    if (scan.ocrRequired) failures.push("OCR blieb als offen markiert, obwohl Text da ist");
+    const audio = await parseKnowledgeSource({
+      name: "memo.wav",
+      bytes: buildSilentWav(),
+      mimeType: "audio/wav",
+      sourceType: "audio",
+    });
+    if (!/Hetzner/.test(audio.fulltext)) failures.push("Transkript fehlt in der Audiodatei");
+  } finally {
+    setOcrAdapterForTests(null);
+    setTranscribeAdapterForTests(null);
+  }
   return failures;
 }

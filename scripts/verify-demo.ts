@@ -2,10 +2,12 @@ import { PrismaClient } from "@prisma/client";
 import { runMaster } from "@/agents/master";
 import { needsFlagshipModel, needsSpecialistWork } from "@/agents/master/intent";
 import { searchMemory } from "@/services/retrieval";
+import { LocalHashEmbeddingProvider, setEmbeddingProviderForTests } from "@/providers/embedding";
 
 const prisma = new PrismaClient();
 
 async function main() {
+  setEmbeddingProviderForTests(new LocalHashEmbeddingProvider());
   if (needsSpecialistWork("Hallo NOVA, wie ist der Stand?")) {
     throw new Error("Gespräch darf keinen Spezialisten-Planer brauchen.");
   }
@@ -115,5 +117,6 @@ main()
     process.exit(1);
   })
   .finally(async () => {
+    setEmbeddingProviderForTests(null);
     await prisma.$disconnect();
   });

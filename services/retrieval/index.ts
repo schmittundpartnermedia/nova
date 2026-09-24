@@ -4,6 +4,7 @@ import { searchConversationMessages } from "@/services/conversation";
 import { buildKnowledgeContext } from "@/services/knowledge";
 import { DIALOG_HISTORY_SIZE } from "@/types/conversation";
 import { loadConversationContinuity } from "@/services/conversation/continuity";
+import { embedText, embeddingSimilarity, lexicalMemoryScore, parseEmbedding } from "@/lib/memory/embedding";
 
 export type RetrievalMode = "structured" | "fulltext" | "semantic" | "relation";
 
@@ -44,9 +45,63 @@ export async function searchMemory(input: {
     return assertTenantIsolation(input.organizationId, rows, "Memory");
   }
 
-  if (input.mode === "semantic") {
-    // V1: semantische Suche ist vorbereitet, fällt auf Fulltext zurück.
-    // embeddingRef bleibt ungenutzt, bis ein Embedding-Store angebunden wird.
+  if (input.mode === "semantic" || !input.mode) {
+    const tokens = q
+      .split(/\s+/)
+      .map((token) => token.replace(/[^a-zA-Z0-9äöüÄÖÜß-]/g, ""))
+      .filter((token) => token.length > 2)
+      .slice(0, 8);
+    const [lexicalRows, recentRows] = await Promise.all([
+      prisma.memoryEntry.findMany({
+        where: {
+          organizationId: input.organizationId,
+          ...(input.type ? { type: input.type } : {}),
+          OR: [
+            { title: { contains: q } },
+            { content: { contains: q } },
+            { fulltext: { contains: q.toLowerCase() } },
+            ...tokens.flatMap((token) => [
+              { title: { contains: token } },
+              { content: { contains: token } },
+              { fulltext: { contains: token.toLowerCase() } },
+            ]),
+          ],
+        },
+        orderBy: { updatedAt: "desc" },
+        take: 80,
+      }),
+      prisma.memoryEntry.findMany({
+        where: {
+          organizationId: input.organizationId,
+          ...(input.type ? { type: input.type } : {}),
+          embeddingRef: { not: null },
+        },
+        orderBy: { updatedAt: "desc" },
+        take: 150,
+      }),
+    ]);
+    const byId = new Map<string, (typeof lexicalRows)[number]>();
+    for (const row of [...lexicalRows, ...recentRows]) {
+      if (row.organizationId === input.organizationId) byId.set(row.id, row);
+    }
+    const candidates = assertTenantIsolation(input.organizationId, Array.from(byId.values()), "Memory");
+    let queryVector: number[] = [];
+    try {
+      queryVector = (await embedText(q)).vector;
+    } catch {
+      queryVector = [];
+    }
+    const ranked = candidates
+      .map((row) => {
+        const lexical = lexicalMemoryScore(q, row.title, row.content, row.fulltext);
+        const semantic = queryVector.length ? embeddingSimilarity(queryVector, parseEmbedding(row.embeddingRef)) : 0;
+        return { row, score: semantic * 0.72 + lexical * 0.28 };
+      })
+      .filter((item) => item.score > 0)
+      .sort((a, b) => b.score - a.score)
+      .slice(0, limit)
+      .map((item) => item.row);
+    if (ranked.length) return ranked;
   }
 
   if (input.mode === "relation") {

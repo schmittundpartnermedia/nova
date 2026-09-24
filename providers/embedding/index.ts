@@ -1,3 +1,5 @@
+import { hasOpenAIApiKey } from "@/lib/secrets";
+
 export interface EmbeddingProvider {
   id: string;
   model: string;
@@ -65,6 +67,7 @@ let override: EmbeddingProvider | null = null;
 
 export function getEmbeddingProvider(): EmbeddingProvider {
   if (override) return override;
+  if (hasOpenAIApiKey()) return new OpenAIEmbeddingProvider();
   return new LocalHashEmbeddingProvider();
 }
 

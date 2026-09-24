@@ -17,6 +17,7 @@ import { createJob, updateJobStatus } from "@/services/jobs";
 import { createApprovalRequest } from "@/services/approvals";
 import { recordActivity } from "@/services/archive";
 import { createSource, upsertDurableMemory } from "@/services/memory";
+import { extractSpokenMemory } from "@/lib/memory/policy";
 import { loadRelevantBusinessContext } from "@/services/retrieval";
 import { requestKnowledgeCancel } from "@/services/knowledge/jobs";
 import { prisma } from "@/lib/prisma";
@@ -159,12 +160,25 @@ function rememberConversation(input: {
   reply: string;
 }) {
   if (!input.conversationId || !input.reply.trim()) return;
-  void refreshConversationContinuity({
-    organizationId: input.organizationId,
-    conversationId: input.conversationId,
-    userRequest: input.userRequest,
-    reply: input.reply,
-  }).catch(() => undefined);
+  void (async () => {
+    await refreshConversationContinuity({
+      organizationId: input.organizationId,
+      conversationId: input.conversationId,
+      userRequest: input.userRequest,
+      reply: input.reply,
+    });
+    const spoken = extractSpokenMemory(input.userRequest);
+    if (spoken) {
+      await upsertDurableMemory({
+        organizationId: input.organizationId,
+        type: spoken.type,
+        title: spoken.title,
+        content: spoken.content,
+        sourceType: "conversation_message",
+        sourceReference: input.conversationId,
+      });
+    }
+  })().catch(() => undefined);
 }
 
 function novaReplySystem(input: {

@@ -1,5 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { assertOrganizationId } from "@/services/tenant";
+import { indexMemoryEmbedding } from "@/lib/memory/embedding";
+import { shouldPersistMemoryItem } from "@/lib/memory/policy";
 import type { MemoryType, SourceType } from "@/types";
 
 export type SaveMemoryInput = {
@@ -27,7 +29,7 @@ function memoryFulltext(input: Pick<SaveMemoryInput, "title" | "content" | "type
 export async function saveMemory(input: SaveMemoryInput) {
   assertOrganizationId(input.organizationId);
 
-  return prisma.memoryEntry.create({
+  const created = await prisma.memoryEntry.create({
     data: {
       organizationId: input.organizationId,
       type: input.type,
@@ -44,6 +46,13 @@ export async function saveMemory(input: SaveMemoryInput) {
       fulltext: memoryFulltext(input),
     },
   });
+  await indexMemoryEmbedding({
+    organizationId: input.organizationId,
+    memoryId: created.id,
+    title: created.title,
+    content: created.content,
+  }).catch(() => undefined);
+  return prisma.memoryEntry.findFirstOrThrow({ where: { id: created.id, organizationId: input.organizationId } });
 }
 
 export async function upsertDurableMemory(input: SaveMemoryInput) {
@@ -51,6 +60,7 @@ export async function upsertDurableMemory(input: SaveMemoryInput) {
   const title = input.title.trim();
   const content = input.content.trim();
   if (!title || !content) return null;
+  if (!shouldPersistMemoryItem({ title, content })) return null;
 
   const existing = await prisma.memoryEntry.findFirst({
     where: {
@@ -63,7 +73,7 @@ export async function upsertDurableMemory(input: SaveMemoryInput) {
 
   if (existing) {
     const sameContent = existing.content === content;
-    return prisma.memoryEntry.update({
+    const updated = await prisma.memoryEntry.update({
       where: { id: existing.id },
       data: {
         content: sameContent ? existing.content : content,
@@ -79,6 +89,16 @@ export async function upsertDurableMemory(input: SaveMemoryInput) {
         version: { increment: 1 },
       },
     });
+    if (!sameContent || !updated.embeddingRef) {
+      await indexMemoryEmbedding({
+        organizationId: input.organizationId,
+        memoryId: updated.id,
+        title: updated.title,
+        content: updated.content,
+      }).catch(() => undefined);
+      return prisma.memoryEntry.findFirstOrThrow({ where: { id: updated.id, organizationId: input.organizationId } });
+    }
+    return updated;
   }
 
   return saveMemory({ ...input, title, content });

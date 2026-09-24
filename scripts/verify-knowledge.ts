@@ -15,6 +15,9 @@ import {
   searchKnowledge,
 } from "@/services/knowledge";
 import { importUploadedFiles } from "@/services/import/upload";
+import { LocalHashEmbeddingProvider, setEmbeddingProviderForTests } from "@/providers/embedding";
+import { setOcrAdapterForTests } from "@/lib/knowledge/ocr";
+import { setTranscribeAdapterForTests } from "@/lib/knowledge/transcribe";
 
 const prisma = new PrismaClient();
 
@@ -23,12 +26,41 @@ function assert(condition: unknown, message: string): void {
 }
 
 async function main() {
+  setEmbeddingProviderForTests(new LocalHashEmbeddingProvider());
+  setOcrAdapterForTests({
+    id: "test-ocr",
+    available: () => true,
+    async recognize() {
+      return "Scan: Preis 199 EUR Firma Nordstern Media GmbH";
+    },
+  });
+  setTranscribeAdapterForTests({
+    id: "test-stt",
+    available: () => true,
+    async transcribe() {
+      return "Firma: Hetzner\nEntscheidung: Pilot startet mit drei Monaten.";
+    },
+  });
   bootstrapAgents();
   const unit = runKnowledgeUnitTests();
   const smoke = await parseRoundtripSmoke();
   if (unit.length || smoke.length) {
     throw new Error(`Unit-Tests fehlgeschlagen: ${[...unit, ...smoke].join("; ")}`);
   }
+  setOcrAdapterForTests({
+    id: "test-ocr",
+    available: () => true,
+    async recognize() {
+      return "Scan: Preis 199 EUR Firma Nordstern Media GmbH";
+    },
+  });
+  setTranscribeAdapterForTests({
+    id: "test-stt",
+    available: () => true,
+    async transcribe() {
+      return "Firma: Hetzner\nEntscheidung: Pilot startet mit drei Monaten.";
+    },
+  });
 
   const knowledge = getAgent("knowledge");
   assert(knowledge?.definition.implemented === true, "Knowledge Agent nicht in der Registry");
@@ -96,6 +128,33 @@ async function main() {
     query: "Projekt Gamma Preis",
   });
   assert(uploadedHit.some((hit) => /Gamma|250/i.test(hit.content + hit.title)), "Hochgeladene Datei nicht wiederfindbar");
+  const uploadedMedia = await importUploadedFiles({
+    organizationId: organization.id,
+    userRequest: "Lade Scan und Sprachmemo hoch",
+    files: [
+      {
+        name: "scan.png",
+        mimeType: "image/png",
+        bytes: fs.readFileSync(fixtures.files.image),
+      },
+      {
+        name: "memo.wav",
+        mimeType: "audio/wav",
+        bytes: fs.readFileSync(fixtures.files.audio),
+      },
+    ],
+  });
+  assert(uploadedMedia.ok, "Medien-Upload fehlgeschlagen");
+  const ocrHit = await searchKnowledge({
+    organizationId: organization.id,
+    query: "Scan Preis Nordstern",
+  });
+  assert(ocrHit.some((hit) => /199|Nordstern/i.test(`${hit.content} ${hit.title}`)), "OCR-Inhalt nicht wiederfindbar");
+  const transcriptHit = await searchKnowledge({
+    organizationId: organization.id,
+    query: "Hetzner Pilot",
+  });
+  assert(transcriptHit.some((hit) => /Hetzner|Pilot/i.test(`${hit.content} ${hit.title}`)), "Transkript nicht wiederfindbar");
 
   const parsedPdf = await parseKnowledgeSource({
     name: "partnerstrategie.pdf",
@@ -286,5 +345,8 @@ main()
     process.exitCode = 1;
   })
   .finally(async () => {
+    setEmbeddingProviderForTests(null);
+    setOcrAdapterForTests(null);
+    setTranscribeAdapterForTests(null);
     await prisma.$disconnect();
   });

@@ -177,11 +177,7 @@ export async function importUploadedFiles(input: {
         else checkpoint.filesFailed += 1;
       } else {
         const sourceType = detectSourceType(file.name, file.mimeType);
-        const catalogOnly =
-          file.bytes.length > KNOWLEDGE_LIMITS.maxFileBytes ||
-          sourceType === "audio" ||
-          sourceType === "video" ||
-          sourceType === "image";
+        const catalogOnly = file.bytes.length > KNOWLEDGE_LIMITS.maxFileBytes;
         const catalogBytes = catalogOnly
           ? Buffer.from(`${file.name}\n${file.mimeType ?? sourceType}\n${storedPath}`, "utf8")
           : file.bytes;
