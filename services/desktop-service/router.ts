@@ -96,7 +96,7 @@ async function dispatch(envelope: ComputerActionEnvelope, userCommissioned: bool
     }
     case "accessibility": {
       const payload = accessibilityActionSchema.parse(envelope.payload);
-      return executeAccessibilityAction({ payload });
+      return executeAccessibilityAction({ payload, userCommissioned });
     }
     case "screen": {
       const payload = screenActionSchema.parse(envelope.payload);

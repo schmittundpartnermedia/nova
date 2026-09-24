@@ -121,7 +121,17 @@ export async function buildNativeHelper(): Promise<{ ok: boolean; reason: string
 }
 
 export async function ensureNativeHelper(): Promise<{ ok: boolean; reason: string }> {
-  if (helperAvailable()) return { ok: true, reason: "Native Helper vorhanden." };
+  const source = helperSourcePath();
+  const plist = helperInfoPlistPath();
+  const bin = helperBinaryPath();
+  if (helperAvailable()) {
+    const binTime = fs.statSync(bin).mtimeMs;
+    const sourceTime = fs.existsSync(source) ? fs.statSync(source).mtimeMs : 0;
+    const plistTime = fs.existsSync(plist) ? fs.statSync(plist).mtimeMs : 0;
+    if (binTime >= sourceTime && binTime >= plistTime) {
+      return { ok: true, reason: "Native Helper vorhanden." };
+    }
+  }
   return buildNativeHelper();
 }
 

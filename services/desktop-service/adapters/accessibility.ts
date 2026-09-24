@@ -1,13 +1,21 @@
 import os from "node:os";
 import { invokeNativeHelper, ensureNativeHelper } from "@/lib/computer/capabilities";
+import { classifyComputerAction } from "@/lib/computer/risk";
 import { createActionResult, failedResult } from "@/lib/computer/result";
 import type { AccessibilityAction } from "@/lib/computer/schemas";
 import type { ActionResult } from "@/lib/computer/types";
 
 export async function executeAccessibilityAction(input: {
   payload: AccessibilityAction;
+  userCommissioned?: boolean;
 }): Promise<ActionResult> {
   const startedAt = new Date();
+  const risk = classifyComputerAction({
+    tool: "accessibility",
+    action: input.payload.action,
+    target: "identifier" in input.payload ? input.payload.identifier : input.payload.app,
+    userCommissioned: input.userCommissioned,
+  });
   if (os.platform() !== "darwin") {
     return failedResult({
       tool: "accessibility",
@@ -16,6 +24,18 @@ export async function executeAccessibilityAction(input: {
       riskLevel: "READ_ONLY",
       code: "unavailable",
       message: "Accessibility ist nur auf macOS verfügbar.",
+    });
+  }
+
+  if (risk.approvalRequired && !input.userCommissioned) {
+    return failedResult({
+      tool: "accessibility",
+      action: input.payload.action,
+      startedAt,
+      riskLevel: risk.risk,
+      code: "approval_required",
+      message: "UI-Steuerung braucht einen klaren Auftrag von dir.",
+      approvalRequired: true,
     });
   }
 
@@ -57,17 +77,23 @@ export async function executeAccessibilityAction(input: {
   }
 
   if (!helper.ok) {
+    const code = helper.error ?? "ax_error";
+    const message =
+      code === "ax_not_found"
+        ? "Das UI-Element wurde nicht gefunden."
+        : code === "missing_identifier"
+          ? "Ohne Bezeichnung kann ich nichts anklicken."
+          : code === "PERMISSION_REQUIRED"
+            ? "NOVA benötigt Bedienungshilfen-Zugriff."
+            : "Accessibility-Aktion fehlgeschlagen.";
     return failedResult({
       tool: "accessibility",
       action: input.payload.action,
       startedAt,
-      riskLevel: "READ_ONLY",
-      code: helper.error ?? "ax_error",
-      message:
-        helper.error === "ax_action_foundation"
-          ? "Accessibility-Aktionen sind als Foundation vorbereitet, Element-Targeting ist noch nicht produktionsfähig."
-          : helper.error ?? "Accessibility fehlgeschlagen.",
-      metadata: { status: helper.error === "ax_action_foundation" ? "NOT_IMPLEMENTED" : "ERROR" },
+      riskLevel: risk.risk,
+      code,
+      message,
+      metadata: { status: "ERROR", identifier: "identifier" in input.payload ? input.payload.identifier : undefined },
     });
   }
 
@@ -76,7 +102,7 @@ export async function executeAccessibilityAction(input: {
     action: input.payload.action,
     startedAt,
     success: true,
-    riskLevel: "READ_ONLY",
+    riskLevel: risk.risk,
     approvalRequired: false,
     result: helper.data ?? helper,
     verification: { verified: true, method: "native_helper" },

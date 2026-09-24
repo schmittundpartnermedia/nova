@@ -111,6 +111,62 @@ export function planComputerTask(input: {
           userCommissioned: true,
         },
       ];
+    case "open_app": {
+      const app = guessAppName(input.userRequest);
+      return [
+        {
+          tool: "application",
+          payload: { action: "launch", name: app },
+          purpose: `${app} starten`,
+          userCommissioned: true,
+        },
+        {
+          tool: "application",
+          payload: { action: "focus", name: app },
+          purpose: `${app} in den Vordergrund`,
+          userCommissioned: true,
+        },
+      ];
+    }
+    case "ui_click": {
+      const app = guessAppName(input.userRequest);
+      const control = guessControlName(input.userRequest);
+      const typed = guessTypedValue(input.userRequest);
+      const steps: PlannedStep[] = [];
+      if (app) {
+        steps.push({
+          tool: "application",
+          payload: { action: "focus", name: app },
+          purpose: `${app} fokussieren`,
+          userCommissioned: true,
+        });
+      }
+      if (typed && control) {
+        steps.push({
+          tool: "accessibility",
+          payload: { action: "setValue", identifier: control, value: typed, app: app || undefined },
+          purpose: `In ${control} tippen`,
+          userCommissioned: true,
+        });
+        return steps;
+      }
+      if (control) {
+        steps.push({
+          tool: "accessibility",
+          payload: { action: "press", identifier: control, app: app || undefined },
+          purpose: `${control} bedienen`,
+          userCommissioned: true,
+        });
+        return steps;
+      }
+      steps.push({
+        tool: "accessibility",
+        payload: { action: "inspect", app: app || undefined, maxDepth: 3 },
+        purpose: "UI lesen, weil das Ziel unklar ist",
+        userCommissioned: true,
+      });
+      return steps;
+    }
     case "find_file":
       return [
         {
@@ -136,4 +192,44 @@ function guessFilename(request: string): string {
   const cleaned = request.replace(/such(?:e| mir)?|die datei|finde/gi, "").trim().slice(0, 40);
   if (cleaned) return cleaned;
   return "nova";
+}
+
+const APP_ALIASES: Record<string, string> = {
+  finder: "Finder",
+  terminal: "Terminal",
+  textedit: "TextEdit",
+  mail: "Mail",
+  kalender: "Calendar",
+  calendar: "Calendar",
+  safari: "Safari",
+  chrome: "Google Chrome",
+  cursor: "Cursor",
+  notizen: "Notes",
+  notes: "Notes",
+  systemeinstellungen: "System Settings",
+};
+
+export function guessAppName(request: string): string {
+  const match = request.match(
+    /\b(finder|terminal|textedit|mail|kalender|calendar|safari|chrome|cursor|notizen|notes|systemeinstellungen)\b/i,
+  );
+  if (!match?.[1]) return "";
+  return APP_ALIASES[match[1].toLowerCase()] ?? match[1];
+}
+
+export function guessControlName(request: string): string {
+  const quoted = request.match(/["„]([^"”]+)["”]/)?.[1];
+  if (quoted?.trim()) return quoted.trim().slice(0, 120);
+  const click = request.match(
+    /(?:klick(?:e|en)?(?:\s+auf)?|drück(?:e|en)?(?:\s+auf)?|button|menü(?:punkt)?)\s+(.+?)(?:\s+in\s+|\s*$)/i,
+  );
+  if (click?.[1]) return click[1].replace(/\s+in\s+.+$/i, "").trim().slice(0, 120);
+  const field = request.match(/tippe(?:\s+(?:in|auf))?\s+(.+?)(?:\s*[:–-]\s*|\s*$)/i);
+  if (field?.[1]) return field[1].trim().slice(0, 120);
+  return "";
+}
+
+export function guessTypedValue(request: string): string {
+  const typed = request.match(/tippe(?:\s+(?:in|auf)\s+[^:]+)?\s*[:–-]\s*(.+)$/i);
+  return typed?.[1]?.trim().slice(0, 500) ?? "";
 }

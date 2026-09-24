@@ -153,13 +153,13 @@ export const applicationActionSchema = z.discriminatedUnion("action", [
 
 export const accessibilityActionSchema = z.discriminatedUnion("action", [
   z.object({ action: z.literal("inspect"), app: z.string().max(200).optional(), maxDepth: z.number().int().positive().max(8).optional() }),
-  z.object({ action: z.literal("press"), identifier: z.string().min(1).max(500) }),
-  z.object({ action: z.literal("focus"), identifier: z.string().min(1).max(500) }),
-  z.object({ action: z.literal("setValue"), identifier: z.string().min(1).max(500), value: z.string().max(20_000) }),
-  z.object({ action: z.literal("select"), identifier: z.string().min(1).max(500) }),
-  z.object({ action: z.literal("expand"), identifier: z.string().min(1).max(500) }),
-  z.object({ action: z.literal("collapse"), identifier: z.string().min(1).max(500) }),
-  z.object({ action: z.literal("scroll"), identifier: z.string().min(1).max(500) }),
+  z.object({ action: z.literal("press"), identifier: z.string().min(1).max(500), app: z.string().max(200).optional() }),
+  z.object({ action: z.literal("focus"), identifier: z.string().min(1).max(500), app: z.string().max(200).optional() }),
+  z.object({ action: z.literal("setValue"), identifier: z.string().min(1).max(500), value: z.string().max(20_000), app: z.string().max(200).optional() }),
+  z.object({ action: z.literal("select"), identifier: z.string().min(1).max(500), app: z.string().max(200).optional() }),
+  z.object({ action: z.literal("expand"), identifier: z.string().min(1).max(500), app: z.string().max(200).optional() }),
+  z.object({ action: z.literal("collapse"), identifier: z.string().min(1).max(500), app: z.string().max(200).optional() }),
+  z.object({ action: z.literal("scroll"), identifier: z.string().min(1).max(500), app: z.string().max(200).optional() }),
 ]);
 
 export const screenActionSchema = z.discriminatedUnion("action", [

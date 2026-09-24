@@ -6,6 +6,8 @@ export type ComputerIntentKind =
   | "inspect_project"
   | "start_dev"
   | "open_local"
+  | "open_app"
+  | "ui_click"
   | "cursor_ask"
   | "delete_dangerous"
   | "screenshot"
@@ -41,6 +43,14 @@ export function detectComputerIntent(userRequest: string): ComputerIntent {
 
   if (/öffne die lokale nova|lokale nova-seite|localhost.*prüf|seite.*erreichbar/i.test(lower)) {
     return { kind: "open_local", userCommissioned: true, statusMessage: "Browser wird geprüft" };
+  }
+
+  if (/\b(?:klick(?:e|en)?(?:\s+auf)?|drück(?:e|en)?(?:\s+auf)?|tippe(?:\s+(?:in|auf))?)\b/i.test(lower)) {
+    return { kind: "ui_click", userCommissioned: true, statusMessage: "UI-Element wird bedient" };
+  }
+
+  if (/öffne\s+(?:finder|terminal|textedit|mail|kalender|safari|chrome|cursor|notizen|notes|systemeinstellungen)/i.test(lower)) {
+    return { kind: "open_app", userCommissioned: true, statusMessage: "App wird geöffnet" };
   }
 
   if (/starte nova lokal|npm run dev|dev server|lokal starten/i.test(lower)) {

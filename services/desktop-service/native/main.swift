@@ -164,6 +164,136 @@ func inspectElement(_ element: AXUIElement, depth: Int, maxDepth: Int) -> [Strin
     return node
 }
 
+func stringAttr(_ element: AXUIElement, _ name: CFString) -> String {
+    attribute(element, name) as? String ?? ""
+}
+
+func elementMatches(_ element: AXUIElement, needle: String) -> Bool {
+    let n = needle.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+    guard !n.isEmpty else { return false }
+    let fields = [
+        stringAttr(element, kAXIdentifierAttribute as CFString),
+        stringAttr(element, kAXTitleAttribute as CFString),
+        stringAttr(element, kAXDescriptionAttribute as CFString),
+        stringAttr(element, kAXHelpAttribute as CFString),
+        stringAttr(element, kAXRoleDescriptionAttribute as CFString),
+        stringAttr(element, kAXValueAttribute as CFString),
+    ].map { $0.lowercased() }.filter { !$0.isEmpty }
+    if fields.contains(where: { $0 == n || $0.contains(n) }) { return true }
+    let role = stringAttr(element, kAXRoleAttribute as CFString).lowercased()
+    if n.contains(":") {
+        let parts = n.split(separator: ":", maxSplits: 1)
+        if parts.count == 2 {
+            let roleNeedle = String(parts[0])
+            let titleNeedle = String(parts[1])
+            if role.contains(roleNeedle) && fields.contains(where: { $0.contains(titleNeedle) }) {
+                return true
+            }
+        }
+    }
+    return false
+}
+
+func describeElement(_ element: AXUIElement) -> [String: Any] {
+    [
+        "role": stringAttr(element, kAXRoleAttribute as CFString),
+        "title": stringAttr(element, kAXTitleAttribute as CFString),
+        "identifier": stringAttr(element, kAXIdentifierAttribute as CFString),
+        "description": stringAttr(element, kAXDescriptionAttribute as CFString),
+    ]
+}
+
+func applicationElement(named name: String?) -> AXUIElement {
+    if let name, !name.isEmpty {
+        let match = NSWorkspace.shared.runningApplications.first {
+            $0.localizedName?.localizedCaseInsensitiveCompare(name) == .orderedSame
+                || ($0.bundleIdentifier ?? "").localizedCaseInsensitiveContains(name)
+        }
+        if let match {
+            return AXUIElementCreateApplication(match.processIdentifier)
+        }
+    }
+    if let front = NSWorkspace.shared.frontmostApplication {
+        return AXUIElementCreateApplication(front.processIdentifier)
+    }
+    return AXUIElementCreateSystemWide()
+}
+
+func findElement(in root: AXUIElement, needle: String, limit: Int = 500) -> AXUIElement? {
+    var queue: [AXUIElement] = [root]
+    var seen = 0
+    while !queue.isEmpty, seen < limit {
+        let current = queue.removeFirst()
+        seen += 1
+        if seen > 1, elementMatches(current, needle: needle) {
+            return current
+        }
+        if let children = attribute(current, kAXChildrenAttribute as CFString) as? [AXUIElement] {
+            queue.append(contentsOf: Array(children.prefix(80)))
+        }
+    }
+    return nil
+}
+
+func axActionName(_ command: String) -> String {
+    switch command {
+    case "ax.press", "ax.select":
+        return kAXPressAction as String
+    case "ax.focus":
+        return kAXRaiseAction as String
+    case "ax.expand":
+        return kAXShowMenuAction as String
+    case "ax.collapse":
+        return kAXCancelAction as String
+    case "ax.scroll":
+        return "AXScrollToVisible"
+    default:
+        return kAXPressAction as String
+    }
+}
+
+func performAction(_ identifier: String, action: String, value: String?, appName: String?) -> [String: Any] {
+    let needle = identifier.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !needle.isEmpty else {
+        return ["ok": false, "error": "missing_identifier"]
+    }
+    let root = applicationElement(named: appName)
+    guard let element = findElement(in: root, needle: needle) else {
+        return [
+            "ok": false,
+            "error": "ax_not_found",
+            "identifier": needle,
+            "requestedAction": action,
+            "app": appName ?? "",
+        ]
+    }
+    if action == "ax.setValue" {
+        let focused = AXUIElementSetAttributeValue(element, kAXFocusedAttribute as CFString, kCFBooleanTrue)
+        let set = AXUIElementSetAttributeValue(element, kAXValueAttribute as CFString, (value ?? "") as CFTypeRef)
+        let ok = set == .success || focused == .success
+        return [
+            "ok": ok,
+            "error": ok ? "" : "ax_set_value_failed",
+            "identifier": needle,
+            "requestedAction": action,
+            "matched": describeElement(element),
+        ]
+    }
+    if action == "ax.focus" {
+        _ = AXUIElementSetAttributeValue(element, kAXFocusedAttribute as CFString, kCFBooleanTrue)
+    }
+    let result = AXUIElementPerformAction(element, axActionName(action) as CFString)
+    let ok = result == .success
+    return [
+        "ok": ok,
+        "error": ok ? "" : "ax_action_failed",
+        "identifier": needle,
+        "requestedAction": action,
+        "axCode": Int(result.rawValue),
+        "matched": describeElement(element),
+    ]
+}
+
 func systemWideInspect(maxDepth: Int, appName: String?) -> [String: Any] {
     if let appName, !appName.isEmpty {
         let match = NSWorkspace.shared.runningApplications.first {
@@ -175,18 +305,6 @@ func systemWideInspect(maxDepth: Int, appName: String?) -> [String: Any] {
         }
     }
     return inspectElement(AXUIElementCreateSystemWide(), depth: 0, maxDepth: maxDepth)
-}
-
-func performAction(_ identifier: String, action: String, value: String?) -> [String: Any] {
-    // Foundation-only: identifier matching across the tree is Phase B depth.
-    return [
-        "ok": false,
-        "error": "ax_action_foundation",
-        "identifier": identifier,
-        "requestedAction": action,
-        "value": value ?? "",
-        "status": "NOT_IMPLEMENTED",
-    ]
 }
 
 func captureScreen() -> [String: Any] {
@@ -328,7 +446,7 @@ case "ax.press", "ax.focus", "ax.setValue", "ax.select", "ax.expand", "ax.collap
     if !axTrusted() {
         writeJSON(["ok": false, "permission": "accessibility", "error": "PERMISSION_REQUIRED"])
     } else {
-        writeJSON(performAction(command.identifier ?? "", action: command.cmd, value: command.value))
+        writeJSON(performAction(command.identifier ?? "", action: command.cmd, value: command.value, appName: command.app))
     }
 case "app.launch":
     writeJSON(launchApp(command.app ?? ""))

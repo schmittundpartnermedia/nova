@@ -225,6 +225,17 @@ export function classifyComputerAction(input: {
   if (input.tool === "application") {
     return decision("READ_ONLY", true, "Anwendung fokussieren oder starten.");
   }
+  if (input.tool === "accessibility") {
+    if (input.action === "inspect") {
+      return decision("READ_ONLY", true, "UI-Baum lesen.");
+    }
+    return {
+      ...decision("WORKSPACE_WRITE", true, "UI-Steuerung in einer App."),
+      approvalClass: input.userCommissioned ? "B" : "C",
+      approvalRequired: !input.userCommissioned,
+      autonomousAllowed: Boolean(input.userCommissioned),
+    };
+  }
   return decision("READ_ONLY", true, "Standard-Computeraktion.");
 }
 

@@ -4,6 +4,7 @@ import { detectHardBlock, isHardBlockedPath } from "@/lib/computer/hard-blocks";
 import { isInjectionAttempt, wrapExternalContent } from "@/lib/computer/injection";
 import { redactEnvFile, redactSecrets, shouldRedactFilePath } from "@/lib/computer/redaction";
 import { detectComputerIntent } from "@/agents/computer/intent";
+import { guessAppName, guessControlName, planComputerTask } from "@/agents/computer/planner";
 import { detectCodingIntent } from "@/agents/coding/intent";
 import {
   buildAgentCliArgv,
@@ -106,7 +107,16 @@ export function runComputerUnitTests(): string[] {
     assert.equal(detectComputerIntent("NOVA, frag Cursor, ob im Projekt TypeScript-Fehler vorhanden sind.").kind, "cursor_ask");
     assert.equal(detectComputerIntent("Ändere auf rankPilot die Startseite und lass Cursor das umsetzen.").kind, "none");
     assert.equal(detectComputerIntent("NOVA, lösche das NOVA-Projekt.").kind, "delete_dangerous");
-    assert.equal(detectComputerIntent("Was ist der Sponsorenstatus?").kind, "none");
+    assert.equal(detectComputerIntent("NOVA, öffne Finder").kind, "open_app");
+    assert.equal(detectComputerIntent("Klick auf Speichern in TextEdit").kind, "ui_click");
+    assert.equal(guessAppName("Klick auf Speichern in TextEdit"), "TextEdit");
+    assert.equal(guessControlName("Klick auf Speichern in TextEdit"), "Speichern");
+    const ui = planComputerTask({
+      kind: "ui_click",
+      userRequest: "Klick auf Speichern in TextEdit",
+      workspace: "/tmp",
+    });
+    assert.equal(ui.some((step) => step.tool === "accessibility" && (step.payload as { action?: string }).action === "press"), true);
   });
 
   check("schema rejects raw shell strings", () => {
@@ -143,6 +153,24 @@ export function runComputerUnitTests(): string[] {
       platform: "darwin",
     }).filter((item) => item.id.startsWith("browser."));
     assert.ok(withPw.every((item) => item.status === "AVAILABLE"));
+  });
+
+  check("accessibility press is commissioned write", () => {
+    const autonomous = classifyComputerAction({
+      tool: "accessibility",
+      action: "press",
+      target: "Speichern",
+      userCommissioned: true,
+    });
+    assert.equal(autonomous.approvalRequired, false);
+    assert.equal(autonomous.risk, "WORKSPACE_WRITE");
+    const sneaky = classifyComputerAction({
+      tool: "accessibility",
+      action: "press",
+      target: "Speichern",
+      userCommissioned: false,
+    });
+    assert.equal(sneaky.approvalRequired, true);
   });
 
   check("browser open is autonomous", () => {
