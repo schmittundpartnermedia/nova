@@ -1,6 +1,7 @@
 import type { NovaAgent } from "@/types/agents";
 import { detectKnowledgeIntent } from "@/agents/knowledge/intent";
 import { detectChatGPTImportIntent } from "@/lib/chatgpt/intent";
+import { detectNamedVolume, unmountedVolumeMessage } from "@/lib/computer/volumes";
 import {
   buildKnowledgeContext,
   importKnowledgePaths,
@@ -91,6 +92,16 @@ export async function runKnowledgeAgent(input: {
       summary: `${count} Knowledge-Import(s) abgebrochen.`,
       reply: "Ich habe den Import gestoppt. Bereits vollständig verarbeitete Gespräche und Einträge bleiben erhalten.",
       statusMessage: "Abgebrochen",
+    };
+  }
+
+  const volume = detectNamedVolume(input.userRequest);
+  if (volume && !volume.mounted && (intent.kind === "import" || chatgpt.kind !== "none")) {
+    return {
+      ok: false,
+      summary: unmountedVolumeMessage(volume),
+      reply: unmountedVolumeMessage(volume),
+      statusMessage: `${volume.name} nicht eingehängt`,
     };
   }
 

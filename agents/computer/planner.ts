@@ -1,5 +1,6 @@
 import type { ComputerIntentKind } from "@/agents/computer/intent";
 import type { ComputerActionEnvelope } from "@/lib/computer/schemas";
+import { detectNamedVolume } from "@/lib/computer/volumes";
 
 export type PlannedStep = {
   tool: ComputerActionEnvelope["tool"];
@@ -179,20 +180,34 @@ export function planComputerTask(input: {
       });
       return steps;
     }
-    case "find_file":
+    case "find_file": {
+      const volume = detectNamedVolume(input.userRequest);
+      const root = volume?.path ?? input.workspace;
+      const listing = /was liegt|zeig|liste|übersicht|inhalt|festplatte/i.test(input.userRequest);
+      if (listing) {
+        return [
+          {
+            tool: "filesystem",
+            payload: { action: "list", path: root, maxEntries: 80 },
+            purpose: volume ? `${volume.name} listen` : "Ordner listen",
+            userCommissioned: true,
+          },
+        ];
+      }
       return [
         {
           tool: "filesystem",
           payload: {
             action: "search",
-            root: input.workspace,
+            root,
             query: guessFilename(input.userRequest),
             maxResults: 30,
           },
-          purpose: "Datei suchen",
+          purpose: volume ? `Auf ${volume.name} suchen` : "Datei suchen",
           userCommissioned: true,
         },
       ];
+    }
     default:
       return [];
   }
@@ -201,7 +216,10 @@ export function planComputerTask(input: {
 function guessFilename(request: string): string {
   const named = request.match(/datei\s+([a-zA-Z0-9._-]+)/i)?.[1];
   if (named) return named;
-  const cleaned = request.replace(/such(?:e| mir)?|die datei|finde/gi, "").trim().slice(0, 40);
+  const cleaned = request
+    .replace(/such(?:e| mir)?|die datei|finde|auf elevum|von elevum|festplatte|elevum/gi, "")
+    .trim()
+    .slice(0, 40);
   if (cleaned) return cleaned;
   return "nova";
 }

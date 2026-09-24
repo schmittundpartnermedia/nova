@@ -1,5 +1,6 @@
 import { detectHardBlock } from "@/lib/computer/hard-blocks";
 import { isInjectionAttempt } from "@/lib/computer/injection";
+import { detectNamedVolume } from "@/lib/computer/volumes";
 
 export type ComputerIntentKind =
   | "cancel"
@@ -65,8 +66,13 @@ export function detectComputerIntent(userRequest: string): ComputerIntent {
     return { kind: "screenshot", userCommissioned: true, statusMessage: "Bildschirm wird erfasst" };
   }
 
-  if (/wo (?:liegt|ist) die datei|such(?:e| mir) die datei|finde die datei/i.test(lower)) {
+  if (/wo (?:liegt|ist) die datei|such(?:e| mir) die datei|finde die datei|was liegt auf|inhalt (?:der|von)|zeig(?:e| mir) (?:den )?(?:ordner|inhalt)/i.test(lower)) {
     return { kind: "find_file", userCommissioned: true, statusMessage: "Dateien werden gesucht" };
+  }
+
+  const volume = detectNamedVolume(text);
+  if (volume && /\b(lies|lese|zeig|liste|ordner|dateien|unterlagen|festplatte|was liegt|inhalt|such)\b/i.test(lower)) {
+    return { kind: "find_file", userCommissioned: true, statusMessage: volume.mounted ? `${volume.name} wird gelesen` : `${volume.name} ist nicht eingehängt` };
   }
 
   if (

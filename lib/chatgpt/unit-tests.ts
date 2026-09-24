@@ -15,6 +15,10 @@ export function runChatGPTUnitTests(): string[] {
   if (detectChatGPTImportIntent("Importiere den ChatGPT Export `/tmp/export.zip`").kind !== "import") {
     failures.push("ChatGPT-Import mit Pfad nicht erkannt");
   }
+  const elevumChat = detectChatGPTImportIntent("Importiere den ChatGPT-Export von ELEVUM");
+  if (elevumChat.kind === "none") {
+    failures.push("ChatGPT von ELEVUM nicht erkannt");
+  }
   if (detectChatGPTImportIntent("Aendere die Startseite von rankPilot").kind !== "none") {
     failures.push("ChatGPT-Intent darf Coding nicht stehlen");
   }

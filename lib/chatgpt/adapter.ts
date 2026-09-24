@@ -32,6 +32,51 @@ export function isChatGPTExportZip(bytes: Buffer): boolean {
   }
 }
 
+const SKIP_DIRS = new Set(["node_modules", ".git", ".next", ".Spotlight-V100", ".fseventsd", ".Trashes"]);
+
+export function findChatGPTExportFile(root: string): string | null {
+  const resolved = path.resolve(root);
+  let best: string | null = null;
+  const walk = (dir: string, depth: number) => {
+    if (best && /chatgpt/i.test(best)) return;
+    if (depth > 6) return;
+    let entries: fs.Dirent[] = [];
+    try {
+      entries = fs.readdirSync(dir, { withFileTypes: true });
+    } catch {
+      return;
+    }
+    const ordered = [...entries].sort((a, b) => Number(/chatgpt/i.test(b.name)) - Number(/chatgpt/i.test(a.name)));
+    for (const entry of ordered) {
+      if (SKIP_DIRS.has(entry.name) || (entry.name.startsWith(".") && entry.name !== ".")) continue;
+      const full = path.join(dir, entry.name);
+      if (entry.isDirectory()) {
+        walk(full, depth + 1);
+        continue;
+      }
+      if (!/\.zip$/i.test(entry.name)) continue;
+      try {
+        const stat = fs.statSync(full);
+        if (stat.size < 32 || stat.size > CHATGPT_LIMITS.maxZipBytes) continue;
+        if (/chatgpt/i.test(full) || /chatgpt/i.test(dir)) {
+          best = full;
+          return;
+        }
+        if (!best) best = full;
+      } catch {
+        continue;
+      }
+    }
+  };
+  try {
+    if (fs.existsSync(resolved) && fs.statSync(resolved).isFile() && /\.zip$/i.test(resolved)) return resolved;
+    if (fs.existsSync(resolved) && fs.statSync(resolved).isDirectory()) walk(resolved, 0);
+  } catch {
+    return null;
+  }
+  return best;
+}
+
 function sanitizeMessage(message: ImportedMessage): ImportedMessage {
   const untrusted = inspectUntrustedDocument(`chatgpt:${message.externalId}`, message.content);
   const redacted = redactKnowledgeText(message.content);
@@ -89,12 +134,18 @@ function matchAttachment(entries: Array<{ name: string }>, attachment: ImportedA
 
 export function inspectChatGPTExport(source: ChatGPTExportSource): { kind: "zip" | "json"; manifest: ChatGPTExportManifest; bytes: Buffer } {
   let bytes = source.zipBytes ?? source.jsonBytes;
-  if (!bytes && source.filePath) {
-    const stat = fs.statSync(source.filePath);
+  let filePath = source.filePath;
+  if (!bytes && filePath) {
+    const located = findChatGPTExportFile(filePath);
+    if (located) filePath = located;
+    const stat = fs.statSync(filePath);
+    if (stat.isDirectory()) {
+      throw new Error("Kein ChatGPT-Export gefunden.");
+    }
     if (stat.size > CHATGPT_LIMITS.maxZipBytes) {
       throw new Error("ChatGPT-Export überschreitet das Import-Limit.");
     }
-    bytes = fs.readFileSync(source.filePath);
+    bytes = fs.readFileSync(filePath);
   }
   if (!bytes || !bytes.length) {
     throw new Error("Kein ChatGPT-Export gefunden.");

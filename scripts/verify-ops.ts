@@ -8,6 +8,9 @@ import { scanWatch } from "@/agents/watch";
 import { standingApprovalAllows, createStandingPolicy, consumeStandingApproval } from "@/services/approvals";
 import { isRealConnectorEnabled } from "@/connectors/registry";
 import { smtpConfigured } from "@/connectors/mail/smtp";
+import { resolveWorkspacePath } from "@/lib/computer/paths";
+import { volumeMountPath } from "@/lib/computer/volumes";
+import { LocalDiskStorageProvider } from "@/connectors/storage/local";
 
 const prisma = new PrismaClient();
 
@@ -125,6 +128,20 @@ async function main() {
   });
   const leaked = await calendar.list(other.id, new Date(), new Date(Date.now() + 3 * 24 * 60 * 60 * 1000));
   assert(Array.isArray(leaked) && leaked.length === 0, "Kalender leakte über Tenant");
+
+  const elevum = volumeMountPath("ELEVUM");
+  const elevumPath = resolveWorkspacePath({ requested: elevum });
+  if (elevumPath.exists) {
+    assert(elevumPath.withinAllowed, "Eingehängtes ELEVUM muss als lokale Platte erlaubt sein");
+  }
+  const foreign = resolveWorkspacePath({ requested: "/Volumes/ELEMENTS" });
+  if (foreign.exists) {
+    assert(foreign.withinAllowed === false, "Andere Volumes dürfen nicht automatisch offen sein");
+  }
+  const disk = new LocalDiskStorageProvider();
+  const write = await disk.create(organization.id, { title: "Notiz", content: "nein" });
+  assert(write.executed === false, "Lokale Platte darf nicht blind schreiben");
+  assert(await isRealConnectorEnabled(organization.id, "storage"), "Lokale Platte muss real gelten");
 
   console.log(
     JSON.stringify(

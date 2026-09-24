@@ -1,3 +1,5 @@
+import { namedVolumePaths } from "@/lib/computer/volumes";
+
 export type KnowledgeIntentKind = "import" | "query" | "cancel" | "none";
 
 export type KnowledgeIntent = {
@@ -28,6 +30,9 @@ export function extractKnowledgePaths(text: string): string[] {
     const value = (match[1] ?? match[2] ?? match[3] ?? match[4] ?? "").trim();
     if (value.startsWith("/") || value.startsWith("~/") || value.startsWith("./")) paths.push(value);
   }
+  for (const volume of namedVolumePaths(text)) {
+    if (!paths.includes(volume)) paths.push(volume);
+  }
   return paths;
 }
 
@@ -38,7 +43,7 @@ export function detectKnowledgeIntent(userRequest: string): KnowledgeIntent {
     return { kind: "cancel", userCommissioned: true, statusMessage: "Ich breche ab.", paths: [] };
   }
   const paths = extractKnowledgePaths(text);
-  if (IMPORT_RE.test(text) || IMPORT_ALT_RE.test(text)) {
+  if (IMPORT_RE.test(text) || IMPORT_ALT_RE.test(text) || (namedVolumePaths(text).length > 0 && /\b(importier|lern(?:e|en)?|nimm\s+auf)\b/i.test(text))) {
     return {
       kind: "import",
       userCommissioned: true,

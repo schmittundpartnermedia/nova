@@ -6,6 +6,8 @@ import { redactEnvFile, redactSecrets, shouldRedactFilePath } from "@/lib/comput
 import { detectComputerIntent } from "@/agents/computer/intent";
 import { guessAppName, guessControlName, planComputerTask } from "@/agents/computer/planner";
 import { detectCodingIntent } from "@/agents/coding/intent";
+import { resolveWorkspacePath } from "@/lib/computer/paths";
+import { isAllowedVolumeName, mentionsVolumeDisk, volumeMountPath } from "@/lib/computer/volumes";
 import {
   buildAgentCliArgv,
   parseCursorAuth,
@@ -260,6 +262,32 @@ export function runComputerUnitTests(): string[] {
   check("upload secrets blocked", () => {
     const blocked = assertUploadAllowed("/Users/joachim/.ssh/id_rsa");
     assert.equal(blocked.ok, false);
+  });
+
+  check("elevum disk access, not google", () => {
+    assert.equal(isAllowedVolumeName("ELEVUM"), true);
+    assert.equal(isAllowedVolumeName("../etc"), false);
+    assert.equal(mentionsVolumeDisk("Was liegt auf ELEVUM?", "ELEVUM"), true);
+    assert.equal(mentionsVolumeDisk("Lies die Festplatte ELEVUM", "ELEVUM"), true);
+    assert.equal(mentionsVolumeDisk("Was hatten wir zu ELEVUM beschlossen?", "ELEVUM"), false);
+    assert.equal(mentionsVolumeDisk("Baue mir eine neue ELEVUM Website.", "ELEVUM"), false);
+    assert.equal(detectComputerIntent("Was liegt auf ELEVUM?").kind, "find_file");
+    assert.equal(detectComputerIntent("Was hatten wir zu ELEVUM beschlossen?").kind, "none");
+    const listed = planComputerTask({
+      kind: "find_file",
+      userRequest: "Was liegt auf ELEVUM?",
+      workspace: "/tmp",
+    });
+    assert.equal(listed.some((step) => step.tool === "filesystem" && (step.payload as { action?: string }).action === "list"), true);
+    const elevum = volumeMountPath("ELEVUM");
+    const allowed = resolveWorkspacePath({ requested: elevum });
+    const other = resolveWorkspacePath({ requested: "/Volumes/ELEMENTS" });
+    if (allowed.exists) {
+      assert.equal(allowed.withinAllowed, true);
+    }
+    if (other.exists) {
+      assert.equal(other.withinAllowed, false);
+    }
   });
 
   return failures;

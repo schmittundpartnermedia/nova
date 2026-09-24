@@ -16,6 +16,7 @@ export const envSchema = z.object({
   NOVA_DESKTOP_PORT: z.string().optional(),
   NOVA_DESKTOP_TOKEN: z.string().optional(),
   NOVA_WORKSPACE_ROOTS: z.string().optional(),
+  NOVA_EXTERNAL_VOLUMES: z.string().optional(),
   NOVA_CURSOR_AGENT_BIN: z.string().optional(),
 });
 
@@ -38,6 +39,7 @@ export function getEnv(): Env {
     NOVA_DESKTOP_PORT: process.env.NOVA_DESKTOP_PORT,
     NOVA_DESKTOP_TOKEN: process.env.NOVA_DESKTOP_TOKEN,
     NOVA_WORKSPACE_ROOTS: process.env.NOVA_WORKSPACE_ROOTS,
+    NOVA_EXTERNAL_VOLUMES: process.env.NOVA_EXTERNAL_VOLUMES,
     NOVA_CURSOR_AGENT_BIN: process.env.NOVA_CURSOR_AGENT_BIN,
   });
 }

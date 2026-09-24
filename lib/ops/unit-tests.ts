@@ -4,6 +4,8 @@ import { detectCalendarIntent } from "@/agents/calendar/intent";
 import { detectWatchIntent } from "@/agents/watch/intent";
 import { needsSpecialistWork } from "@/agents/master/intent";
 import { planComputerTask } from "@/agents/computer/planner";
+import { detectComputerIntent } from "@/agents/computer/intent";
+import { mentionsVolumeDisk } from "@/lib/computer/volumes";
 
 export function runOpsUnitTests(): string[] {
   const failures: string[] = [];
@@ -72,6 +74,12 @@ export function runOpsUnitTests(): string[] {
       workspace: "/tmp",
     });
     assert.equal(steps.some((step) => step.tool === "screen"), true);
+  });
+
+  check("elevum is local disk, not google", () => {
+    assert.equal(mentionsVolumeDisk("Was liegt auf ELEVUM?", "ELEVUM"), true);
+    assert.equal(detectComputerIntent("Was liegt auf ELEVUM?").kind, "find_file");
+    assert.equal(needsSpecialistWork("Was hatten wir zu ELEVUM beschlossen?"), false);
   });
 
   return failures;

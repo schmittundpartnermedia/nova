@@ -2,6 +2,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { isHardBlockedPath } from "@/lib/computer/hard-blocks";
+import { mountedExternalVolumeRoots } from "@/lib/computer/volumes";
 
 export type PathResolution = {
   requested: string;
@@ -32,6 +33,7 @@ export function defaultWorkspaceRoots(): string[] {
     path.join(os.tmpdir(), "nova-knowledge-e2e"),
     path.join(os.tmpdir(), "nova-chatgpt-e2e"),
     path.join(process.cwd(), ".nova", "uploads"),
+    ...mountedExternalVolumeRoots().map((item) => item.path),
   ].flat();
   const unique: string[] = [];
   for (const candidate of candidates) {

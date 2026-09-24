@@ -8,10 +8,11 @@ import { LocalCalendarProvider } from "@/connectors/calendar/local";
 import { MockSearchProvider } from "@/connectors/search/mock";
 import { OpenAISearchProvider } from "@/connectors/search/openai";
 import { MockStorageProvider } from "@/connectors/storage/mock";
+import { LocalDiskStorageProvider } from "@/connectors/storage/local";
 import { MockTaskProvider } from "@/connectors/tasks/mock";
 import { MockContactsProvider } from "@/connectors/contacts/mock";
 import { MockBrowserProvider } from "@/connectors/browser/mock";
-import type { CalendarProvider, ConnectorType, MailProvider, SearchProvider } from "@/types/connectors";
+import type { CalendarProvider, ConnectorType, MailProvider, SearchProvider, StorageProvider } from "@/types/connectors";
 
 const mailMock = new MockMailProvider();
 const mailSmtp = new SmtpMailProvider();
@@ -19,7 +20,8 @@ const calendarMock = new MockCalendarProvider();
 const calendarLocal = new LocalCalendarProvider();
 const mockSearch = new MockSearchProvider();
 const openaiSearch = new OpenAISearchProvider();
-const storage = new MockStorageProvider();
+const storageMock = new MockStorageProvider();
+const storageLocal = new LocalDiskStorageProvider();
 const tasks = new MockTaskProvider();
 const contacts = new MockContactsProvider();
 const browser = new MockBrowserProvider();
@@ -38,6 +40,16 @@ export async function getCalendarProvider(organizationId: string): Promise<Calen
   });
   if (config?.provider === "mock") return calendarMock;
   return calendarLocal;
+}
+
+export async function getStorageProvider(organizationId: string): Promise<StorageProvider> {
+  assertOrganizationId(organizationId);
+  const config = await prisma.connectorConfig.findFirst({
+    where: { organizationId, type: "storage", enabled: true },
+    orderBy: { updatedAt: "desc" },
+  });
+  if (config?.provider === "mock") return storageMock;
+  return storageLocal;
 }
 
 export async function getSearchProvider(organizationId: string): Promise<SearchProvider> {
@@ -62,10 +74,11 @@ export async function getOrganizationConnectors(organizationId: string) {
   const configs = await prisma.connectorConfig.findMany({
     where: { organizationId },
   });
-  const [search, mail, calendar] = await Promise.all([
+  const [search, mail, calendar, storage] = await Promise.all([
     getSearchProvider(organizationId),
     getMailProvider(organizationId),
     getCalendarProvider(organizationId),
+    getStorageProvider(organizationId),
   ]);
 
   return {
@@ -97,6 +110,10 @@ export async function isRealConnectorEnabled(
   if (type === "calendar") {
     const provider = await getCalendarProvider(organizationId);
     return provider.id !== "mock-calendar";
+  }
+  if (type === "storage") {
+    const provider = await getStorageProvider(organizationId);
+    return provider.id !== "mock-storage";
   }
   const config = await prisma.connectorConfig.findFirst({
     where: {

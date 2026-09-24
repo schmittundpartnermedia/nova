@@ -17,6 +17,7 @@ import { classifyComputerAction } from "@/lib/computer/risk";
 import { detectHardBlock } from "@/lib/computer/hard-blocks";
 import { isInjectionAttempt, wrapExternalContent } from "@/lib/computer/injection";
 import { redactSecrets } from "@/lib/computer/redaction";
+import { detectNamedVolume, unmountedVolumeMessage } from "@/lib/computer/volumes";
 import type { NovaAgent } from "@/types/agents";
 import type { ActionResult, ComputerJobStatus } from "@/lib/computer/types";
 
@@ -117,7 +118,19 @@ export async function runComputerAgent(input: {
     };
   }
 
-  const workspace = process.cwd();
+  const volume = detectNamedVolume(input.userRequest);
+  if (volume && !volume.mounted) {
+    return {
+      ok: false,
+      status: "FAILED",
+      summary: unmountedVolumeMessage(volume),
+      reply: unmountedVolumeMessage(volume),
+      actions: [],
+      verified: true,
+      statusMessage: `${volume.name} nicht eingehängt`,
+    };
+  }
+  const workspace = volume?.path ?? process.cwd();
   const computerJob = await createComputerJob({
     organizationId: input.organizationId,
     jobId: input.jobId,
@@ -508,6 +521,22 @@ function userReply(
     return output
       ? `Cursor-Antwort (verifiziert empfangen):\n${output.slice(0, 3000)}`
       : "Cursor war erreichbar, hat aber keine verifizierte Antwort geliefert.";
+  }
+  if (intent.kind === "find_file") {
+    const listed = actions.find((item) => item.action === "list");
+    const searched = actions.find((item) => item.action === "search");
+    const entries = ((listed?.result as { entries?: Array<{ name: string; type: string }>; path?: string })?.entries ?? [])
+      .slice(0, 20)
+      .map((item) => `- ${item.name}${item.type === "dir" ? "/" : ""}`);
+    const matches = ((searched?.result as { matches?: string[] })?.matches ?? []).slice(0, 20);
+    const root = String((listed?.result as { path?: string })?.path ?? (searched?.result as { root?: string })?.root ?? "");
+    if (entries.length) {
+      return `Auf ${root || "der Platte"} liegt:\n${entries.join("\n")}`;
+    }
+    if (matches.length) {
+      return `Gefunden:\n${matches.map((item) => `- ${item}`).join("\n")}`;
+    }
+    return root ? `Unter ${root} ist nichts Passendes.` : "Keine Dateien gefunden.";
   }
   return `Computeraufgabe mit Status ${status}.`;
 }

@@ -2,6 +2,7 @@ import { spawn } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { mountedExternalVolumeRoots } from "@/lib/computer/volumes";
 import { CAPABILITY_IDS, type CapabilityId, type CapabilityRecord, type CapabilityStatus, type PermissionSnapshot } from "@/lib/computer/types";
 
 export type NativeHelperResult = {
@@ -152,6 +153,12 @@ export async function invokeNativeHelper(command: Record<string, unknown>, timeo
   }
 }
 
+function filesFoldersMessage(): string {
+  const volumes = mountedExternalVolumeRoots();
+  if (!volumes.length) return "Definierte Arbeitsverzeichnisse sind lokal auflösbar. ELEVUM ist nicht eingehängt.";
+  return `Lokale Platte: ${volumes.map((item) => item.name).join(", ")}. Nicht Google Drive.`;
+}
+
 export async function readMacPermissions(): Promise<PermissionSnapshot[]> {
   if (os.platform() !== "darwin") {
     return [
@@ -159,7 +166,7 @@ export async function readMacPermissions(): Promise<PermissionSnapshot[]> {
       { id: "screen_recording", status: "UNAVAILABLE", message: "Nur auf macOS verfügbar." },
       { id: "automation", status: "UNAVAILABLE", message: "Nur auf macOS verfügbar." },
       { id: "microphone", status: "UNAVAILABLE", message: "Wird für Computer Control nicht benötigt." },
-      { id: "files_folders", status: "AVAILABLE", message: "Workspace-Wurzeln über Konfiguration." },
+      { id: "files_folders", status: "AVAILABLE", message: filesFoldersMessage() },
     ];
   }
 
@@ -200,7 +207,7 @@ export async function readMacPermissions(): Promise<PermissionSnapshot[]> {
     {
       id: "files_folders",
       status: "AVAILABLE",
-      message: "Definierte Arbeitsverzeichnisse sind lokal auflösbar.",
+      message: filesFoldersMessage(),
     },
   ];
 }

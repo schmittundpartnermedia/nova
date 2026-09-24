@@ -91,6 +91,7 @@ async function main() {
     { type: "search", provider: "mock", enabled: false },
     { type: "search", provider: "openai", enabled: true },
     { type: "storage", provider: "mock", enabled: false },
+    { type: "storage", provider: "local", enabled: true },
     { type: "tasks", provider: "mock", enabled: false },
     { type: "contacts", provider: "mock", enabled: false },
     { type: "browser", provider: "mock", enabled: false },
@@ -116,7 +117,9 @@ async function main() {
             connector.provider === "openai"
               ? "Websuche über OpenAI Web Search. Der API-Key liegt nur in OPENAI_API_KEY."
               : connector.provider === "local"
-                ? "NOVA-Kalender in SQLite. Nicht Google oder Outlook."
+                ? connector.type === "calendar"
+                  ? "NOVA-Kalender in SQLite. Nicht Google oder Outlook."
+                  : "Lokale Platte (ELEVUM, wenn eingehängt). Nicht Google Drive."
                 : "Nur Interface/Mock. Keine echte externe Verbindung.",
         }),
       },
