@@ -7,6 +7,8 @@ import { detectKnowledgeIntent } from "@/agents/knowledge/intent";
 import { detectChatGPTImportIntent } from "@/lib/chatgpt/intent";
 import { runKnowledgeAgent } from "@/agents/knowledge";
 import { detectDialogMove, dialogInstruction, type DialogMove } from "@/lib/dialog/intent";
+import { detectUserTone, toneInstruction } from "@/lib/dialog/tone";
+import { refreshConversationContinuity } from "@/services/conversation/continuity";
 import { needsLiveResearch } from "@/lib/research/intent";
 import { needsFlagshipModel, needsSpecialistWork } from "@/agents/master/intent";
 import { getDefaultProject, runAgentStep } from "@/agents/runtime";
@@ -150,10 +152,26 @@ async function persistDurableMemory(input: {
   return saved;
 }
 
+function rememberConversation(input: {
+  organizationId: string;
+  conversationId?: string;
+  userRequest: string;
+  reply: string;
+}) {
+  if (!input.conversationId || !input.reply.trim()) return;
+  void refreshConversationContinuity({
+    organizationId: input.organizationId,
+    conversationId: input.conversationId,
+    userRequest: input.userRequest,
+    reply: input.reply,
+  }).catch(() => undefined);
+}
+
 function novaReplySystem(input: {
   organizationName: string;
   mock: boolean;
   dialog: DialogMove;
+  tone?: string;
   researchAnswer?: string;
   researchBlocked?: boolean;
   researchFailed?: boolean;
@@ -164,7 +182,8 @@ Du führst ein Gespräch auf Augenhöhe. Du bist kein Lexikon, kein Formular und
 Dialog zuerst:
 - Wünsche, Dank, Begrüßung, Smalltalk erwiderst du menschlich. Erkläre keine Wörter, wenn jemand mit dir spricht.
 - „Schönen Feierabend“ → „Danke, dir auch.“ Nicht, was Feierabend bedeutet.
-- Du triffst die Absicht, nicht die Wörter.
+- Du triffst die Absicht, nicht die Wörter: Ironie, Sarkasmus, Spaß, Ärger, Müdigkeit, Eile.
+- Gesprächskontinuität und offene Fäden im Kontext gelten über Tage. Du musst nicht so tun, als wärst du neu.
 
 Wissen im Gespräch:
 - Knowledge und Memory sind stiller Kontext. Wenn etwas zur Frage passt, nutze es.
@@ -178,6 +197,7 @@ Behaupte niemals, E-Mails seien gesendet, wenn das nicht der Fall ist.
 Conversation Archive ist die vollständige Kommunikation. Business Memory ist extrahiertes Wissen mit Quelle.
 Aktuelle Fakten nur aus der Recherche mit Quellen.
 ${dialogInstruction(input.dialog)}
+${input.tone ?? ""}
 ${input.researchAnswer ? "Eine echte Webrecherche ist erfolgt. Verwende deren Ergebnis." : ""}
 ${input.researchBlocked ? "Es ist kein echter Search Connector verbunden. Sage klar, dass aktuelle Informationen gerade nicht zuverlässig prüfbar sind. Erfinde keine Treffer." : ""}
 ${input.researchFailed ? "Die Webrecherche konnte die aktuelle Information nicht zuverlässig prüfen. Sage genau das. Erfinde keine Ergebnisse." : ""}
@@ -193,6 +213,7 @@ async function runDirectReply(input: {
   mode: ProviderMode;
   contextPack: { organizationName: string; promptBlock: string };
 }): Promise<MasterRunResult> {
+  const tone = detectUserTone(input.userRequest);
   const reply = await collectStream({
     provider: input.provider,
     generateInput: {
@@ -202,6 +223,7 @@ async function runDirectReply(input: {
         organizationName: input.contextPack.organizationName,
         mock: input.provider.id === "mock",
         dialog: input.dialog,
+        tone: toneInstruction(tone),
       }),
       prompt: `Benutzer: ${input.userRequest}
 
@@ -321,7 +343,7 @@ export async function runMaster(input: {
   }
 
   if (!specialist) {
-    return runDirectReply({
+    const result = await runDirectReply({
       userRequest: input.userRequest,
       dialog,
       onEvent: input.onEvent,
@@ -330,6 +352,13 @@ export async function runMaster(input: {
       mode,
       contextPack,
     });
+    rememberConversation({
+      organizationId: input.organizationId,
+      conversationId: input.conversationId,
+      userRequest: input.userRequest,
+      reply: result.reply,
+    });
+    return result;
   }
 
   const available = implementedAgentIds();
@@ -697,6 +726,7 @@ ${input.userRequest}`,
           organizationName: contextPack.organizationName,
           mock: provider.id === "mock",
           dialog,
+          tone: toneInstruction(detectUserTone(input.userRequest)),
           researchAnswer,
           researchBlocked,
           researchFailed,
@@ -775,6 +805,13 @@ Formuliere die Nutzerantwort. Wenn ein Entwurf erzeugt wurde, zeige ihn.${
   if (!wantsExternal || communicationIds.length === 0) {
     await updateJobStatus(input.organizationId, job.id, "completed", { completedAt: new Date() });
   }
+
+  rememberConversation({
+    organizationId: input.organizationId,
+    conversationId: input.conversationId,
+    userRequest: input.userRequest,
+    reply,
+  });
 
   return {
     jobId: job.id,

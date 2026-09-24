@@ -2,7 +2,8 @@ import { prisma } from "@/lib/prisma";
 import { assertOrganizationId } from "@/services/tenant";
 import { searchConversationMessages } from "@/services/conversation";
 import { buildKnowledgeContext } from "@/services/knowledge";
-import { CONTEXT_WINDOW_SIZE } from "@/types/conversation";
+import { DIALOG_HISTORY_SIZE } from "@/types/conversation";
+import { loadConversationContinuity } from "@/services/conversation/continuity";
 
 export type RetrievalMode = "structured" | "fulltext" | "semantic" | "relation";
 
@@ -112,6 +113,7 @@ export type BusinessContextPack = {
   recentMessages: Array<{ role: string; content: string }>;
   retrievedMessages: Array<{ role: string; content: string; createdAt: string }>;
   knowledge: string;
+  continuity: string;
   promptBlock: string;
 };
 
@@ -132,7 +134,7 @@ export async function loadRelevantBusinessContext(input: {
   }
 
   const social = input.mode === "social";
-  const [memories, projects, companies, contacts, tasks, recentMessages, retrievedMessages, knowledge] = await Promise.all([
+  const [memories, projects, companies, contacts, tasks, recentMessages, retrievedMessages, knowledge, continuity] = await Promise.all([
     social ? Promise.resolve([]) : searchMemory({ organizationId: input.organizationId, query, limit: 10 }),
     social
       ? Promise.resolve([])
@@ -200,7 +202,7 @@ export async function loadRelevantBusinessContext(input: {
             conversationId: input.conversationId,
           },
           orderBy: { createdAt: "desc" },
-          take: CONTEXT_WINDOW_SIZE,
+          take: DIALOG_HISTORY_SIZE,
         })
       : Promise.resolve([]),
     query
@@ -213,6 +215,10 @@ export async function loadRelevantBusinessContext(input: {
     query
       ? buildKnowledgeContext({ organizationId: input.organizationId, query, limit: 8 })
       : Promise.resolve({ promptBlock: "", hits: [], contradictions: [], answer: "" }),
+    loadConversationContinuity({
+      organizationId: input.organizationId,
+      conversationId: input.conversationId,
+    }),
   ]);
 
   assertTenantIsolation(input.organizationId, projects, "Projekt");
@@ -267,6 +273,7 @@ export async function loadRelevantBusinessContext(input: {
       createdAt: item.createdAt,
     })),
     knowledge: knowledge.promptBlock,
+    continuity: continuity.promptBlock,
     promptBlock: "",
   };
 
@@ -283,6 +290,9 @@ function formatContextPack(pack: BusinessContextPack): string {
     pack.tasks.length === 0 &&
     !pack.knowledge;
   const lines: string[] = [`Organization: ${pack.organizationName}`];
+  if (pack.continuity) {
+    lines.push("", pack.continuity);
+  }
   if (!socialOnly) {
     lines.push(
       "",

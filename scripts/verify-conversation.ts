@@ -8,6 +8,7 @@ import {
 } from "@/services/conversation";
 import { upsertDurableMemory } from "@/services/memory";
 import { searchMemory } from "@/services/retrieval";
+import { loadConversationContinuity, THREAD_DIGEST_TITLE } from "@/services/conversation/continuity";
 import { recordConversationTurn } from "@/services/archive";
 
 const prisma = new PrismaClient();
@@ -121,6 +122,19 @@ async function main() {
     limit: 10,
   });
 
+  await upsertDurableMemory({
+    organizationId: organization.id,
+    type: "summary",
+    title: THREAD_DIGEST_TITLE,
+    content: "Turns: 4\nHetzner-Pilot und ELEVUM liegen im Faden.",
+    sourceType: "conversation_message",
+    sourceReference: conversation.id,
+  });
+  const continuity = await loadConversationContinuity({
+    organizationId: organization.id,
+    conversationId: conversation.id,
+  });
+
   const visibleIds = new Set(window.map((item) => item.id));
   const oldStillArchived = persisted.some((item) => item.id === userText.id);
   const contextClipped = selectContextWindow(persisted, 4).length <= 4;
@@ -146,6 +160,7 @@ async function main() {
     memoryDedup: Boolean(confirmed && memory && confirmed.id === memory.id && confirmed.version >= 2),
     tenantIsolation: leaked === leakedBefore && isolatedSearch.length === 0 && foreignMemory.length === 0,
     voiceInContext: visibleIds.has(userVoice.id) && visibleIds.has(assistantVoice.id),
+    conversationContinuity: /Hetzner-Pilot|ELEVUM/i.test(continuity.promptBlock) && continuity.messageCount >= 4,
   };
 
   const failed = Object.entries(checks).filter(([, ok]) => !ok);

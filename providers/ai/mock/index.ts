@@ -160,6 +160,15 @@ export class MockAIProvider implements AIProvider {
       return { persist: false, items: [] } as T;
     }
 
+    if (input.schemaName === "conversation-continuity") {
+      return {
+        digest: "Fortlaufendes Gespräch mit Joachim. Ton auf Augenhöhe.",
+        relation: "Knapp, menschlich, ohne Assistenten-Jargon.",
+        openThreads: "",
+        insights: [],
+      } as T;
+    }
+
     return { mock: true } as T;
   }
 

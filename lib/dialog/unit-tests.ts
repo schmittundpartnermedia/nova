@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { detectDialogMove, isPureSocial } from "@/lib/dialog/intent";
+import { detectUserTone } from "@/lib/dialog/tone";
 import { needsFlagshipModel, needsSpecialistWork } from "@/agents/master/intent";
 import { needsLiveResearch } from "@/lib/research/intent";
 import { detectKnowledgeIntent } from "@/agents/knowledge/intent";
@@ -57,6 +58,15 @@ export function runDialogUnitTests(): string[] {
     assert.equal(needsSpecialistWork("Finde aktuelle Unternehmen, die als Sponsor passen."), true);
     assert.equal(needsSpecialistWork("Merk dir: Hetzner startet mit drei Monaten Pilot."), true);
     assert.equal(needsSpecialistWork("Hallo NOVA, wie ist der Stand?"), false);
+  });
+
+  check("tone beyond greetings", () => {
+    assert.equal(detectUserTone("Na super, schon wieder."), "sarcastic");
+    assert.equal(detectUserTone("Jetzt reicht's."), "annoyed");
+    assert.equal(detectUserTone("Nur Spaß haha"), "playful");
+    assert.equal(detectUserTone("Ich bin müde, später."), "tired");
+    assert.equal(detectUserTone("Das braucht ich sofort."), "urgent");
+    assert.equal(detectUserTone("Was stand im Angebot?"), "neutral");
   });
 
   check("flagship only for hard work", () => {
