@@ -8,7 +8,7 @@ import { NovaCommunicationLayer, type CommunicationLine } from "@/components/nov
 import { NovaStatus } from "@/components/nova/NovaStatus";
 import { NovaVoiceWave } from "@/components/nova/NovaVoiceWave";
 import { NovaSidebar, type NovaSection } from "@/components/nova/NovaSidebar";
-import { NovaContextPanel, type NovaJobSummary } from "@/components/nova/NovaContextPanel";
+import { NovaContextPanel, type NovaJobSummary, type NovaStandingPolicy } from "@/components/nova/NovaContextPanel";
 import { ApprovalCard } from "@/components/nova/ApprovalCard";
 import { NovaUpload } from "@/components/nova/NovaUpload";
 import { ArchivePanel, type ArchiveItem } from "@/components/archive/ArchivePanel";
@@ -30,6 +30,7 @@ type Approval = {
   id: string;
   description: string;
   status: string;
+  actionType?: string;
 };
 
 function humanStatus(state: OrbState, text: string): string {
@@ -93,6 +94,8 @@ export function NovaShell() {
   const [userName, setUserName] = useState("Joachim");
   const [online, setOnline] = useState(true);
   const [job, setJob] = useState<NovaJobSummary | null>(null);
+  const [standingPolicies, setStandingPolicies] = useState<NovaStandingPolicy[]>([]);
+  const [standingBusy, setStandingBusy] = useState(false);
   const [navOpen, setNavOpen] = useState(false);
   const [contextOpen, setContextOpen] = useState(false);
   const [commOpen, setCommOpen] = useState(false);
@@ -337,6 +340,7 @@ export function NovaShell() {
               id: String(payload.approvalId),
               description: String(payload.statusMessage ?? "Freigabe erforderlich"),
               status: "pending",
+              actionType: typeof payload.actionType === "string" ? payload.actionType : undefined,
             });
           } else {
             setApproval(null);
@@ -450,11 +454,19 @@ export function NovaShell() {
         if (data.tenant?.userName) setUserName(data.tenant.userName);
         const pending = data.pendingApprovals?.[0];
         if (pending) {
-          setApproval({ id: pending.id, description: pending.description, status: pending.status });
+          setApproval({
+            id: pending.id,
+            description: pending.description,
+            status: pending.status,
+            actionType: pending.actionType,
+          });
           setOrbState("WAITING_FOR_APPROVAL");
           setStatus(/computer|löschen|freigabe/i.test(String(pending.description ?? ""))
             ? "Freigabe erforderlich"
             : "Ich brauche deine Freigabe, bevor etwas versendet werden könnte.");
+        }
+        if (Array.isArray(data.standingPolicies)) {
+          setStandingPolicies(data.standingPolicies);
         }
         if (data.latestJob) {
           setJob({
@@ -471,22 +483,56 @@ export function NovaShell() {
     })();
   }, [loadArchive]);
 
-  const decide = async (decision: "approved" | "rejected") => {
+  const decide = async (decision: "approved" | "rejected", standing = false) => {
     if (!approval) return;
     setBusy(true);
     try {
       const response = await fetch("/api/approvals", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ approvalId: approval.id, decision }),
+        body: JSON.stringify({ approvalId: approval.id, decision, standing }),
       });
       const data = await response.json();
       setApproval(null);
       setOrbState(decision === "approved" ? "DONE" : "IDLE");
       setStatus(data.message ?? IDLE_STATUS);
+      if (standing) {
+        const policies = await fetch("/api/approvals/policies");
+        const body = await policies.json();
+        if (Array.isArray(body.policies)) setStandingPolicies(body.policies);
+      }
       goIdleSoon(2400);
     } finally {
       setBusy(false);
+    }
+  };
+
+  const grantStanding = async (actionType: "mail.send.batch" | "macos.ui.click") => {
+    setStandingBusy(true);
+    try {
+      const response = await fetch("/api/approvals/policies", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ actionType }),
+      });
+      const data = await response.json();
+      if (data.ok) {
+        const policies = await fetch("/api/approvals/policies");
+        const body = await policies.json();
+        if (Array.isArray(body.policies)) setStandingPolicies(body.policies);
+      }
+    } finally {
+      setStandingBusy(false);
+    }
+  };
+
+  const revokeStanding = async (policyId: string) => {
+    setStandingBusy(true);
+    try {
+      await fetch(`/api/approvals/policies?policyId=${encodeURIComponent(policyId)}`, { method: "DELETE" });
+      setStandingPolicies((current) => current.filter((item) => item.id !== policyId));
+    } finally {
+      setStandingBusy(false);
     }
   };
 
@@ -672,7 +718,11 @@ export function NovaShell() {
               <ApprovalCard
                 description={approval.description}
                 busy={busy}
+                allowStanding={
+                  approval.actionType === "mail.send.batch" || approval.actionType === "macos.ui.click"
+                }
                 onApprove={() => void decide("approved")}
+                onAlwaysAllow={() => void decide("approved", true)}
                 onReject={() => void decide("rejected")}
               />
             ) : null}
@@ -712,6 +762,10 @@ export function NovaShell() {
           job={job}
           approvalDescription={approval?.description ?? null}
           items={activities}
+          standingPolicies={standingPolicies}
+          standingBusy={standingBusy}
+          onGrantStanding={(actionType) => void grantStanding(actionType)}
+          onRevokeStanding={(policyId) => void revokeStanding(policyId)}
         />
       </div>
 

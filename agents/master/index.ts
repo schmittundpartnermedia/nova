@@ -82,6 +82,7 @@ export type MasterRunResult = {
   statusMessage: string;
   reply: string;
   approvalId?: string;
+  actionType?: string;
   mock: boolean;
   providerMode: ProviderMode;
   providerId: string;
@@ -948,6 +949,7 @@ Formuliere die Nutzerantwort. Wenn ein Entwurf erzeugt wurde, zeige ihn.${
     statusMessage,
     reply,
     approvalId,
+    actionType: approvalId ? "mail.send.batch" : undefined,
     mock: provider.id === "mock",
     providerMode: mode,
     providerId: provider.id,

@@ -1,6 +1,6 @@
 /**
  * Ein Mikrofon-Stream, RMS-VAD, HTTP-Transkription.
- * Kurze Pause beendet den Turn. Keine langlebige Socket-Session.
+ * Kurze Pause beendet den Turn. Während NOVA spricht, kann die Nutzerstimme unterbrechen.
  */
 
 export const VOICE_SESSION_CONFIG = {
@@ -16,7 +16,11 @@ export const VOICE_SESSION_CONFIG = {
   vadNoiseAdaptSilence: 0.12,
   vadNoiseCeiling: 0.06,
   postTtsGuardMs: 350,
-  bargeInEnabled: false,
+  bargeInEnabled: true,
+  bargeInWarmupMs: 180,
+  bargeInMinSpeechRms: 0.028,
+  bargeInMinSpeechPeak: 0.1,
+  bargeInMinSpeechMs: 200,
   silenceResumeConfirmMs: 280,
   silenceUiTickMs: 100,
   fftSize: 2048,
@@ -29,4 +33,6 @@ export const VOICE_SESSION_CONFIG = {
   pcmBufferSeconds: 30,
 } as const;
 
-export type VoiceSessionConfig = typeof VOICE_SESSION_CONFIG;
+export type VoiceSessionConfig = Omit<typeof VOICE_SESSION_CONFIG, "bargeInEnabled"> & {
+  bargeInEnabled: boolean;
+};

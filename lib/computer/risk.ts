@@ -222,6 +222,14 @@ export function classifyComputerAction(input: {
   if (input.tool === "application" && input.action === "quit") {
     return decision("SYSTEM_CHANGE", input.userCommissioned, "Anwendung beenden.");
   }
+  if (input.tool === "application" && input.action === "runScript") {
+    return {
+      ...decision("SYSTEM_CHANGE", true, "AppleScript steuert eine App."),
+      approvalClass: input.userCommissioned ? "B" : "C",
+      approvalRequired: !input.userCommissioned,
+      autonomousAllowed: Boolean(input.userCommissioned),
+    };
+  }
   if (input.tool === "application") {
     return decision("READ_ONLY", true, "Anwendung fokussieren oder starten.");
   }

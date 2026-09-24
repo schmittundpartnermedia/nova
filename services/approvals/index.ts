@@ -2,6 +2,20 @@ import { prisma } from "@/lib/prisma";
 import { assertOrganizationId } from "@/services/tenant";
 import type { ApprovalStatus } from "@/types";
 
+export const STANDING_ACTION_TYPES = ["mail.send.batch", "macos.ui.click"] as const;
+
+export type StandingActionType = (typeof STANDING_ACTION_TYPES)[number];
+
+export function isStandingActionType(value: string): value is StandingActionType {
+  return (STANDING_ACTION_TYPES as readonly string[]).includes(value);
+}
+
+export function standingActionLabel(actionType: string): string {
+  if (actionType === "mail.send.batch") return "Mails versenden";
+  if (actionType === "macos.ui.click") return "UI-Klicks auf dem Mac";
+  return actionType;
+}
+
 export async function createApprovalRequest(input: {
   organizationId: string;
   jobId?: string;
@@ -123,15 +137,54 @@ export async function createStandingPolicy(input: {
   limits?: Record<string, unknown>;
 }) {
   assertOrganizationId(input.organizationId);
+  if (!isStandingActionType(input.actionType)) {
+    throw new Error("Für diese Aktion gibt es keine Dauerfreigabe.");
+  }
+  const existing = await findMatchingPolicy({
+    organizationId: input.organizationId,
+    actionType: input.actionType,
+  });
+  const data = {
+    name: input.name,
+    scope: input.scope ?? "organization",
+    conditions: JSON.stringify(input.conditions ?? {}),
+    limits: JSON.stringify(input.limits ?? {}),
+    revokedAt: null,
+  };
+  if (existing) {
+    return prisma.approvalPolicy.update({
+      where: { id: existing.id },
+      data,
+    });
+  }
   return prisma.approvalPolicy.create({
     data: {
       organizationId: input.organizationId,
-      name: input.name,
       actionType: input.actionType,
-      scope: input.scope ?? "organization",
-      conditions: JSON.stringify(input.conditions ?? {}),
-      limits: JSON.stringify(input.limits ?? {}),
+      ...data,
     },
+  });
+}
+
+export async function listStandingPolicies(organizationId: string) {
+  assertOrganizationId(organizationId);
+  return prisma.approvalPolicy.findMany({
+    where: { organizationId, revokedAt: null },
+    orderBy: { createdAt: "desc" },
+  });
+}
+
+export async function revokeStandingPolicy(input: { organizationId: string; policyId: string }) {
+  assertOrganizationId(input.organizationId);
+  const existing = await prisma.approvalPolicy.findFirst({
+    where: { id: input.policyId, organizationId: input.organizationId, revokedAt: null },
+  });
+  if (!existing) {
+    throw new Error("Dauerfreigabe nicht gefunden.");
+  }
+  return prisma.approvalPolicy.update({
+    where: { id: existing.id },
+    data: { revokedAt: new Date() },
   });
 }
 

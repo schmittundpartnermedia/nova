@@ -26,6 +26,7 @@ export const CAPABILITY_IDS = [
   "macos.ui.click",
   "macos.ui.type",
   "macos.ui.select",
+  "macos.script",
   "filesystem.read",
   "filesystem.search",
   "filesystem.write",

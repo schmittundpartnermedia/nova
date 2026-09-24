@@ -1,7 +1,12 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getCurrentTenant } from "@/services/tenant";
-import { decideApproval } from "@/services/approvals";
+import {
+  decideApproval,
+  createStandingPolicy,
+  isStandingActionType,
+  standingActionLabel,
+} from "@/services/approvals";
 import { getOrganizationConnectors, isRealConnectorEnabled } from "@/connectors/registry";
 import { recordActivity } from "@/services/archive";
 import { updateJobStatus } from "@/services/jobs";
@@ -13,18 +18,28 @@ export const runtime = "nodejs";
 const bodySchema = z.object({
   approvalId: z.string(),
   decision: z.enum(["approved", "rejected"]),
+  standing: z.boolean().optional(),
 });
 
 export async function POST(request: Request) {
   try {
     const json = await request.json();
-    const { approvalId, decision } = bodySchema.parse(json);
+    const { approvalId, decision, standing } = bodySchema.parse(json);
     const tenant = await getCurrentTenant();
     const approval = await decideApproval({
       organizationId: tenant.organizationId,
       approvalId,
       status: decision,
     });
+
+    if (decision === "approved" && standing && isStandingActionType(approval.actionType)) {
+      await createStandingPolicy({
+        organizationId: tenant.organizationId,
+        name: standingActionLabel(approval.actionType),
+        actionType: approval.actionType,
+        limits: { maxPerDay: approval.actionType === "mail.send.batch" ? 20 : 40 },
+      });
+    }
 
     if (decision === "rejected") {
       if (approval.jobId) {
@@ -125,10 +140,11 @@ export async function POST(request: Request) {
       mock: !mailConnected,
       sent,
       message: sent
-        ? `${sent} E-Mail(s) sind raus.`
+        ? `${sent} E-Mail(s) sind raus.${standing ? " Dauerfreigabe ist aktiv." : ""}`
         : mailConnected
           ? "Freigegeben, aber der Versand ist fehlgeschlagen. Es wurde nichts als gesendet markiert."
           : "Freigegeben, aber Connector noch nicht verbunden. Es wurde nichts versendet.",
+      standing: Boolean(standing && isStandingActionType(approval.actionType)),
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unbekannter Fehler";

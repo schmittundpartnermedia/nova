@@ -106,6 +106,7 @@ export async function POST(request: Request) {
             statusMessage: result.statusMessage,
             reply: result.reply,
             approvalId: result.approvalId,
+            actionType: result.actionType ?? null,
             mock: result.mock,
             providerMode: result.providerMode,
             providerId: result.providerId,

@@ -5,6 +5,7 @@ import { isInjectionAttempt, wrapExternalContent } from "@/lib/computer/injectio
 import { redactEnvFile, redactSecrets, shouldRedactFilePath } from "@/lib/computer/redaction";
 import { detectComputerIntent } from "@/agents/computer/intent";
 import { guessAppName, guessControlName, planComputerTask } from "@/agents/computer/planner";
+import { compileAppleScript } from "@/lib/computer/applescript";
 import { detectCodingIntent } from "@/agents/coding/intent";
 import { resolveWorkspacePath } from "@/lib/computer/paths";
 import { isAllowedVolumeName, mentionsVolumeDisk, volumeMountPath } from "@/lib/computer/volumes";
@@ -120,6 +121,7 @@ export function runComputerUnitTests(): string[] {
     });
     assert.equal(ui.some((step) => step.tool === "accessibility" && (step.payload as { action?: string }).action === "press"), true);
     assert.equal(ui.some((step) => step.tool === "screen"), true);
+    assert.equal(detectComputerIntent('Führe AppleScript aus: tell application "Finder" to get name').kind, "run_script");
   });
 
   check("schema rejects raw shell strings", () => {
@@ -136,6 +138,7 @@ export function runComputerUnitTests(): string[] {
     assert.ok(CAPABILITY_IDS.includes("browser.reload"));
     assert.ok(CAPABILITY_IDS.includes("browser.back"));
     assert.ok(CAPABILITY_IDS.includes("browser.forward"));
+    assert.ok(CAPABILITY_IDS.includes("macos.script"));
   });
 
   check("browser capabilities require playwright", () => {
@@ -174,6 +177,41 @@ export function runComputerUnitTests(): string[] {
       userCommissioned: false,
     });
     assert.equal(sneaky.approvalRequired, true);
+  });
+
+  check("applescript is tell-only", () => {
+    const ok = compileAppleScript('tell application "Finder" to get name');
+    assert.equal(ok.ok, true);
+    const shell = compileAppleScript('tell application "Finder" to do shell script "ls"');
+    assert.equal(shell.ok, false);
+    const terminal = compileAppleScript('tell application "Terminal" to do script "ls"');
+    assert.equal(terminal.ok, false);
+    const scripted = planComputerTask({
+      kind: "run_script",
+      userRequest: 'Führe AppleScript aus: tell application "Finder" to get name',
+      workspace: "/tmp",
+    });
+    assert.equal(scripted.some((step) => step.tool === "application" && (step.payload as { action?: string }).action === "runScript"), true);
+    const blocked = planComputerTask({
+      kind: "run_script",
+      userRequest: 'AppleScript: tell application "Finder" to do shell script "ls"',
+      workspace: "/tmp",
+    });
+    assert.equal(blocked.length, 0);
+    const commissioned = classifyComputerAction({
+      tool: "application",
+      action: "runScript",
+      target: "Finder",
+      userCommissioned: true,
+    });
+    assert.equal(commissioned.approvalRequired, false);
+    const sneakyScript = classifyComputerAction({
+      tool: "application",
+      action: "runScript",
+      target: "Finder",
+      userCommissioned: false,
+    });
+    assert.equal(sneakyScript.approvalRequired, true);
   });
 
   check("browser open is autonomous", () => {

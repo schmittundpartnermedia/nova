@@ -1,5 +1,6 @@
 import type { ComputerIntentKind } from "@/agents/computer/intent";
 import type { ComputerActionEnvelope } from "@/lib/computer/schemas";
+import { compileAppleScript, extractAppleScript } from "@/lib/computer/applescript";
 import { detectNamedVolume } from "@/lib/computer/volumes";
 
 export type PlannedStep = {
@@ -112,6 +113,24 @@ export function planComputerTask(input: {
           userCommissioned: true,
         },
       ];
+    case "run_script": {
+      const compiled = compileAppleScript(extractAppleScript(input.userRequest));
+      if (!compiled.ok) return [];
+      return [
+        {
+          tool: "application",
+          payload: { action: "runScript", source: compiled.source, app: compiled.app },
+          purpose: `AppleScript in ${compiled.app}`,
+          userCommissioned: true,
+        },
+        {
+          tool: "screen",
+          payload: { action: "capture", persist: false },
+          purpose: "Selbstprüfung nach AppleScript",
+          userCommissioned: true,
+        },
+      ];
+    }
     case "open_app": {
       const app = guessAppName(input.userRequest);
       return [

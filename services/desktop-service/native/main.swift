@@ -24,6 +24,7 @@ struct Command: Decodable {
     let app: String?
     let identifier: String?
     let value: String?
+    let script: String?
     let maxDepth: Int?
     let persist: Bool?
 }
@@ -356,6 +357,55 @@ func captureScreen() -> [String: Any] {
     return result
 }
 
+func automationTrusted() -> Bool {
+    guard let target = NSAppleEventDescriptor(bundleIdentifier: "com.apple.systemevents") else {
+        return false
+    }
+    let status = AEDeterminePermissionToAutomateTarget(
+        target.aeDesc,
+        typeWildCard,
+        typeWildCard,
+        false
+    )
+    return status == noErr
+}
+
+func appleScriptBlocked(_ source: String) -> String? {
+    let lower = source.lowercased()
+    if lower.contains("do shell script") { return "do_shell_script_blocked" }
+    if lower.contains("do javascript") { return "do_javascript_blocked" }
+    if lower.contains("run script") { return "run_script_blocked" }
+    if !lower.contains("tell application") { return "missing_tell_application" }
+    return nil
+}
+
+func runAppleScript(_ source: String) -> [String: Any] {
+    let trimmed = source.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !trimmed.isEmpty else {
+        return ["ok": false, "error": "missing_script"]
+    }
+    if let blocked = appleScriptBlocked(trimmed) {
+        return ["ok": false, "error": blocked]
+    }
+    var error: NSDictionary?
+    guard let script = NSAppleScript(source: trimmed) else {
+        return ["ok": false, "error": "applescript_compile_failed"]
+    }
+    let result = script.executeAndReturnError(&error)
+    if let error {
+        let code = error[NSAppleScript.errorNumber] as? Int ?? 1
+        if code == -1743 || code == -1744 {
+            return ["ok": false, "permission": "automation", "error": "PERMISSION_REQUIRED"]
+        }
+        return [
+            "ok": false,
+            "error": (error[NSAppleScript.errorMessage] as? String) ?? "applescript_failed",
+            "code": code,
+        ]
+    }
+    return ["ok": true, "data": ["output": result.stringValue ?? ""]]
+}
+
 func launchApp(_ name: String) -> [String: Any] {
     let appURL =
         NSWorkspace.shared.urlForApplication(withBundleIdentifier: name)
@@ -424,7 +474,7 @@ case "permissions":
         "data": [
             "accessibility": accessibility,
             "screenRecording": screenTrusted(),
-            "automation": false,
+            "automation": automationTrusted(),
         ],
     ])
 case "apps":
@@ -454,6 +504,8 @@ case "app.focus":
     writeJSON(focusApp(command.app ?? ""))
 case "app.quit":
     writeJSON(quitApp(command.app ?? ""))
+case "applescript.run":
+    writeJSON(runAppleScript(command.script ?? command.value ?? ""))
 default:
     writeJSON(["ok": false, "error": "unknown_cmd", "cmd": command.cmd])
     exit(1)

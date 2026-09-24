@@ -265,6 +265,14 @@ function decorate(
       reason: ctx.darwin ? "App beenden nutzt Automation." : "Nur macOS.",
     };
   }
+  if (id === "macos.script") {
+    return {
+      ...record,
+      status: ctx.darwin ? (ctx.helper ? ctx.perm("automation") : "NOT_IMPLEMENTED") : "UNAVAILABLE",
+      permission: "automation",
+      reason: ctx.darwin ? "AppleScript braucht Automation-Zugriff." : "Nur macOS.",
+    };
+  }
   if (id.startsWith("macos.")) {
     return {
       ...record,

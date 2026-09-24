@@ -149,6 +149,7 @@ export const applicationActionSchema = z.discriminatedUnion("action", [
   z.object({ action: z.literal("focus"), name: z.string().min(1).max(200) }),
   z.object({ action: z.literal("quit"), name: z.string().min(1).max(200) }),
   z.object({ action: z.literal("windows") }),
+  z.object({ action: z.literal("runScript"), source: z.string().min(1).max(4000), app: z.string().max(200).optional() }),
 ]);
 
 export const accessibilityActionSchema = z.discriminatedUnion("action", [

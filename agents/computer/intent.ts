@@ -12,6 +12,7 @@ export type ComputerIntentKind =
   | "cursor_ask"
   | "delete_dangerous"
   | "screenshot"
+  | "run_script"
   | "find_file"
   | "generic"
   | "none";
@@ -64,6 +65,10 @@ export function detectComputerIntent(userRequest: string): ComputerIntent {
 
   if (/screenshot|bildschirmfoto/i.test(lower)) {
     return { kind: "screenshot", userCommissioned: true, statusMessage: "Bildschirm wird erfasst" };
+  }
+
+  if (/applescript|osascript|tell\s+application|führe\s+(?:dieses\s+)?skript/i.test(lower)) {
+    return { kind: "run_script", userCommissioned: true, statusMessage: "AppleScript wird ausgeführt" };
   }
 
   if (/wo (?:liegt|ist) die datei|such(?:e| mir) die datei|finde die datei|was liegt auf|inhalt (?:der|von)|zeig(?:e| mir) (?:den )?(?:ordner|inhalt)/i.test(lower)) {

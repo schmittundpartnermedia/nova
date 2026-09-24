@@ -107,7 +107,8 @@ function pump(capture: FakeCapture, clock: FakeClock, durationMs: number, kind: 
 
 export async function runVoiceSessionChecks() {
   assert(VOICE_SESSION_CONFIG.silenceTimeoutMs === 800, "silenceTimeoutMs muss 800 sein.");
-  assert(VOICE_SESSION_CONFIG.bargeInEnabled === false, "Barge-In muss in dieser Architektur aus bleiben.");
+  assert(VOICE_SESSION_CONFIG.bargeInEnabled === true, "Barge-In muss während NOVA spricht an sein.");
+  assert(VOICE_SESSION_CONFIG.bargeInMinSpeechMs > 0, "Barge-In braucht eine Mindestsprachdauer.");
   assert(VOICE_SESSION_CONFIG.pcmSampleRate === 16000, "PCM muss 16 kHz sein.");
   assert(VOICE_SESSION_CONFIG.minSpeechDurationMs > 0, "minSpeechDurationMs zentral");
   assert(VOICE_SESSION_CONFIG.postTtsGuardMs > 0, "postTtsGuardMs zentral");
@@ -127,6 +128,12 @@ export async function runVoiceSessionChecks() {
   assert(empty.state === "LISTENING", "Leerer Silence-Timeout bleibt LISTENING.");
   const waitingFull = reduceVoiceSession(waitingAgain, { type: "SILENCE_TIMEOUT", hasTranscript: true });
   assert(waitingFull.state === "PROCESSING", "Silence mit Transcript → PROCESSING");
+  const speakingNova = reduceVoiceSession(waitingFull, { type: "NOVA_SPEAKING" });
+  assert(speakingNova.state === "NOVA_SPEAKING", "PROCESSING → NOVA_SPEAKING");
+  const barged = reduceVoiceSession(speakingNova, { type: "BARGE_IN", at: 4000 });
+  assert(barged.state === "INTERRUPTED", "BARGE_IN → INTERRUPTED");
+  const afterBarge = reduceVoiceSession(barged, { type: "VOICE_START", at: 4010 });
+  assert(afterBarge.state === "USER_SPEAKING", "Nach Barge-In weiter USER_SPEAKING");
 
   const vad = new VoiceActivityDetector();
   vad.reset(0);
@@ -188,19 +195,19 @@ export async function runVoiceSessionChecks() {
 
   controller.notifyNovaSpeaking();
   assert(controller.getSnapshot().state === "NOVA_SPEAKING", "NOVA_SPEAKING");
-  pump(capture, clock, 400, "speech");
-  assert(turns.length === 1, "NOVAs Stimme darf keinen neuen User-Turn erzeugen.");
-
-  controller.notifyNovaIdle();
-  clock.advance(VOICE_SESSION_CONFIG.postTtsGuardMs);
-  assert(controller.getSnapshot().state === "LISTENING", `Auto Re-Listen, war ${controller.getSnapshot().state}`);
-  assert(capture.collecting, "Capture nach Guard wieder aktiv.");
-
-  pump(capture, clock, 400, "speech");
+  assert(capture.collecting, "Mit Barge-In bleibt das Mikrofon während TTS offen.");
+  const interrupts: number[] = [];
+  controller.setListener({
+    onTurn: (turn) => turns.push(turn),
+    onInterruptNova: () => interrupts.push(clock.nowMs),
+  });
+  pump(capture, clock, 500, "speech");
+  assert(interrupts.length === 1, `Barge-In muss NOVAs Stimme unterbrechen, war ${interrupts.length}`);
+  assert(controller.getSnapshot().state === "USER_SPEAKING", `Nach Barge-In USER_SPEAKING, war ${controller.getSnapshot().state}`);
   pump(capture, clock, 320, "noise");
   clock.advance(VOICE_SESSION_CONFIG.silenceTimeoutMs);
   await flush();
-  assert(turns.length === 2, "Zweiter Turn ohne erneutes Aktivieren.");
+  assert(turns.length === 2, "Unterbrochene TTS wird ein User-Turn.");
   assert(turns[1]?.transcript.includes("Nächster Beitrag"), turns[1]?.transcript);
 
   controller.notifyNovaSpeaking();
@@ -235,6 +242,39 @@ export async function runVoiceSessionChecks() {
   assert(emptyTurns.length === 0, "Leeres Transkript darf keinen Turn senden.");
   assert(emptyController.getSnapshot().state === "LISTENING", "Nach leerem Slice bleibt LISTENING.");
   emptyController.stop();
+
+  const quietClock = new FakeClock();
+  const quietCapture = new FakeCapture();
+  const quietTurns: VoiceTurn[] = [];
+  let quietInterrupts = 0;
+  const quietController = new VoiceSessionController({
+    clock: quietClock,
+    createCapture: () => quietCapture,
+    transcribeUtterance: async () => "sollte nicht kommen",
+    config: { ...VOICE_SESSION_CONFIG, bargeInEnabled: false },
+  });
+  quietController.setListener({
+    onTurn: (turn) => quietTurns.push(turn),
+    onInterruptNova: () => {
+      quietInterrupts += 1;
+    },
+  });
+  await quietController.start();
+  quietClock.advance(30_000);
+  pump(quietCapture, quietClock, 400, "noise");
+  pump(quietCapture, quietClock, 500, "speech");
+  pump(quietCapture, quietClock, 320, "noise");
+  quietClock.advance(VOICE_SESSION_CONFIG.silenceTimeoutMs);
+  await flush();
+  assert(quietTurns.length === 1, `Ohne Barge-In zuerst ein Turn, war ${quietTurns.length}`);
+  quietController.notifyNovaSpeaking();
+  assert(quietController.getSnapshot().state === "NOVA_SPEAKING", "Ohne Barge-In NOVA_SPEAKING");
+  assert(!quietCapture.collecting, "Ohne Barge-In pausiert Capture während TTS.");
+  pump(quietCapture, quietClock, 500, "speech");
+  assert(quietInterrupts === 0, "Ohne Barge-In keine Unterbrechung.");
+  assert(quietTurns.length === 1, `Ohne Barge-In keinen Extra-Turn während TTS, war ${quietTurns.length}`);
+  assert(quietController.getSnapshot().state === "NOVA_SPEAKING", "Ohne Barge-In bleibt NOVA_SPEAKING");
+  quietController.stop();
 
   return {
     ok: true,

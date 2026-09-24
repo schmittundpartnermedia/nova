@@ -10,6 +10,13 @@ export type NovaJobSummary = {
   userRequest: string;
 };
 
+export type NovaStandingPolicy = {
+  id: string;
+  name: string;
+  actionType: string;
+  label: string;
+};
+
 function jobStatusLabel(status: string) {
   if (status === "running" || status === "planning") return "In Bearbeitung";
   if (status === "waiting_for_approval") return "Wartet auf Freigabe";
@@ -41,6 +48,10 @@ export function NovaContextPanel({
   job,
   approvalDescription,
   items,
+  standingPolicies = [],
+  standingBusy = false,
+  onGrantStanding,
+  onRevokeStanding,
 }: {
   open?: boolean;
   section: NovaSection;
@@ -49,6 +60,10 @@ export function NovaContextPanel({
   job: NovaJobSummary | null;
   approvalDescription: string | null;
   items: ArchiveItem[];
+  standingPolicies?: NovaStandingPolicy[];
+  standingBusy?: boolean;
+  onGrantStanding?: (actionType: "mail.send.batch" | "macos.ui.click") => void;
+  onRevokeStanding?: (policyId: string) => void;
 }) {
   const projects = uniqueByName(
     items.filter((item) => item.project?.name).map((item) => ({ name: item.project!.name, status: item.status })),
@@ -84,6 +99,50 @@ export function NovaContextPanel({
         <div className="nova-card nova-panel">
           <h3>Freigabe erforderlich</h3>
           <p className="nova-quote">{approvalDescription}</p>
+        </div>
+      ) : null}
+
+      {section === "approvals" ? (
+        <div className="nova-card nova-panel">
+          <h3>Dauerfreigaben</h3>
+          {standingPolicies.length === 0 ? (
+            <p className="nova-empty">Keine Dauerfreigaben. Einzeln freigegebene Aktionen bleiben einzeln.</p>
+          ) : (
+            standingPolicies.map((policy) => (
+              <div key={policy.id} className="mt-4" style={{ display: "flex", justifyContent: "space-between", gap: 8, alignItems: "center" }}>
+                <div>
+                  <strong>{policy.label}</strong>
+                  <p className="nova-card-meta">{policy.name}</p>
+                </div>
+                <button
+                  type="button"
+                  className="nova-chip"
+                  disabled={standingBusy}
+                  onClick={() => onRevokeStanding?.(policy.id)}
+                >
+                  Widerrufen
+                </button>
+              </div>
+            ))
+          )}
+          <div className="mt-4 flex gap-2" style={{ flexWrap: "wrap" }}>
+            <button
+              type="button"
+              className="nova-chip"
+              disabled={standingBusy || standingPolicies.some((item) => item.actionType === "mail.send.batch")}
+              onClick={() => onGrantStanding?.("mail.send.batch")}
+            >
+              Mails immer erlauben
+            </button>
+            <button
+              type="button"
+              className="nova-chip"
+              disabled={standingBusy || standingPolicies.some((item) => item.actionType === "macos.ui.click")}
+              onClick={() => onGrantStanding?.("macos.ui.click")}
+            >
+              Klicks immer erlauben
+            </button>
+          </div>
         </div>
       ) : null}
 

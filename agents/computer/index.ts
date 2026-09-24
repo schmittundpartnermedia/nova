@@ -141,6 +141,25 @@ export async function runComputerAgent(input: {
 
   const caps = await fetchCapabilities();
   const steps = planComputerTask({ kind: intent.kind, userRequest: input.userRequest, workspace });
+  if (intent.kind === "run_script" && steps.length === 0) {
+    await updateComputerJob({
+      organizationId: input.organizationId,
+      id: computerJob.id,
+      status: "FAILED",
+      error: "invalid_applescript",
+      finished: true,
+    });
+    return {
+      ok: false,
+      status: "FAILED",
+      summary: "Kein ausführbares AppleScript.",
+      reply:
+        "Ohne ein gültiges tell application … führe ich kein AppleScript aus. do shell script und fremde Apps sind blockiert.",
+      actions: [],
+      verified: true,
+      statusMessage: "Skript abgelehnt",
+    };
+  }
   await updateComputerJob({
     organizationId: input.organizationId,
     id: computerJob.id,
@@ -537,6 +556,13 @@ function userReply(
       return `Gefunden:\n${matches.map((item) => `- ${item}`).join("\n")}`;
     }
     return root ? `Unter ${root} ist nichts Passendes.` : "Keine Dateien gefunden.";
+  }
+  if (intent.kind === "run_script") {
+    const scripted = actions.find((item) => item.action === "runScript");
+    const output = String((scripted?.result as { output?: string })?.output ?? "").trim();
+    return output
+      ? `AppleScript ist gelaufen.\n${output.slice(0, 1500)}`
+      : "AppleScript ist gelaufen. Die App hat nichts zurückgegeben.";
   }
   return `Computeraufgabe mit Status ${status}.`;
 }

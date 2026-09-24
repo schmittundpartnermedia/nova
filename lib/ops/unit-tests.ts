@@ -82,5 +82,15 @@ export function runOpsUnitTests(): string[] {
     assert.equal(needsSpecialistWork("Was hatten wir zu ELEVUM beschlossen?"), false);
   });
 
+  check("applescript tell finder is planned", () => {
+    assert.equal(detectComputerIntent('Führe AppleScript aus: tell application "Finder" to get name').kind, "run_script");
+    const steps = planComputerTask({
+      kind: "run_script",
+      userRequest: 'Führe AppleScript aus: tell application "Finder" to get name',
+      workspace: "/tmp",
+    });
+    assert.equal(steps.some((step) => step.tool === "application"), true);
+  });
+
   return failures;
 }

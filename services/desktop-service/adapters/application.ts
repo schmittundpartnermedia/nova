@@ -3,6 +3,7 @@ import { invokeNativeHelper, ensureNativeHelper } from "@/lib/computer/capabilit
 import { classifyComputerAction } from "@/lib/computer/risk";
 import { createActionResult, failedResult } from "@/lib/computer/result";
 import { runArgv } from "@/services/desktop-service/adapters/shell";
+import { compileAppleScript } from "@/lib/computer/applescript";
 import type { ApplicationAction } from "@/lib/computer/schemas";
 import type { ActionResult } from "@/lib/computer/types";
 
@@ -109,6 +110,58 @@ export async function executeApplicationAction(input: {
           target: input.payload.name,
           result: helper,
           verification: { verified: helper.ok, method: "native_helper" },
+        });
+      }
+      case "runScript": {
+        const compiled = compileAppleScript(input.payload.source);
+        if (!compiled.ok) {
+          return failedResult({
+            tool: "application",
+            action: "runScript",
+            startedAt,
+            riskLevel: risk.risk,
+            code: "applescript_rejected",
+            message: compiled.reason,
+          });
+        }
+        const helper = await invokeNativeHelper(
+          { cmd: "applescript.run", script: compiled.source, app: compiled.app, value: compiled.source },
+          20_000,
+        );
+        if (helper.permission === "automation" || helper.error === "PERMISSION_REQUIRED") {
+          return failedResult({
+            tool: "application",
+            action: "runScript",
+            startedAt,
+            riskLevel: "SYSTEM_CHANGE",
+            code: "permission_required",
+            message: "NOVA benötigt Automation-Zugriff für AppleScript.",
+            metadata: { status: "PERMISSION_REQUIRED", permission: "automation" },
+          });
+        }
+        if (!helper.ok) {
+          return failedResult({
+            tool: "application",
+            action: "runScript",
+            startedAt,
+            riskLevel: risk.risk,
+            code: helper.error ?? "applescript_failed",
+            message: typeof helper.error === "string" && helper.error
+              ? helper.error
+              : "AppleScript ist fehlgeschlagen.",
+            metadata: { app: compiled.app },
+          });
+        }
+        return createActionResult({
+          tool: "application",
+          action: "runScript",
+          startedAt,
+          success: true,
+          riskLevel: risk.risk,
+          approvalRequired: false,
+          target: compiled.app,
+          result: helper.data ?? helper,
+          verification: { verified: true, method: "native_helper" },
         });
       }
     }

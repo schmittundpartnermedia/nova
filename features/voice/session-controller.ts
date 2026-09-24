@@ -55,6 +55,8 @@ export class VoiceSessionController {
   private utteranceFromMs: number | null = null;
   private finalizing = false;
   private pendingTranscript: Promise<string> | null = null;
+  private bargeInSince: number | null = null;
+  private bargeInSpeechMs = 0;
 
   constructor(deps: VoiceSessionDeps = {}) {
     this.config = deps.config ?? VOICE_SESSION_CONFIG;
@@ -76,7 +78,7 @@ export class VoiceSessionController {
     return {
       state,
       active: isVoiceSessionActive(state),
-      capturing: isVoiceCapturing(state),
+      capturing: isVoiceCapturing(state) || (state === "NOVA_SPEAKING" && this.config.bargeInEnabled),
       listening: isVoiceCapturing(state),
       userSpeaking: state === "USER_SPEAKING" || state === "INTERRUPTED",
       supported: this.supported,
@@ -140,6 +142,8 @@ export class VoiceSessionController {
     this.utteranceFromMs = null;
     this.pendingTranscript = null;
     this.finalizing = false;
+    this.bargeInSince = null;
+    this.bargeInSpeechMs = 0;
     this.lastError = this.model.state === "ERROR" ? this.lastError : null;
     this.dispatch({ type: "STOP" });
   }
@@ -155,7 +159,14 @@ export class VoiceSessionController {
   notifyNovaSpeaking() {
     if (!isVoiceSessionActive(this.model.state) && this.model.state !== "PROCESSING") return;
     this.clearGuard();
-    this.pauseInput();
+    if (this.config.bargeInEnabled) {
+      this.capture?.setCollecting(true);
+      this.bargeInSince = this.clock.now();
+      this.bargeInSpeechMs = 0;
+      this.vad.wake(this.clock.now());
+    } else {
+      this.pauseInput();
+    }
     this.dispatch({ type: "NOVA_SPEAKING" });
   }
 
@@ -206,7 +217,11 @@ export class VoiceSessionController {
   }
 
   private onFrame(frame: VadFrame) {
-    if (this.model.state === "NOVA_SPEAKING" || this.model.state === "PROCESSING") return;
+    if (this.model.state === "PROCESSING") return;
+    if (this.model.state === "NOVA_SPEAKING") {
+      this.considerBargeIn(frame);
+      return;
+    }
     if (!isVoiceCapturing(this.model.state)) return;
     const status = this.vad.push(frame);
     this.level = Math.max(0, Math.min(1, status.level / 0.12));
@@ -222,6 +237,28 @@ export class VoiceSessionController {
     if (status.event === "VOICE_END") {
       this.endSpeech(frame.timestampMs);
     }
+  }
+
+  private considerBargeIn(frame: VadFrame) {
+    if (!this.config.bargeInEnabled || this.model.state !== "NOVA_SPEAKING") return;
+    const energy = Math.max(frame.rms, frame.peak * 0.45);
+    this.level = Math.max(0, Math.min(1, energy / 0.12));
+    this.emit();
+    const started = this.bargeInSince ?? frame.timestampMs;
+    if (frame.timestampMs - started < this.config.bargeInWarmupMs) return;
+    const speech = frame.rms >= this.config.bargeInMinSpeechRms && frame.peak >= this.config.bargeInMinSpeechPeak;
+    if (!speech) {
+      this.bargeInSpeechMs = 0;
+      return;
+    }
+    const dt = 20;
+    this.bargeInSpeechMs += dt;
+    if (this.bargeInSpeechMs < this.config.bargeInMinSpeechMs) return;
+    this.bargeInSpeechMs = 0;
+    this.bargeInSince = null;
+    this.dispatch({ type: "BARGE_IN", at: frame.timestampMs });
+    this.beginSpeech(frame.timestampMs);
+    this.listener.onInterruptNova?.();
   }
 
   private beginSpeech(at: number) {

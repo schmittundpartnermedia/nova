@@ -18,5 +18,7 @@
 	<string>0.1.0</string>
 	<key>LSUIElement</key>
 	<true/>
+	<key>NSAppleEventsUsageDescription</key>
+	<string>NOVA steuert lokale Apps über AppleScript, wenn du das ausdrücklich verlangst.</string>
 </dict>
 </plist>

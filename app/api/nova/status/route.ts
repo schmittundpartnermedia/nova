@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getCurrentTenant } from "@/services/tenant";
-import { listPendingApprovals } from "@/services/approvals";
+import { listPendingApprovals, listStandingPolicies, standingActionLabel } from "@/services/approvals";
 import { getOrCreateActiveConversation } from "@/services/conversation";
 import { prisma } from "@/lib/prisma";
 
@@ -10,7 +10,7 @@ export const runtime = "nodejs";
 export async function GET() {
   try {
     const tenant = await getCurrentTenant();
-    const [pending, latestJob, conversation] = await Promise.all([
+    const [pending, latestJob, conversation, standing] = await Promise.all([
       listPendingApprovals(tenant.organizationId),
       prisma.job.findFirst({
         where: { organizationId: tenant.organizationId },
@@ -18,6 +18,7 @@ export async function GET() {
         include: { approvalRequests: true, steps: true },
       }),
       getOrCreateActiveConversation(tenant.organizationId),
+      listStandingPolicies(tenant.organizationId),
     ]);
 
     return NextResponse.json({
@@ -27,6 +28,12 @@ export async function GET() {
         userName: tenant.userName,
       },
       pendingApprovals: pending,
+      standingPolicies: standing.map((item) => ({
+        id: item.id,
+        name: item.name,
+        actionType: item.actionType,
+        label: standingActionLabel(item.actionType),
+      })),
       latestJob,
       conversation: {
         id: conversation.id,
