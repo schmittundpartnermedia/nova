@@ -2,9 +2,9 @@ import type { AIRole } from "@/types/ai";
 
 /** Zentrale Default-Modelle. Organization-Overrides liegen in AiProviderConfig. */
 export const DEFAULT_MODELS_BY_ROLE: Record<AIRole, string> = {
-  master: "gpt-6-astra",
-  simple: "gpt-6-astra",
-  sensitive: "gpt-6-astra",
+  master: "gpt-6-sol",
+  simple: "gpt-6-sol",
+  sensitive: "gpt-6-sol",
   fallback: "mock-fallback",
 };
 
