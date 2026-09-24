@@ -59,6 +59,20 @@ export function NovaSidebar({
           </button>
         ))}
       </nav>
+      <button type="button" className="nova-upload-nav" onClick={onOpenSettings} title="Dateien hochladen">
+        <span className="nova-nav-icon" aria-hidden="true">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+            <path
+              d="M12 16V4M7 9l5-5 5 5M5 20h14"
+              stroke="currentColor"
+              strokeWidth="1.6"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          </svg>
+        </span>
+        <span className="label">Hochladen</span>
+      </button>
       <button type="button" className="nova-user" onClick={onOpenSettings} title="Dateien hochladen">
         <span className="nova-user-mark">{initial}</span>
         <div>

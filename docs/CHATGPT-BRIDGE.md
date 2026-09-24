@@ -39,7 +39,8 @@ ChatGPT Export
 
 Entry Points:
 
-- Plus-Button in der Command Bar oder „Dateien hochladen“ unten links → beliebige Dateien
+- Button **Dateien** in der Command Bar, **Hochladen** in der Sidebar oder **Dateien hochladen** unter Wissen
+- Dateien in die untere Leiste oder in die Upload-Karte ziehen
 - ChatGPT-ZIP, PDF, Text, Office, Audio, Video und Bilder werden automatisch zugeordnet
 - `POST /api/import` startet den Import im Hintergrund
 - `GET /api/import?jobId=` liefert Fortschritt

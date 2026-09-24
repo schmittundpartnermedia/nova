@@ -52,6 +52,7 @@ export function NovaContextPanel({
   standingBusy = false,
   onGrantStanding,
   onRevokeStanding,
+  onUpload,
 }: {
   open?: boolean;
   section: NovaSection;
@@ -64,6 +65,7 @@ export function NovaContextPanel({
   standingBusy?: boolean;
   onGrantStanding?: (actionType: "mail.send.batch" | "macos.ui.click") => void;
   onRevokeStanding?: (policyId: string) => void;
+  onUpload?: () => void;
 }) {
   const projects = uniqueByName(
     items.filter((item) => item.project?.name).map((item) => ({ name: item.project!.name, status: item.status })),
@@ -215,6 +217,11 @@ export function NovaContextPanel({
           {knowledge.slice(0, 8).map((item) => (
             <NovaTaskCard key={item.id} title={item.title} meta={item.status} />
           ))}
+          {onUpload ? (
+            <button type="button" className="nova-chip" style={{ marginTop: 12 }} onClick={onUpload}>
+              Dateien hochladen
+            </button>
+          ) : null}
         </div>
       ) : null}
 

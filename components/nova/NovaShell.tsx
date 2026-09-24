@@ -10,7 +10,7 @@ import { NovaVoiceWave } from "@/components/nova/NovaVoiceWave";
 import { NovaSidebar, type NovaSection } from "@/components/nova/NovaSidebar";
 import { NovaContextPanel, type NovaJobSummary, type NovaStandingPolicy } from "@/components/nova/NovaContextPanel";
 import { ApprovalCard } from "@/components/nova/ApprovalCard";
-import { NovaUpload } from "@/components/nova/NovaUpload";
+import { NovaUpload, type NovaUploadHandle } from "@/components/nova/NovaUpload";
 import { ArchivePanel, type ArchiveItem } from "@/components/archive/ArchivePanel";
 import { performanceForState } from "@/components/nova/avatar-performance";
 import { useVoiceSession } from "@/features/voice/useVoiceSession";
@@ -123,6 +123,8 @@ export function NovaShell() {
   const [visibleLines, setVisibleLines] = useState<CommunicationLine[]>([]);
   const [interactionMode, setInteractionMode] = useState<InteractionMode>("voice");
   const [importOpen, setImportOpen] = useState(false);
+  const uploadRef = useRef<NovaUploadHandle | null>(null);
+  const [dropActive, setDropActive] = useState(false);
   const idleTimer = useRef<number | null>(null);
   const hideTimer = useRef<number | null>(null);
   const interruptedRef = useRef(false);
@@ -652,6 +654,18 @@ export function NovaShell() {
     if (next !== "chat") setContextOpen(true);
   };
 
+  const openUpload = useCallback((pick = true) => {
+    setImportOpen(true);
+    if (pick) uploadRef.current?.pick();
+  }, []);
+
+  const takeDroppedFiles = useCallback((list: FileList | File[]) => {
+    const next = Array.from(list).filter((item) => item.name);
+    if (!next.length) return;
+    setImportOpen(true);
+    uploadRef.current?.importFiles(next);
+  }, []);
+
   const resumeComputer = useCallback(() => {
     setHumanGate(null);
     setResumable(null);
@@ -781,7 +795,7 @@ export function NovaShell() {
           onSection={chooseSection}
           userName={userName}
           open={navOpen}
-          onOpenSettings={() => setImportOpen(true)}
+          onOpenSettings={() => openUpload(true)}
         />
 
         <main className="nova-center">
@@ -822,7 +836,29 @@ export function NovaShell() {
             </div>
           </div>
 
-          <div className="nova-command-dock">
+          <div
+            className={`nova-command-dock ${dropActive ? "drop-active" : ""}`}
+            onDragEnter={(event) => {
+              if (!event.dataTransfer.types.includes("Files")) return;
+              event.preventDefault();
+              setDropActive(true);
+            }}
+            onDragOver={(event) => {
+              if (!event.dataTransfer.types.includes("Files")) return;
+              event.preventDefault();
+              event.dataTransfer.dropEffect = "copy";
+              setDropActive(true);
+            }}
+            onDragLeave={(event) => {
+              if (event.currentTarget.contains(event.relatedTarget as Node)) return;
+              setDropActive(false);
+            }}
+            onDrop={(event) => {
+              event.preventDefault();
+              setDropActive(false);
+              takeDroppedFiles(event.dataTransfer.files);
+            }}
+          >
             {unavailableHint ? <p className="nova-voice-hint">{unavailableHint}</p> : null}
             {watchBanner ? (
               <div className="nova-card nova-panel" style={{ width: "min(92%, 480px)", textAlign: "center", marginBottom: 12 }}>
@@ -860,7 +896,7 @@ export function NovaShell() {
                 onReject={() => void decide("rejected")}
               />
             ) : null}
-            <NovaUpload open={importOpen} onClose={() => setImportOpen(false)} />
+            <NovaUpload ref={uploadRef} open={importOpen} onClose={() => setImportOpen(false)} />
             <NovaStatus text={shownStatus} />
             <NovaCommandBar
               disabled={busy}
@@ -879,6 +915,7 @@ export function NovaShell() {
               onToggleVoice={toggleEnabled}
               onDraftChange={handleDraftChange}
               onComposeStart={openTextLayer}
+              onUpload={() => openUpload(true)}
             />
             <NovaVoiceWave
               listening={sessionSnap.capturing}
@@ -900,6 +937,7 @@ export function NovaShell() {
           standingBusy={standingBusy}
           onGrantStanding={(actionType) => void grantStanding(actionType)}
           onRevokeStanding={(policyId) => void revokeStanding(policyId)}
+          onUpload={() => openUpload(true)}
         />
       </div>
 

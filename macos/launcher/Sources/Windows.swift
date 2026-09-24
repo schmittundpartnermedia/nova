@@ -178,6 +178,32 @@ final class NovaWebWindowController: NSWindowController, WKNavigationDelegate, W
 
     func webView(
         _ webView: WKWebView,
+        runOpenPanelWith parameters: WKOpenPanelParameters,
+        initiatedByFrame frame: WKFrameInfo,
+        completionHandler: @escaping ([URL]?) -> Void
+    ) {
+        let panel = NSOpenPanel()
+        panel.allowsMultipleSelection = parameters.allowsMultipleSelection
+        panel.canChooseDirectories = parameters.allowsDirectories
+        panel.canChooseFiles = true
+        panel.canCreateDirectories = false
+        panel.message = "Dateien für NOVA wählen"
+        panel.prompt = "Hochladen"
+        log?.info("WebView-Dateidialog", fields: [
+            "multiple": parameters.allowsMultipleSelection ? "true" : "false",
+            "directories": parameters.allowsDirectories ? "true" : "false",
+        ])
+        guard let host = webView.window ?? window else {
+            completionHandler(nil)
+            return
+        }
+        panel.beginSheetModal(for: host) { response in
+            completionHandler(response == .OK ? panel.urls : nil)
+        }
+    }
+
+    func webView(
+        _ webView: WKWebView,
         requestMediaCapturePermissionFor origin: WKSecurityOrigin,
         initiatedByFrame frame: WKFrameInfo,
         type: WKMediaCaptureType,

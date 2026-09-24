@@ -28,6 +28,7 @@ export function NovaCommandBar({
   onToggleVoice,
   onDraftChange,
   onComposeStart,
+  onUpload,
 }: {
   disabled: boolean;
   listening: boolean;
@@ -45,6 +46,7 @@ export function NovaCommandBar({
   onToggleVoice: () => void;
   onDraftChange?: (value: string) => void;
   onComposeStart?: () => void;
+  onUpload?: () => void;
 }) {
   const [value, setValue] = useState("");
   const shown = sessionActive ? dictation : value;
@@ -97,14 +99,15 @@ export function NovaCommandBar({
         autoComplete="off"
       />
       <div className="nova-command-row">
-        <label
-          htmlFor="nova-upload-input"
-          className="nova-icon-btn nova-upload-btn"
+        <button
+          type="button"
+          className="nova-chip nova-upload-btn"
+          onClick={onUpload}
           title="Dateien hochladen"
           aria-label="Dateien hochladen"
         >
-          +
-        </label>
+          Dateien
+        </button>
         {QUICK_ACTIONS.map((action) => (
           <button
             key={action.id}
