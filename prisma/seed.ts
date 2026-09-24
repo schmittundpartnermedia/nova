@@ -52,7 +52,7 @@ async function main() {
   }
 
   const aiRoles = [
-    { role: "master", provider: "openai", model: "gpt-6-sol" },
+    { role: "master", provider: "openai", model: "gpt-6-astra" },
     { role: "simple", provider: "openai", model: "gpt-6-sol" },
     { role: "sensitive", provider: "openai", model: "gpt-6-sol" },
     { role: "fallback", provider: "mock", model: "mock-fallback" },

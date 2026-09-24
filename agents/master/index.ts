@@ -8,7 +8,7 @@ import { detectChatGPTImportIntent } from "@/lib/chatgpt/intent";
 import { runKnowledgeAgent } from "@/agents/knowledge";
 import { detectDialogMove, dialogInstruction, type DialogMove } from "@/lib/dialog/intent";
 import { needsLiveResearch } from "@/lib/research/intent";
-import { needsSpecialistWork } from "@/agents/master/intent";
+import { needsFlagshipModel, needsSpecialistWork } from "@/agents/master/intent";
 import { getDefaultProject, runAgentStep } from "@/agents/runtime";
 import { resolveAIProvider } from "@/providers/ai/registry";
 import { createJob, updateJobStatus } from "@/services/jobs";
@@ -285,8 +285,9 @@ export async function runMaster(input: {
   }
 
   const specialist = needsSpecialistWork(input.userRequest);
+  const flagship = needsFlagshipModel(input.userRequest);
   const [{ provider, decision }, project, contextPack] = await Promise.all([
-    resolveAIProvider(input.organizationId, specialist ? "master" : "simple"),
+    resolveAIProvider(input.organizationId, flagship ? "master" : "simple"),
     getDefaultProject(input.organizationId),
     loadRelevantBusinessContext({
       organizationId: input.organizationId,

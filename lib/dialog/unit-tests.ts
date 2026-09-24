@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { detectDialogMove, isPureSocial } from "@/lib/dialog/intent";
-import { needsSpecialistWork } from "@/agents/master/intent";
+import { needsFlagshipModel, needsSpecialistWork } from "@/agents/master/intent";
 import { needsLiveResearch } from "@/lib/research/intent";
 import { detectKnowledgeIntent } from "@/agents/knowledge/intent";
 
@@ -57,6 +57,16 @@ export function runDialogUnitTests(): string[] {
     assert.equal(needsSpecialistWork("Finde aktuelle Unternehmen, die als Sponsor passen."), true);
     assert.equal(needsSpecialistWork("Merk dir: Hetzner startet mit drei Monaten Pilot."), true);
     assert.equal(needsSpecialistWork("Hallo NOVA, wie ist der Stand?"), false);
+  });
+
+  check("flagship only for hard work", () => {
+    assert.equal(needsFlagshipModel("Schönen Feierabend"), false);
+    assert.equal(needsFlagshipModel("Was stand im Angebot von Firma Nordstern?"), false);
+    assert.equal(needsFlagshipModel("Merk dir: Hetzner startet mit drei Monaten Pilot."), false);
+    assert.equal(needsFlagshipModel("Aendere die Startseite von rankPilot"), true);
+    assert.equal(needsFlagshipModel("Bau eine Website für Testkunde"), true);
+    assert.equal(needsFlagshipModel("Finde aktuelle Unternehmen, die als Sponsor passen."), true);
+    assert.equal(needsFlagshipModel("Wer ist derzeit Bundeskanzler?"), false);
   });
 
   return failures;

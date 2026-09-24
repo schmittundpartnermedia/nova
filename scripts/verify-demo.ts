@@ -1,6 +1,6 @@
 import { PrismaClient } from "@prisma/client";
 import { runMaster } from "@/agents/master";
-import { needsSpecialistWork } from "@/agents/master/intent";
+import { needsFlagshipModel, needsSpecialistWork } from "@/agents/master/intent";
 import { searchMemory } from "@/services/retrieval";
 
 const prisma = new PrismaClient();
@@ -20,6 +20,15 @@ async function main() {
   }
   if (!needsSpecialistWork("Merk dir: Hetzner startet mit drei Monaten Pilot.")) {
     throw new Error("Merk-dir muss Memory schreiben.");
+  }
+  if (needsFlagshipModel("Schönen Feierabend") || needsFlagshipModel("Merk dir: Hetzner startet mit drei Monaten Pilot.")) {
+    throw new Error("Alltag darf kein Astra brauchen.");
+  }
+  if (!needsFlagshipModel("Aendere die Startseite von rankPilot")) {
+    throw new Error("Coding muss Astra nutzen.");
+  }
+  if (!needsFlagshipModel("Finde aktuelle Unternehmen, die als Sponsor passen.")) {
+    throw new Error("Tiefe Recherche muss Astra nutzen.");
   }
 
   const organization = await prisma.organization.findUnique({ where: { slug: "joachim" } });

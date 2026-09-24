@@ -32,8 +32,8 @@ Default-Modelle liegen zentral in `providers/ai/models.ts` und können pro Organ
 
 Aktuell (Joachim):
 
-- `master` → OpenAI `gpt-6-sol`
-- `simple` → OpenAI `gpt-6-sol`
+- `master` → OpenAI `gpt-6-astra` (nur Coding, Computer, tiefe Recherche)
+- `simple` → OpenAI `gpt-6-sol` (Gespräch, Wissen, Alltag)
 - `sensitive` → OpenAI `gpt-6-sol`
 - `fallback` → Mock
 

@@ -1,6 +1,8 @@
-import { needsLiveResearch } from "@/lib/research/intent";
+import { detectResearchIntent, needsLiveResearch } from "@/lib/research/intent";
 import { detectKnowledgeIntent } from "@/agents/knowledge/intent";
 import { detectChatGPTImportIntent } from "@/lib/chatgpt/intent";
+import { detectCodingIntent } from "@/agents/coding/intent";
+import { detectComputerIntent } from "@/agents/computer/intent";
 import { isPureSocial } from "@/lib/dialog/intent";
 
 /**
@@ -25,4 +27,20 @@ export function needsSpecialistWork(userRequest: string): boolean {
     return true;
   }
   return false;
+}
+
+/**
+ * Astra nur wenn NOVA hart arbeiten muss: Programmieren, Computer, tiefe Recherche.
+ * Alltag, Dialog und Aktenfragen bleiben auf Sol.
+ */
+export function needsFlagshipModel(userRequest: string): boolean {
+  const text = userRequest.trim();
+  if (!text || isPureSocial(text)) return false;
+  const coding = detectCodingIntent(text);
+  if (coding.kind !== "none" && coding.kind !== "cancel") return true;
+  const computer = detectComputerIntent(text);
+  if (computer.kind !== "none" && computer.kind !== "cancel") return true;
+  if (!needsLiveResearch(text)) return false;
+  const research = detectResearchIntent(text);
+  return research.deep || research.kind === "company" || research.kind === "deep";
 }
