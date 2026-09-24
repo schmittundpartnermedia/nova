@@ -23,14 +23,6 @@ function stub(id: string, name: string, description: string, capabilities: strin
   };
 }
 
-export const calendarAgent = stub(
-  "calendar",
-  "Calendar Agent",
-  "Termine, Verfügbarkeiten, Meetingplanung, Terminänderungen.",
-  ["calendar", "availability", "meetings"],
-  "high",
-);
-
 export const documentAgent = stub(
   "document",
   "Document Agent",
@@ -45,14 +37,6 @@ export const meetingAgent = stub(
   "Meetingvorbereitung, Memos, Entscheidungen, Aufgaben aus Meetings.",
   ["meetings", "memos", "decisions"],
   "medium",
-);
-
-export const watchAgent = stub(
-  "watch",
-  "Watch Agent",
-  "Deadlines, fehlende Antworten, Follow-ups, Handlungsbedarf.",
-  ["deadlines", "follow-ups", "monitoring"],
-  "low",
 );
 
 export const contactAgent = stub(

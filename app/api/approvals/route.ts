@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getCurrentTenant } from "@/services/tenant";
 import { decideApproval } from "@/services/approvals";
-import { getOrganizationConnectors } from "@/connectors/registry";
+import { getOrganizationConnectors, isRealConnectorEnabled } from "@/connectors/registry";
 import { recordActivity } from "@/services/archive";
 import { updateJobStatus } from "@/services/jobs";
 import { prisma } from "@/lib/prisma";
@@ -47,25 +47,59 @@ export async function POST(request: Request) {
       });
     }
 
-    const connectors = await getOrganizationConnectors(tenant.organizationId);
     const payload = JSON.parse(approval.payload) as { communicationIds?: string[] };
     const ids = payload.communicationIds ?? [];
+    const mailConnected = await isRealConnectorEnabled(tenant.organizationId, "mail");
+    const connectors = await getOrganizationConnectors(tenant.organizationId);
+    const drafts = ids.length
+      ? await prisma.communication.findMany({
+          where: { organizationId: tenant.organizationId, id: { in: ids } },
+          include: { contact: true },
+        })
+      : [];
 
-    const sendResult = await connectors.mail.send({
-      organizationId: tenant.organizationId,
-      to: "unused@mock",
-      subject: "batch",
-      body: "batch",
-    });
+    let sent = 0;
+    const reasons: string[] = [];
+    if (mailConnected) {
+      for (const draft of drafts) {
+        const to = draft.contact?.email?.trim();
+        if (!to) {
+          reasons.push(`${draft.subject}: kein Empfänger.`);
+          continue;
+        }
+        const sendResult = await connectors.mail.send({
+          organizationId: tenant.organizationId,
+          to,
+          subject: draft.subject,
+          body: draft.body,
+        });
+        reasons.push(sendResult.reason);
+        if (sendResult.executed) {
+          sent += 1;
+          await prisma.communication.update({
+            where: { id: draft.id },
+            data: { status: "sent", sentAt: new Date(), isMock: false, externalReference: sendResult.messageId ?? undefined },
+          });
+        }
+      }
+    } else {
+      reasons.push( (await connectors.mail.send({
+        organizationId: tenant.organizationId,
+        to: "unused@mock",
+        subject: "batch",
+        body: "batch",
+      })).reason);
+    }
 
     await recordActivity({
       organizationId: tenant.organizationId,
       type: "communication",
-      title: "Freigegeben – Connector noch nicht verbunden",
-      description: sendResult.reason,
-      status: "failed",
+      title: sent ? `${sent} E-Mail(s) versendet` : "Freigegeben – nichts versendet",
+      description: reasons.slice(0, 4).join(" "),
+      status: sent ? "executed" : "failed",
+      actuallyExecutedExternally: sent > 0,
       jobId: approval.jobId ?? undefined,
-      metadata: { mock: true, executed: false, communicationIds: ids },
+      metadata: { mock: !mailConnected, executed: sent > 0, sent, communicationIds: ids },
     });
 
     if (approval.jobId) {
@@ -74,21 +108,27 @@ export async function POST(request: Request) {
       });
     }
 
-    await prisma.communication.updateMany({
-      where: {
-        organizationId: tenant.organizationId,
-        id: { in: ids },
-      },
-      data: {
-        status: "prepared",
-      },
-    });
+    if (!sent && ids.length) {
+      await prisma.communication.updateMany({
+        where: {
+          organizationId: tenant.organizationId,
+          id: { in: ids },
+          status: { not: "sent" },
+        },
+        data: { status: "prepared" },
+      });
+    }
 
     return NextResponse.json({
       ok: true,
-      executed: false,
-      mock: true,
-      message: "Freigegeben, aber Connector noch nicht verbunden. Es wurde nichts versendet.",
+      executed: sent > 0,
+      mock: !mailConnected,
+      sent,
+      message: sent
+        ? `${sent} E-Mail(s) sind raus.`
+        : mailConnected
+          ? "Freigegeben, aber der Versand ist fehlgeschlagen. Es wurde nichts als gesendet markiert."
+          : "Freigegeben, aber Connector noch nicht verbunden. Es wurde nichts versendet.",
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unbekannter Fehler";

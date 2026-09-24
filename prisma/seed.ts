@@ -87,6 +87,7 @@ async function main() {
   const connectors = [
     { type: "mail", provider: "mock", enabled: false },
     { type: "calendar", provider: "mock", enabled: false },
+    { type: "calendar", provider: "local", enabled: true },
     { type: "search", provider: "mock", enabled: false },
     { type: "search", provider: "openai", enabled: true },
     { type: "storage", provider: "mock", enabled: false },
@@ -114,7 +115,9 @@ async function main() {
           note:
             connector.provider === "openai"
               ? "Websuche über OpenAI Web Search. Der API-Key liegt nur in OPENAI_API_KEY."
-              : "Nur Interface/Mock. Keine echte externe Verbindung.",
+              : connector.provider === "local"
+                ? "NOVA-Kalender in SQLite. Nicht Google oder Outlook."
+                : "Nur Interface/Mock. Keine echte externe Verbindung.",
         }),
       },
     });

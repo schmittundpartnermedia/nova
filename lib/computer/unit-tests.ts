@@ -117,6 +117,7 @@ export function runComputerUnitTests(): string[] {
       workspace: "/tmp",
     });
     assert.equal(ui.some((step) => step.tool === "accessibility" && (step.payload as { action?: string }).action === "press"), true);
+    assert.equal(ui.some((step) => step.tool === "screen"), true);
   });
 
   check("schema rejects raw shell strings", () => {

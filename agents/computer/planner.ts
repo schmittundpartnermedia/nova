@@ -148,6 +148,12 @@ export function planComputerTask(input: {
           purpose: `In ${control} tippen`,
           userCommissioned: true,
         });
+        steps.push({
+          tool: "screen",
+          payload: { action: "capture", persist: false },
+          purpose: "Selbstprüfung nach UI-Eingabe",
+          userCommissioned: true,
+        });
         return steps;
       }
       if (control) {
@@ -155,6 +161,12 @@ export function planComputerTask(input: {
           tool: "accessibility",
           payload: { action: "press", identifier: control, app: app || undefined },
           purpose: `${control} bedienen`,
+          userCommissioned: true,
+        });
+        steps.push({
+          tool: "screen",
+          payload: { action: "capture", persist: false },
+          purpose: "Selbstprüfung nach UI-Klick",
           userCommissioned: true,
         });
         return steps;

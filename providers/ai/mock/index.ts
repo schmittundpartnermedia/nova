@@ -130,15 +130,31 @@ export class MockAIProvider implements AIProvider {
       const remember = lower.includes("merk dir") || lower.includes("merke dir");
       const mail = lower.includes("mail") || lower.includes("anschreiben");
       const task = lower.includes("aufgabe");
+      const calendar = lower.includes("termin") || lower.includes("kalender");
+      const watch = lower.includes("was steht an") || lower.includes("überfällig") || lower.includes("woran muss ich");
       const agents: string[] = [];
       if (sponsor) agents.push("research", "communication", "task", "project");
       else {
         if (mail) agents.push("communication");
         if (task) agents.push("task");
+        if (calendar) agents.push("calendar");
+        if (watch) agents.push("watch");
         if (lower.includes("projekt")) agents.push("project");
       }
       const result = {
-        intent: sponsor ? "sponsor_acquisition" : remember ? "remember" : mail ? "communication" : task ? "task" : "direct_answer",
+        intent: sponsor
+          ? "sponsor_acquisition"
+          : remember
+            ? "remember"
+            : mail
+              ? "communication"
+              : calendar
+                ? "calendar"
+                : watch
+                  ? "watch"
+                  : task
+                    ? "task"
+                    : "direct_answer",
         goal: sponsor
           ? `${count} potenzielle Sponsoren finden und Ansprache vorbereiten`
           : "Anfrage verstehen und mit verfügbaren Agenten beantworten",
@@ -147,7 +163,7 @@ export class MockAIProvider implements AIProvider {
         needsApproval: sponsor || mail,
         remember,
         searchRequired: sponsor || lower.includes("finde aktuelle"),
-        externalAction: sponsor || mail ? "mail.send" : "none",
+        externalAction: sponsor || mail ? "mail.send" : calendar ? "calendar" : "none",
         mock: true,
         memoryItems: remember
           ? [{ type: "fact", title: "Merkhilfe", content: input.prompt }]

@@ -11,10 +11,13 @@ import { detectUserTone, toneInstruction } from "@/lib/dialog/tone";
 import { refreshConversationContinuity } from "@/services/conversation/continuity";
 import { needsLiveResearch } from "@/lib/research/intent";
 import { needsFlagshipModel, needsSpecialistWork } from "@/agents/master/intent";
+import { detectCalendarIntent } from "@/agents/calendar/intent";
+import { detectWatchIntent } from "@/agents/watch/intent";
+import { createApprovalRequest, standingApprovalAllows, consumeStandingApproval } from "@/services/approvals";
+import { getOrganizationConnectors, isRealConnectorEnabled } from "@/connectors/registry";
 import { getDefaultProject, runAgentStep } from "@/agents/runtime";
 import { resolveAIProvider } from "@/providers/ai/registry";
 import { createJob, updateJobStatus } from "@/services/jobs";
-import { createApprovalRequest } from "@/services/approvals";
 import { recordActivity } from "@/services/archive";
 import { createSource, upsertDurableMemory } from "@/services/memory";
 import { extractSpokenMemory } from "@/lib/memory/policy";
@@ -159,11 +162,12 @@ function rememberConversation(input: {
   userRequest: string;
   reply: string;
 }) {
-  if (!input.conversationId || !input.reply.trim()) return;
+  const conversationId = input.conversationId;
+  if (!conversationId || !input.reply.trim()) return;
   void (async () => {
     await refreshConversationContinuity({
       organizationId: input.organizationId,
-      conversationId: input.conversationId,
+      conversationId,
       userRequest: input.userRequest,
       reply: input.reply,
     });
@@ -175,7 +179,7 @@ function rememberConversation(input: {
         title: spoken.title,
         content: spoken.content,
         sourceType: "conversation_message",
-        sourceReference: input.conversationId,
+        sourceReference: conversationId,
       });
     }
   })().catch(() => undefined);
@@ -380,7 +384,7 @@ export async function runMaster(input: {
     model: decision.model,
     schemaName: "master-plan",
     schemaDescription:
-      'JSON mit intent, goal, agents (Teilmenge von research|communication|task|project|coding|knowledge), needsApproval, remember, searchRequired, externalAction (none|mail.send|calendar|other), replyHint, communicationBrief, taskDraft, projectDraft {create,name,description,list}, memoryItems [{type,title,content}], mock=false wenn echter Provider.',
+      'JSON mit intent, goal, agents (Teilmenge von research|communication|task|project|coding|knowledge|calendar|watch), needsApproval, remember, searchRequired, externalAction (none|mail.send|calendar|other), replyHint, communicationBrief, taskDraft, projectDraft {create,name,description,list}, memoryItems [{type,title,content}], mock=false wenn echter Provider.',
     prompt: `Du bist NOVA, persönlicher Business-Assistent der Organization ${contextPack.organizationName}.
 Entscheide anhand von Intent und Kontext, nicht anhand einzelner Keywords, ob du direkt antwortest oder interne Agenten nutzt.
 
@@ -390,8 +394,10 @@ Regeln:
 - Direkt antworten, wenn vorhandenes Memory/Projektwissen reicht.
 - research nur bei Bedarf an externer Recherche.
 - knowledge für Dokumentimport, Ordnerlesen und Fragen an vorhandene Unterlagen. Nicht für Codeänderungen.
-- communication für Mail-/Anschreiben-Entwürfe, niemals Versand.
+- communication für Mail-/Anschreiben-Entwürfe, niemals Versand ohne Connector.
 - task für Aufgaben/Deadlines.
+- calendar für Termine im NOVA-Kalender (anlegen/listen), nicht Google.
+- watch für überfällige Aufgaben, alte Entwürfe, anstehende Termine.
 - project für Projektübersicht, Status oder neues Projekt.
 - coding für Softwareentwicklung, Website-Bau und Cursor-Umsetzung. Der Master schreibt keinen Projektcode selbst.
 - remember=true nur bei langlebigen Fakten (Entscheidungen, Projekte, Firmen, Kontakte, Aufgaben, Präferenzen, Deadlines, Zusagen). Kein Smalltalk speichern.
@@ -410,6 +416,12 @@ ${input.userRequest}`,
   const requestedAgents = (plan.agents ?? []).filter((id) => available.includes(id));
   if (needsLiveResearch(input.userRequest) && !requestedAgents.includes("research")) {
     requestedAgents.push("research");
+  }
+  if (detectCalendarIntent(input.userRequest) && !requestedAgents.includes("calendar")) {
+    requestedAgents.push("calendar");
+  }
+  if (detectWatchIntent(input.userRequest) && !requestedAgents.includes("watch")) {
+    requestedAgents.push("watch");
   }
   const allowMockCatalog = provider.id === "mock" && plan.mock === true;
 
@@ -675,6 +687,56 @@ ${input.userRequest}`,
     }
   }
 
+  if (shouldRun("calendar") || plan.externalAction === "calendar") {
+    const calendar = getAgent("calendar");
+    if (calendar) {
+      const result = await runAgentStep({
+        agent: calendar,
+        action: "calendar",
+        payload: { userRequest: input.userRequest },
+        context,
+      });
+      agentNotes.push(`Calendar Agent: ${result.result.summary}`);
+      await recordActivity({
+        organizationId: input.organizationId,
+        type: "calendar",
+        title: result.result.data.executed ? "Kalender aktualisiert" : "Kalender nicht geändert",
+        description: result.result.summary,
+        status: "prepared",
+        jobId: job.id,
+        projectId: project?.id,
+        metadata: { executed: Boolean(result.result.data.executed), action: result.result.data.action ?? null, local: true },
+      });
+    }
+  }
+
+  if (shouldRun("watch")) {
+    const watch = getAgent("watch");
+    if (watch) {
+      const result = await runAgentStep({
+        agent: watch,
+        action: "watch",
+        payload: { userRequest: input.userRequest },
+        context,
+      });
+      agentNotes.push(`Watch Agent: ${result.result.summary}`);
+      await recordActivity({
+        organizationId: input.organizationId,
+        type: "task",
+        title: "Lage geprüft",
+        description: result.result.summary,
+        status: "prepared",
+        jobId: job.id,
+        projectId: project?.id,
+        metadata: {
+          overdue: result.result.data.overdue ?? 0,
+          staleDrafts: result.result.data.staleDrafts ?? 0,
+          upcoming: result.result.data.upcoming ?? 0,
+        },
+      });
+    }
+  }
+
   let memoryItems = (plan.memoryItems ?? []).filter((item) => item.title && item.content);
   if (researchMemory.length > 0) {
     memoryItems = [...memoryItems, ...researchMemory];
@@ -684,35 +746,87 @@ ${input.userRequest}`,
   let orbState: OrbState = "DONE";
   let statusMessage = "Erledigt.";
   const wantsExternal = plan.needsApproval === true || plan.externalAction === "mail.send";
+  const mailConnected = await isRealConnectorEnabled(input.organizationId, "mail");
 
   if (wantsExternal && communicationIds.length > 0) {
+    const standing = await standingApprovalAllows({
+      organizationId: input.organizationId,
+      actionType: "mail.send.batch",
+    });
+    if (standing.allowed && mailConnected) {
+      await consumeStandingApproval({
+        organizationId: input.organizationId,
+        actionType: "mail.send.batch",
+        jobId: job.id,
+        description: `${communicationIds.length} Entwurf(e) über Dauerfreigabe.`,
+        payload: { communicationIds },
+      });
+      const connectors = await getOrganizationConnectors(input.organizationId);
+      const draftsToSend = await prisma.communication.findMany({
+        where: { organizationId: input.organizationId, id: { in: communicationIds } },
+        include: { contact: true },
+      });
+      let sent = 0;
+      for (const draft of draftsToSend) {
+        const to = draft.contact?.email?.trim();
+        if (!to) continue;
+        const result = await connectors.mail.send({
+          organizationId: input.organizationId,
+          to,
+          subject: draft.subject,
+          body: draft.body,
+        });
+        if (result.executed) {
+          sent += 1;
+          await prisma.communication.update({
+            where: { id: draft.id },
+            data: { status: "sent", sentAt: new Date(), isMock: false },
+          });
+        }
+      }
+      await recordActivity({
+        organizationId: input.organizationId,
+        type: "communication",
+        title: sent ? `${sent} Mail(s) über Dauerfreigabe gesendet` : "Dauerfreigabe: nichts versendet",
+        description: standing.reason,
+        status: sent ? "executed" : "failed",
+        actuallyExecutedExternally: sent > 0,
+        jobId: job.id,
+        projectId: project?.id,
+        metadata: { standingPolicyId: standing.policyId, sent, executed: sent > 0 },
+      });
+    } else {
     const approval = await createApprovalRequest({
       organizationId: input.organizationId,
       jobId: job.id,
       actionType: "mail.send.batch",
-      description:
-        `${communicationIds.length} Entwurf(e) liegen vor. Versand würde Freigabe brauchen. Derzeit ist kein Mail-Connector verbunden. Auch nach Freigabe wird nichts versendet.`,
+      description: mailConnected
+        ? `${communicationIds.length} Entwurf(e) liegen vor. Versand braucht Freigabe oder eine Dauerfreigabe.`
+        : `${communicationIds.length} Entwurf(e) liegen vor. Versand würde Freigabe brauchen. Derzeit ist kein Mail-Connector verbunden. Auch nach Freigabe wird nichts versendet.`,
       payload: {
         communicationIds,
-        mock: provider.id === "mock",
-        wouldSend: false,
+        mock: !mailConnected,
+        wouldSend: mailConnected,
         status: "prepared",
       },
     });
     approvalId = approval.id;
     orbState = "WAITING_FOR_APPROVAL";
-    statusMessage = "Entwurf vorbereitet. Für einen Versand wäre Freigabe nötig – Connector noch nicht verbunden.";
+    statusMessage = mailConnected
+      ? "Entwurf vorbereitet. Für den Versand ist Freigabe nötig."
+      : "Entwurf vorbereitet. Für einen Versand wäre Freigabe nötig – Connector noch nicht verbunden.";
     await recordActivity({
       organizationId: input.organizationId,
       type: "approval",
-      title: "Freigabe vorbereitet – Versand nicht möglich",
+      title: mailConnected ? "Freigabe für Versand" : "Freigabe vorbereitet – Versand nicht möglich",
       description: approval.description,
       status: "suggested",
       jobId: job.id,
       projectId: project?.id,
-      metadata: { approvalId: approval.id, executed: false },
+      metadata: { approvalId: approval.id, executed: false, mailConnected },
     });
     await updateJobStatus(input.organizationId, job.id, "waiting_for_approval");
+    }
   }
 
   const drafts = communicationIds.length

@@ -23,6 +23,12 @@ async function main() {
   if (!needsSpecialistWork("Merk dir: Hetzner startet mit drei Monaten Pilot.")) {
     throw new Error("Merk-dir muss Memory schreiben.");
   }
+  if (!needsSpecialistWork("Was steht an?")) {
+    throw new Error("Lage prüfen muss den Watch-Pfad nutzen.");
+  }
+  if (!needsSpecialistWork("Lege morgen um 10 Uhr einen Termin an")) {
+    throw new Error("Termin anlegen muss den Kalender-Pfad nutzen.");
+  }
   if (needsFlagshipModel("Schönen Feierabend") || needsFlagshipModel("Merk dir: Hetzner startet mit drei Monaten Pilot.")) {
     throw new Error("Alltag darf kein Astra brauchen.");
   }

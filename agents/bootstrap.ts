@@ -6,14 +6,9 @@ import { taskAgent } from "@/agents/tasks";
 import { projectAgent } from "@/agents/projects";
 import { codingAgent } from "@/agents/coding";
 import { knowledgeAgent } from "@/agents/knowledge";
-import {
-  calendarAgent,
-  documentAgent,
-  meetingAgent,
-  watchAgent,
-  contactAgent,
-  qualityAgent,
-} from "@/agents/stubs";
+import { calendarAgent } from "@/agents/calendar";
+import { watchAgent } from "@/agents/watch";
+import { documentAgent, meetingAgent, contactAgent, qualityAgent } from "@/agents/stubs";
 
 let bootstrapped = false;
 

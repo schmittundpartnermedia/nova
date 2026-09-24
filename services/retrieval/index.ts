@@ -165,6 +165,7 @@ export type BusinessContextPack = {
   companies: Array<{ id: string; name: string; industry: string | null; notes: string | null }>;
   contacts: Array<{ id: string; name: string; role: string | null; company: string | null }>;
   tasks: Array<{ id: string; title: string; status: string; dueAt: Date | null }>;
+  meetings: Array<{ id: string; title: string; startsAt: Date }>;
   recentMessages: Array<{ role: string; content: string }>;
   retrievedMessages: Array<{ role: string; content: string; createdAt: string }>;
   knowledge: string;
@@ -287,6 +288,18 @@ export async function loadRelevantBusinessContext(input: {
     "Gespräch",
   );
 
+  const meetingRows = social
+    ? []
+    : await prisma.meeting.findMany({
+        where: {
+          organizationId: input.organizationId,
+          startsAt: { gte: new Date() },
+        },
+        orderBy: { startsAt: "asc" },
+        take: 6,
+      });
+  assertTenantIsolation(input.organizationId, meetingRows, "Termin");
+
   const pack: BusinessContextPack = {
     organizationName: organization.name,
     memories: memories.map((item) => ({
@@ -318,6 +331,11 @@ export async function loadRelevantBusinessContext(input: {
       status: item.status,
       dueAt: item.dueAt,
     })),
+    meetings: meetingRows.map((item) => ({
+      id: item.id,
+      title: item.title,
+      startsAt: item.startsAt,
+    })),
     recentMessages: [...recentMessages].reverse().map((item) => ({
       role: item.role,
       content: item.content.slice(0, 400),
@@ -343,6 +361,7 @@ function formatContextPack(pack: BusinessContextPack): string {
     pack.companies.length === 0 &&
     pack.contacts.length === 0 &&
     pack.tasks.length === 0 &&
+    pack.meetings.length === 0 &&
     !pack.knowledge;
   const lines: string[] = [`Organization: ${pack.organizationName}`];
   if (pack.continuity) {
@@ -375,6 +394,11 @@ function formatContextPack(pack: BusinessContextPack): string {
       pack.tasks.length
         ? pack.tasks.map((item) => `- ${item.title} (${item.status}${item.dueAt ? `, fällig ${item.dueAt.toISOString().slice(0, 10)}` : ""})`).join("\n")
         : "- keine offenen Treffer",
+      "",
+      "Termine:",
+      pack.meetings.length
+        ? pack.meetings.map((item) => `- ${item.startsAt.toISOString().slice(0, 16).replace("T", " ")} ${item.title}`).join("\n")
+        : "- keine anstehenden",
     );
   }
 

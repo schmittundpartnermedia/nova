@@ -25,6 +25,7 @@
     "verify:knowledge": "tsx scripts/verify-knowledge.ts",
     "verify:chatgpt": "tsx scripts/verify-chatgpt.ts",
     "verify:dialog": "tsx scripts/verify-dialog.ts",
+    "verify:ops": "tsx scripts/verify-ops.ts",
     "import:chatgpt": "tsx scripts/import-chatgpt.ts",
     "playwright:install": "PLAYWRIGHT_BROWSERS_PATH=.nova/ms-playwright playwright install chromium",
     "desktop-service": "tsx services/desktop-service/index.ts",

@@ -58,6 +58,8 @@ export function runDialogUnitTests(): string[] {
     assert.equal(needsSpecialistWork("Finde aktuelle Unternehmen, die als Sponsor passen."), true);
     assert.equal(needsSpecialistWork("Merk dir: Hetzner startet mit drei Monaten Pilot."), true);
     assert.equal(needsSpecialistWork("Hallo NOVA, wie ist der Stand?"), false);
+    assert.equal(needsSpecialistWork("Was steht an?"), true);
+    assert.equal(needsSpecialistWork("Lege morgen um 10 Uhr einen Termin an"), true);
   });
 
   check("tone beyond greetings", () => {
