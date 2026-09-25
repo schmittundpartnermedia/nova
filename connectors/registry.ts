@@ -1,9 +1,11 @@
 import { prisma } from "@/lib/prisma";
 import { assertOrganizationId } from "@/services/tenant";
 import { hasOpenAIApiKey } from "@/lib/secrets";
+import { AppleMailProvider } from "@/connectors/mail/apple";
 import { BlockedMailProvider } from "@/connectors/mail/blocked";
 import { ImapSmtpMailProvider } from "@/connectors/mail/imap";
 import { passwordSmtpEnabled } from "@/connectors/mail/smtp";
+import { readMailAutomationState } from "@/services/mail/apple-events";
 import { MockCalendarProvider } from "@/connectors/calendar/mock";
 import { LocalCalendarProvider } from "@/connectors/calendar/local";
 import { MockSearchProvider } from "@/connectors/search/mock";
@@ -17,6 +19,7 @@ import type { CalendarProvider, ConnectorType, MailProvider, SearchProvider, Sto
 
 const mailBlocked = new BlockedMailProvider();
 const mailImap = new ImapSmtpMailProvider();
+const mailApple = new AppleMailProvider();
 const calendarMock = new MockCalendarProvider();
 const calendarLocal = new LocalCalendarProvider();
 const mockSearch = new MockSearchProvider();
@@ -29,6 +32,14 @@ const browser = new MockBrowserProvider();
 
 export async function getMailProvider(organizationId: string): Promise<MailProvider> {
   assertOrganizationId(organizationId);
+  const apple = await prisma.mailAccount.findFirst({
+    where: { organizationId, status: "connected", provider: "apple-mail" },
+  });
+  if (apple) {
+    const automation = await readMailAutomationState();
+    if (automation === "granted") return mailApple;
+    return mailBlocked;
+  }
   const account = await prisma.mailAccount.findFirst({
     where: {
       organizationId,
@@ -116,7 +127,7 @@ export async function getConnectorCapabilityMap(organizationId: string): Promise
   ]);
   return {
     search: search.mock ? "MOCK" : "AVAILABLE",
-    mail: mail.id === "imap-smtp" ? "AVAILABLE" : "BLOCKED",
+    mail: mail.id === "apple-mail" || mail.id === "imap-smtp" ? "AVAILABLE" : "BLOCKED",
     calendar: calendar.id === "mock-calendar" ? "MOCK" : "LOCAL_ONLY",
     storage: storage.id === "mock-storage" ? "MOCK" : "LOCAL_ONLY",
     tasks: "MOCK",
@@ -139,6 +150,10 @@ export async function isRealConnectorEnabled(
     return provider.mock === false;
   }
   if (type === "mail") {
+    const apple = await prisma.mailAccount.findFirst({
+      where: { organizationId, status: "connected", provider: "apple-mail" },
+    });
+    if (apple) return (await readMailAutomationState()) === "granted";
     const account = await prisma.mailAccount.findFirst({
       where: { organizationId, status: "connected", provider: { in: ["google", "microsoft"] }, NOT: { credentialRef: null } },
     });

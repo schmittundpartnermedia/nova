@@ -368,6 +368,27 @@ func automationTrusted() -> Bool {
     return status == noErr
 }
 
+func mailAutomationState() -> [String: Any] {
+    let target = NSAppleEventDescriptor(bundleIdentifier: "com.apple.mail")
+    let status = AEDeterminePermissionToAutomateTarget(
+        target.aeDesc,
+        typeWildCard,
+        typeWildCard,
+        false
+    )
+    let state: String
+    if status == noErr {
+        state = "granted"
+    } else if status == -1743 {
+        state = "denied"
+    } else if status == -1744 {
+        state = "required"
+    } else {
+        state = "unavailable"
+    }
+    return ["ok": true, "data": ["state": state, "code": Int(status)]]
+}
+
 func appleScriptBlocked(_ source: String) -> String? {
     let lower = source.lowercased()
     if lower.contains("do shell script") { return "do_shell_script_blocked" }
@@ -502,6 +523,8 @@ case "app.focus":
     writeJSON(focusApp(command.app ?? ""))
 case "app.quit":
     writeJSON(quitApp(command.app ?? ""))
+case "automation.mail":
+    writeJSON(mailAutomationState())
 case "applescript.run":
     writeJSON(runAppleScript(command.script ?? command.value ?? ""))
 default:

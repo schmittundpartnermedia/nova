@@ -26,6 +26,7 @@
     "verify:chatgpt": "tsx scripts/verify-chatgpt.ts",
     "verify:retrieval": "tsx scripts/verify-retrieval.ts",
     "verify:mail": "tsx scripts/verify-mail.ts",
+    "verify:apple-mail": "tsx scripts/verify-apple-mail.ts",
     "verify:dialog": "tsx scripts/verify-dialog.ts",
     "verify:ops": "tsx scripts/verify-ops.ts",
     "import:chatgpt": "tsx scripts/import-chatgpt.ts",

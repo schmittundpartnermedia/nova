@@ -13,63 +13,98 @@ type Account = {
 
 type Capabilities = Record<string, { state: string; reason?: string }>;
 
+function label(account: Account) {
+  if (account.emailAddress.endsWith("@apple-mail.local")) return account.displayName || "Apple Mail";
+  return account.displayName || account.emailAddress;
+}
+
+function address(account: Account) {
+  if (account.emailAddress.endsWith("@apple-mail.local")) return null;
+  return account.emailAddress;
+}
+
 export function MailConnect() {
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [capabilities, setCapabilities] = useState<Capabilities>({});
-  const [providers, setProviders] = useState({ google: false, microsoft: false });
   const [message, setMessage] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [open, setOpen] = useState(false);
+
+  async function load() {
+    const response = await fetch("/api/mail");
+    if (!response.ok) return;
+    const data = (await response.json()) as { accounts: Account[]; capabilities: Capabilities };
+    setAccounts(data.accounts);
+    setCapabilities(data.capabilities);
+  }
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
-      void fetch("/api/mail")
-        .then((response) => (response.ok ? response.json() : null))
-        .then((data: { accounts: Account[]; capabilities: Capabilities; providers: { google: { configured: boolean }; microsoft: { configured: boolean } } } | null) => {
-          if (!data) return;
-          setAccounts(data.accounts);
-          setCapabilities(data.capabilities);
-          setProviders({ google: data.providers.google.configured, microsoft: data.providers.microsoft.configured });
-        });
+      void load();
     }, 0);
     return () => window.clearTimeout(timer);
   }, []);
 
-  async function connect(provider: "google" | "microsoft") {
+  async function connect() {
+    setBusy(true);
     setMessage("");
-    const response = await fetch(`/api/mail/oauth/start?provider=${provider}`);
-    const data = (await response.json()) as { ok?: boolean; url?: string; reason?: string };
-    if (data.url) {
-      window.location.assign(data.url);
-      return;
+    const response = await fetch("/api/mail/apple", { method: "POST" });
+    const data = (await response.json()) as { ok?: boolean; reason?: string; accounts?: Account[]; capabilities?: Capabilities };
+    if (data.accounts) setAccounts(data.accounts);
+    if (data.capabilities) setCapabilities(data.capabilities);
+    if (data.reason === "AUTOMATION_PERMISSION_REQUIRED") {
+      setMessage("Apple Mail bleibt blockiert, bis du im macOS-Dialog erlaubst, dass der NOVA Desktop Helper Mail steuert.");
+    } else if (!data.ok) {
+      setMessage("Apple Mail ist gerade nicht erreichbar.");
     }
-    setMessage(data.reason === "PROVIDER_OAUTH_NOT_CONFIGURED" ? "OAuth ist für diesen Anbieter noch nicht eingerichtet." : "Verbindung blockiert.");
+    setBusy(false);
+    await load();
   }
 
   const connection = capabilities.MAIL_CONNECTION;
   const connected = accounts.filter((item) => item.status === "connected");
+  const lastSync = connected
+    .map((item) => item.lastSyncAt)
+    .filter((item): item is string => Boolean(item))
+    .sort()
+    .at(-1);
 
   return (
     <div className="nova-card nova-panel">
-      <h3>Mail</h3>
-      {connection?.reason === "PROVIDER_OAUTH_NOT_CONFIGURED" ? (
-        <p className="nova-card-meta">Verbinden blockiert: OAuth-App fehlt beim Anbieter.</p>
+      <h3>Apple Mail</h3>
+      {connection?.state === "AVAILABLE" ? (
+        <p className="nova-card-meta">Verbunden</p>
+      ) : connection?.reason === "AUTOMATION_PERMISSION_REQUIRED" ? (
+        <p className="nova-card-meta">Blockiert: Automatisierung für Mail fehlt.</p>
       ) : (
-        <p className="nova-card-meta">{connected.length ? "Verbunden" : "Noch kein Konto"}</p>
+        <p className="nova-card-meta">Noch nicht verbunden</p>
       )}
-      {connected.map((account) => (
-        <p key={account.id}>
-          <strong>{account.emailAddress}</strong>
-          <span className="nova-card-meta"> {account.provider === "google" ? "Google" : "Microsoft"} · Verbunden</span>
-          {account.lastSyncAt ? <span className="nova-card-meta"> · Sync {account.lastSyncAt.slice(0, 16).replace("T", " ")}</span> : null}
+      {connected.length ? (
+        <p>
+          <strong>{connected.length} Accounts</strong>
+          {lastSync ? <span className="nova-card-meta"> · Sync {lastSync.slice(0, 16).replace("T", " ")}</span> : null}
         </p>
-      ))}
-      <div className="mt-4 flex gap-2" style={{ flexWrap: "wrap" }}>
-        <button type="button" className="nova-chip" disabled={!providers.microsoft} onClick={() => void connect("microsoft")}>
-          Mit Microsoft verbinden
+      ) : null}
+      {connected.length ? (
+        <button type="button" className="nova-chip" onClick={() => setOpen((value) => !value)}>
+          {open ? "Accounts ausblenden" : "Accounts anzeigen"}
         </button>
-        <button type="button" className="nova-chip" disabled={!providers.google} onClick={() => void connect("google")}>
-          Mit Google verbinden
-        </button>
-      </div>
+      ) : null}
+      {open
+        ? connected.map((account) => (
+            <p key={account.id}>
+              <strong>{label(account)}</strong>
+              {address(account) ? <span className="nova-card-meta"> {address(account)}</span> : null}
+            </p>
+          ))
+        : null}
+      {connection?.state !== "AVAILABLE" ? (
+        <div className="mt-4">
+          <button type="button" className="nova-chip" disabled={busy} onClick={() => void connect()}>
+            {busy ? "Apple Mail wird gelesen…" : "Apple Mail verbinden"}
+          </button>
+        </div>
+      ) : null}
       {message ? <p className="nova-card-meta">{message}</p> : null}
     </div>
   );

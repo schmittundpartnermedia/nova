@@ -45,7 +45,13 @@ async function main() {
   await prisma.project.deleteMany({ where: { organizationId: { in: [orgA.id, orgB.id] } } });
 
   const blocked = await getMailCapabilityMap(orgA.id);
-  assert(blocked.MAIL_READ.state === "BLOCKED" && blocked.MAIL_READ.reason === "ACCOUNT_NOT_CONNECTED", "Ohne Konto muss Mail blockiert sein");
+  assert(blocked.MAIL_READ.state === "BLOCKED", "Ohne Konto muss Mail blockiert sein");
+  assert(
+    blocked.MAIL_READ.reason === "ACCOUNT_NOT_CONNECTED" ||
+      blocked.MAIL_READ.reason === "AUTOMATION_PERMISSION_REQUIRED" ||
+      blocked.MAIL_READ.reason === "PROVIDER_UNAVAILABLE",
+    blocked.MAIL_READ.reason ?? "",
+  );
   const provider = await getMailProvider(orgA.id);
   assert(provider instanceof BlockedMailProvider || provider.mock === false, "Produktiver Pfad darf keinen Mock als verfügbar melden");
   assert(provider.id !== "fixture-mail" && provider.id !== "mock-mail", "Fixture/Mock darf nicht produktiv sein");
@@ -198,9 +204,13 @@ async function main() {
   assert(audit.every((item) => !/fixture-access-token|fixture-refresh-token|NOVA_MAIL_KEY/.test(item.detail ?? "")), "Token im Audit");
   const caps = await getMailCapabilityMap(orgB.id);
   assert(caps.MAIL_CONNECTION.state === "BLOCKED", "Verbindung ohne Konto muss blockiert sein");
-  if (!process.env.NOVA_GOOGLE_OAUTH_CLIENT_ID && !process.env.NOVA_MICROSOFT_OAUTH_CLIENT_ID) {
-    assert(caps.MAIL_CONNECTION.reason === "PROVIDER_OAUTH_NOT_CONFIGURED", caps.MAIL_CONNECTION.reason ?? "");
-  }
+  assert(caps.MAIL_CONNECTION.reason !== "PROVIDER_OAUTH_NOT_CONFIGURED", "Apple Mail darf nicht an fehlendem OAuth hängen");
+  assert(
+    caps.MAIL_CONNECTION.reason === "ACCOUNT_NOT_CONNECTED" ||
+      caps.MAIL_CONNECTION.reason === "AUTOMATION_PERMISSION_REQUIRED" ||
+      caps.MAIL_CONNECTION.reason === "PROVIDER_UNAVAILABLE",
+    caps.MAIL_CONNECTION.reason ?? "",
+  );
 
   const watch = await scanWatch(orgA.id);
   assert(Array.isArray(watch.newImportantMail), "Watch ohne Mail");

@@ -31,6 +31,9 @@ export type MailSendInput = {
   threadId?: string;
   inReplyTo?: string;
   references?: string[];
+  providerMessageId?: string;
+  replyAll?: boolean;
+  compose?: "new" | "reply" | "forward";
 };
 
 export type MailSendResult = {

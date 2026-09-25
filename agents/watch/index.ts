@@ -2,6 +2,7 @@ import type { NovaAgent } from "@/types/agents";
 import { prisma } from "@/lib/prisma";
 import { assertOrganizationId } from "@/services/tenant";
 import { listDueFollowUps } from "@/services/mail/followup";
+import { ensureAppleMailFresh } from "@/services/mail/apple-connect";
 
 export type WatchScan = {
   overdueTasks: Array<{ id: string; title: string; dueAt: Date | null }>;
@@ -172,6 +173,7 @@ export const watchAgent: NovaAgent = {
     implemented: true,
   },
   async run(_input, context) {
+    await ensureAppleMailFresh(context.organizationId).catch(() => undefined);
     const scan = await scanWatch(context.organizationId);
     const summary = formatWatchScan(scan);
     return {

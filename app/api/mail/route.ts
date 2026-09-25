@@ -2,23 +2,22 @@ import { NextResponse } from "next/server";
 import { getCurrentTenant } from "@/services/tenant";
 import { listMailAccounts } from "@/services/mail/accounts";
 import { getMailCapabilityMap } from "@/services/mail/capabilities";
-import { oauthConfigured } from "@/services/mail/oauth";
+import { readMailAutomationState } from "@/services/mail/apple-events";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 export async function GET() {
   const tenant = await getCurrentTenant();
-  const [accounts, capabilities] = await Promise.all([
+  const [accounts, capabilities, automation] = await Promise.all([
     listMailAccounts(tenant.organizationId),
     getMailCapabilityMap(tenant.organizationId),
+    readMailAutomationState(),
   ]);
   return NextResponse.json({
-    accounts,
+    accounts: accounts.filter((account) => account.provider === "apple-mail"),
     capabilities,
-    providers: {
-      google: { configured: oauthConfigured("google") },
-      microsoft: { configured: oauthConfigured("microsoft") },
-    },
+    automation,
+    provider: "apple-mail",
   });
 }

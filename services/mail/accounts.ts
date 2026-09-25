@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { assertOrganizationId } from "@/services/tenant";
+import { visibleCapabilities } from "@/lib/mail/apple";
 import { deleteMailSecret, readMailSecret, storeMailSecret, type MailSecret } from "@/services/mail/credentials";
 import { refreshMailAccessToken } from "@/services/mail/oauth";
 
@@ -28,17 +29,8 @@ export function publicAccount(account: {
     displayName: account.displayName,
     status: account.status,
     lastSyncAt: account.lastSyncAt,
-    capabilities: safeJson(account.capabilities),
+    capabilities: visibleCapabilities(account.capabilities),
   };
-}
-
-function safeJson(value: string): string[] {
-  try {
-    const parsed = JSON.parse(value) as unknown;
-    return Array.isArray(parsed) ? parsed.map(String) : [];
-  } catch {
-    return [];
-  }
 }
 
 export async function loadAccountSecret(organizationId: string, accountId: string) {

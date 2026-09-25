@@ -7,6 +7,17 @@ import { extractNewMessage } from "@/lib/mail/quotes";
 import { classifyMail, detectPriority, isConsumerDomain } from "@/lib/mail/classify";
 import { inspectMailContent } from "@/lib/mail/guard";
 import { detectMailIntent } from "@/lib/mail/intent";
+import {
+  accountEmail,
+  assertMailScriptSafe,
+  deliveryFromVerification,
+  inboxMetadataScript,
+  mailMutationPolicy,
+  mergeAppleCursor,
+  parseAppleCursor,
+  replyDraftScript,
+  threadKey,
+} from "@/lib/mail/apple";
 
 export function runMailUnitTests(): string[] {
   const failures: string[] = [];
@@ -92,6 +103,28 @@ export function runMailUnitTests(): string[] {
     assert.equal(detectMailIntent("Antworte, dass wir nächste Woche telefonieren können.").kind, "draft");
     assert.equal(detectMailIntent("Ja, senden.").kind, "send-confirm");
     assert.equal(detectMailIntent("Wie spät ist es?").kind, "none");
+  });
+
+  check("apple mail scripts stay on apple events", () => {
+    const root = process.cwd();
+    const source = ["connectors/mail/apple.ts", "services/mail/apple-events.ts", "services/mail/apple-connect.ts"]
+      .map((file) => fs.readFileSync(path.join(root, file), "utf8"))
+      .join("\n");
+    assert.equal(/password\s+of|keychain|library\/mail|envelope index|find-generic-password/i.test(source), false);
+    const script = inboxMetadataScript("account-1", 4);
+    assert.equal(assertMailScriptSafe(script).ok, true);
+    assert.equal(assertMailScriptSafe('tell application "Mail" to get password of account 1').ok, false);
+    assert.equal(/\bsend\b/.test(replyDraftScript({ accountId: "a", mailbox: "INBOX", messageId: "1", body: "Hallo", replyAll: false })), false);
+    assert.equal(accountEmail("", "ABC").endsWith("@apple-mail.local"), true);
+    assert.equal(threadKey({ messageId: "<m@x>", inReplyTo: "<p@x>", references: "<root@x>", appleId: "1" }).basis, "references");
+    assert.equal(threadKey({ messageId: "<m@x>", appleId: "1" }).key, "<m@x>");
+    assert.deepEqual(parseAppleCursor(mergeAppleCursor(null, ["a", "a", "b"])).knownIds, ["a", "b"]);
+    assert.equal(deliveryFromVerification(true, false), "FAILED");
+    assert.equal(deliveryFromVerification(true, true), "VERIFIED");
+    assert.equal(mailMutationPolicy("send").approvalRequired, true);
+    assert.equal(mailMutationPolicy("archive").approvalRequired, true);
+    assert.equal(mailMutationPolicy("mark-read").approvalRequired, false);
+    assert.equal(mailMutationPolicy("read").autonomous, true);
   });
 
   return failures;

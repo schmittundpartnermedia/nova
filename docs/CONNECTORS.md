@@ -15,7 +15,7 @@ Externe Systeme sind nie hart in der Business-Logik verdrahtet.
 
 ## V1
 
-Mail ist produktiv über OAuth (Google oder Microsoft) und danach IMAP/SMTP mit Zugriffstoken. Ohne OAuth-App oder ohne verbundenes Konto ist Mail blockiert. Benutzerpasswörter werden nicht entgegengenommen. `MockMailProvider` und `FixtureMailProvider` bleiben Testadapter. Calendar, Storage, Tasks, Contacts und Browser bleiben Mock- oder Lokal-Implementierungen. Mocks führen **keine** echten Aktionen aus und behaupten das auch nicht.
+Mail ist für diese NOVA produktiv über Apple Mail. `AppleMailProvider` spricht Mail.app per Apple Events an. macOS behält die Konten und Zugangsdaten. NOVA speichert keine Passwörter und liest weder die Keychain noch die private Mail-Datenbank. Ohne Automatisierungsfreigabe oder ohne erkanntes Konto ist Mail blockiert. Google- und Microsoft-OAuth bleiben als getrennte Adapter für spätere Organisationen erhalten und sind nicht der normale Weg. `MockMailProvider` und `FixtureMailProvider` bleiben Testadapter. Calendar, Storage, Tasks, Contacts und Browser bleiben Mock- oder Lokal-Implementierungen. Mocks führen **keine** echten Aktionen aus und behaupten das auch nicht.
 
 `SearchProvider` ist produktiv: `OpenAISearchProvider` nutzt OpenAI Web Search über `OPENAI_API_KEY`. Der Research Agent hängt am Interface, nicht am konkreten Anbieter.
 

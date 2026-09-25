@@ -246,7 +246,8 @@ sleep 1
 start_nova_app
 wait_ready 90 || fail "Minimal-Environment: Application Service nicht bereit"
 wait_desktop 60 || fail "Minimal-Environment: Desktop Service nicht bereit"
-if ! grep -q '"path":"/usr/local/bin:/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin"' "$LOG_DIR/launcher.log"; then
+if ! grep -q '"path":"/usr/local/bin:/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin"' "$LOG_DIR/launcher.log" \
+  && ! grep -q '"path":"\\/usr\\/local\\/bin:\\/usr\\/local\\/bin:\\/opt\\/homebrew\\/bin:\\/usr\\/bin:\\/bin:\\/usr\\/sbin:\\/sbin"' "$LOG_DIR/launcher.log"; then
   fail "Child-PATH ist nicht deterministisch"
 fi
 ok "NOVA startet ohne Terminal-PATH und ohne zshrc"

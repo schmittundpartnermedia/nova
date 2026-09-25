@@ -12,6 +12,7 @@ import { extractNewMessage } from "@/lib/mail/quotes";
 import { classifyMail, detectPriority, isConsumerDomain } from "@/lib/mail/classify";
 import { inspectMailContent } from "@/lib/mail/guard";
 import { auditMail } from "@/services/mail/audit";
+import { mergeAppleCursor } from "@/lib/mail/apple";
 import { completeFollowUpsForInbound, createMailFollowUp } from "@/services/mail/followup";
 import type { MailProvider, MailProviderMessage } from "@/types/connectors";
 import type { MemoryType } from "@/types";
@@ -101,17 +102,19 @@ export async function syncMailAccount(input: {
     work: async () => {
       const health = await input.provider.healthCheck(input.organizationId, account.id);
       if (!health.live) {
+        const reason = health.reason === "AUTOMATION_PERMISSION_REQUIRED" ? "AUTOMATION_PERMISSION_REQUIRED" : "PROVIDER_UNAVAILABLE";
         await prisma.mailAccount.update({
           where: { id: account.id },
-          data: { lastError: "PROVIDER_UNAVAILABLE" },
+          data: { lastError: reason },
         });
-        throw new Error("PROVIDER_UNAVAILABLE");
+        throw new Error(reason);
       }
       await prisma.mailAccount.update({ where: { id: account.id }, data: { lastError: null } });
     },
   });
 
-  const cursor = account.syncCursor ? (JSON.parse(account.syncCursor) as { lastUid?: number; uidValidity?: string }) : {};
+  const cursor = account.syncCursor ? (JSON.parse(account.syncCursor) as { lastUid?: number; uidValidity?: string; mode?: string }) : {};
+  const apple = input.provider.id === "apple-mail";
   let remote: MailProviderMessage[] = [];
   await runPhase({
     organizationId: input.organizationId,
@@ -123,8 +126,8 @@ export async function syncMailAccount(input: {
         accountId: account.id,
         folder: "INBOX",
         sinceUid: cursor.lastUid,
-        uidValidity: cursor.uidValidity,
-        limit: 50,
+        uidValidity: apple ? (account.syncCursor ?? undefined) : cursor.uidValidity,
+        limit: apple ? 4 : 50,
       });
     },
   });
@@ -215,7 +218,12 @@ export async function syncMailAccount(input: {
         where: { id: account.id },
         data: {
           lastSyncAt: new Date(),
-          syncCursor: JSON.stringify({ lastUid: maxUid, uidValidity: normalized.at(-1)?.uidValidity ?? cursor.uidValidity }),
+          syncCursor: apple
+            ? mergeAppleCursor(
+                account.syncCursor,
+                normalized.map((item) => item.providerMessageId),
+              )
+            : JSON.stringify({ lastUid: maxUid, uidValidity: normalized.at(-1)?.uidValidity ?? cursor.uidValidity }),
         },
       });
       await auditMail({
@@ -230,6 +238,46 @@ export async function syncMailAccount(input: {
   });
 
   return { imported, cancelled: false };
+}
+
+export async function importMailMessages(input: {
+  organizationId: string;
+  accountId: string;
+  provider: MailProvider;
+  messages: MailProviderMessage[];
+}) {
+  assertOrganizationId(input.organizationId);
+  const account = await prisma.mailAccount.findFirst({
+    where: { id: input.accountId, organizationId: input.organizationId },
+  });
+  if (!account || !input.messages.length) return 0;
+  let imported = 0;
+  for (const message of input.messages) {
+    const raw = message.textBody?.trim() ? message.textBody : htmlToNormalizedText(message.htmlBody ?? "");
+    const extracted = extractNewMessage(raw);
+    const inspected = inspectMailContent(extracted.fresh || raw);
+    const saved = await upsertNormalizedMessage({
+      organizationId: input.organizationId,
+      accountId: account.id,
+      ownAddress: account.emailAddress,
+      provider: input.provider,
+      message: { ...message, normalizedText: inspected.safeText, injectionSuspected: inspected.injectionSuspected },
+    });
+    if (saved) imported += 1;
+  }
+  if (input.provider.id === "apple-mail") {
+    await prisma.mailAccount.update({
+      where: { id: account.id },
+      data: {
+        syncCursor: mergeAppleCursor(
+          account.syncCursor,
+          input.messages.map((item) => item.providerMessageId),
+        ),
+        lastSyncAt: new Date(),
+      },
+    });
+  }
+  return imported;
 }
 
 async function upsertNormalizedMessage(input: {
