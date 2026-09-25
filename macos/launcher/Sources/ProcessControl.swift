@@ -106,6 +106,11 @@ enum ProcessControl {
         return lower.contains("desktop-service") || (lower.contains("tsx") && lower.contains("desktop"))
     }
 
+    static func looksLikeWorker(_ command: String) -> Bool {
+        let lower = command.lowercased()
+        return lower.contains("services/worker") || (lower.contains("tsx") && lower.contains("worker/index"))
+    }
+
     static func spawn(
         executable: URL,
         arguments: [String],

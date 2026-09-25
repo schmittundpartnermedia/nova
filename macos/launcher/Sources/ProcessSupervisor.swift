@@ -8,8 +8,10 @@ final class ProcessSupervisor {
     private(set) var state: SupervisorState = .idle
     private var ownedWeb: SpawnedProcess?
     private var ownedDesktop: SpawnedProcess?
+    private var ownedWorker: SpawnedProcess?
     private var reusedWeb = false
     private var reusedDesktop = false
+    private var reusedWorker = false
     private var cancelled = false
     private let lock = NSLock()
 
@@ -56,6 +58,12 @@ final class ProcessSupervisor {
             try transition(.waitingDesktopHealth, progress, "Desktop Service Health")
             try waitForDesktopHealth()
 
+            try transition(.startingWorker, progress, "Worker starten")
+            try ensureWorker()
+
+            try transition(.waitingWorkerHealth, progress, "Worker Health")
+            try waitForWorkerHealth()
+
             try transition(.checkingNativeHelper, progress, "Native Helper prüfen")
             try waitForHelper()
 
@@ -79,7 +87,8 @@ final class ProcessSupervisor {
 
     func reopenOrRepair(progress: (String) -> Void) throws {
         if case .success = HealthMonitor.isApplicationHealthy(config: config),
-           case .success = HealthMonitor.isDesktopHealthy(config: config, token: HealthMonitor.readDesktopToken(config: config))
+           case .success = HealthMonitor.isDesktopHealthy(config: config, token: HealthMonitor.readDesktopToken(config: config)),
+           workerHealthy()
         {
             log.info("Bestehende gesunde Dienste wiederverwendet")
             return
@@ -88,6 +97,7 @@ final class ProcessSupervisor {
         try restartMissingOwnedOrStart()
         try waitForApplicationHealth()
         try waitForDesktopHealth()
+        try waitForWorkerHealth()
         try waitForHelper()
         persistSession()
     }
@@ -97,8 +107,10 @@ final class ProcessSupervisor {
         lock.lock()
         let web = ownedWeb
         let desktop = ownedDesktop
+        let worker = ownedWorker
         ownedWeb = nil
         ownedDesktop = nil
+        ownedWorker = nil
         lock.unlock()
 
         if let web {
@@ -113,10 +125,17 @@ final class ProcessSupervisor {
         } else {
             log.info("Desktop Service wird nicht beendet, weil er nicht von dieser Session stammt")
         }
+        if let worker {
+            log.info("Beende von NOVA.app gestarteten Worker", fields: ["pid": String(worker.pid)])
+            ProcessControl.stopOwned(worker)
+        } else {
+            log.info("Worker wird nicht beendet, weil er nicht von dieser Session stammt")
+        }
         try? FileManager.default.removeItem(at: config.launcherPidFile)
         try? FileManager.default.removeItem(at: config.sessionFile)
         if web != nil { try? FileManager.default.removeItem(at: config.webPidFile) }
         if desktop != nil { try? FileManager.default.removeItem(at: config.desktopPidFile) }
+        if worker != nil { try? FileManager.default.removeItem(at: config.workerPidFile) }
         log.info("Shutdown abgeschlossen")
     }
 
@@ -206,6 +225,7 @@ final class ProcessSupervisor {
     private func cleanStalePidFiles() {
         ProcessControl.removeIfStale(pidFile: config.webPidFile, expected: ProcessControl.looksLikeNovaWeb)
         ProcessControl.removeIfStale(pidFile: config.desktopPidFile, expected: ProcessControl.looksLikeDesktop)
+        ProcessControl.removeIfStale(pidFile: config.workerPidFile, expected: ProcessControl.looksLikeWorker)
         ProcessControl.removeIfStale(pidFile: config.launcherPidFile)
         ProcessControl.writePidFile(config.launcherPidFile, pid: getpid())
     }
@@ -269,6 +289,64 @@ final class ProcessSupervisor {
             "executable": config.nodeBin.path,
             "cwd": config.projectRoot.path,
         ])
+    }
+
+    private func workerHealthy() -> Bool {
+        let url = config.workerHeartbeatFile
+        guard FileManager.default.fileExists(atPath: url.path),
+              let attrs = try? FileManager.default.attributesOfItem(atPath: url.path),
+              let modified = attrs[.modificationDate] as? Date,
+              Date().timeIntervalSince(modified) < 20,
+              let raw = try? String(contentsOf: url, encoding: .utf8),
+              let data = raw.data(using: .utf8),
+              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+        else { return false }
+        let pidNumber = json["pid"] as? NSNumber
+        let pid = pidNumber?.int32Value ?? 0
+        return pid > 0 && ProcessControl.isAlive(pid)
+    }
+
+    private func ensureWorker() throws {
+        if workerHealthy() {
+            reusedWorker = true
+            log.info("Worker läuft bereits und bleibt unangetastet", fields: ["reused": String(reusedWorker)])
+            return
+        }
+        let spawned = try ProcessControl.spawn(
+            executable: config.nodeBin,
+            arguments: [config.tsxBin.path, "services/worker/index.ts"],
+            cwd: config.projectRoot,
+            env: childEnvironment(),
+            logFile: config.workerLogFile
+        )
+        lock.lock()
+        ownedWorker = spawned
+        reusedWorker = false
+        lock.unlock()
+        ProcessControl.writePidFile(config.workerPidFile, pid: spawned.pid)
+        log.info("Worker gestartet", fields: [
+            "pid": String(spawned.pid),
+            "executable": config.nodeBin.path,
+            "cwd": config.projectRoot.path,
+        ])
+    }
+
+    private func waitForWorkerHealth() throws {
+        let deadline = Date().addingTimeInterval(30)
+        var last: LaunchError = .health("Worker nicht bereit.")
+        while Date() < deadline {
+            try throwIfCancelled()
+            if let crash = crashedOwned(ownedWorker, name: "Worker", logFile: config.workerLogFile) {
+                throw crash
+            }
+            if workerHealthy() {
+                log.info("Worker bereit", fields: diagnosticFields())
+                return
+            }
+            last = .health("Worker-Heartbeat fehlt.")
+            Thread.sleep(forTimeInterval: 0.35)
+        }
+        throw last
     }
 
     private func claimWebPort() throws {
@@ -375,6 +453,12 @@ final class ProcessSupervisor {
                 ownedDesktop = nil
             }
             try ensureDesktop()
+        }
+        if !workerHealthy() {
+            if let worker = ownedWorker, !ProcessControl.isAlive(worker.pid) {
+                ownedWorker = nil
+            }
+            try ensureWorker()
         }
     }
 

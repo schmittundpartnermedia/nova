@@ -3,6 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { isHardBlockedPath } from "@/lib/computer/hard-blocks";
 import { mountedExternalVolumeRoots } from "@/lib/computer/volumes";
+import { discoverWorkspaceRootPath } from "@/lib/workspace/root";
 
 export type PathResolution = {
   requested: string;
@@ -23,6 +24,7 @@ export function defaultWorkspaceRoots(): string[] {
     .split(path.delimiter)
     .map((item) => item.trim())
     .filter(Boolean);
+  const workspaceRoot = discoverWorkspaceRootPath().path;
   const candidates = [
     process.cwd(),
     extra,
@@ -34,6 +36,7 @@ export function defaultWorkspaceRoots(): string[] {
     path.join(os.tmpdir(), "nova-chatgpt-e2e"),
     path.join(process.cwd(), ".nova", "uploads"),
     ...mountedExternalVolumeRoots().map((item) => item.path),
+    ...(workspaceRoot ? [workspaceRoot] : []),
   ].flat();
   const unique: string[] = [];
   for (const candidate of candidates) {

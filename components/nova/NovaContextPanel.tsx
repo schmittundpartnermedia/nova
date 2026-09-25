@@ -21,6 +21,8 @@ export type NovaStandingPolicy = {
 function jobStatusLabel(status: string) {
   if (status === "running" || status === "planning") return "In Bearbeitung";
   if (status === "waiting_for_approval") return "Wartet auf Freigabe";
+  if (status === "waiting_for_review") return "Wartet auf Prüfung";
+  if (status === "paused") return "Pausiert";
   if (status === "completed") return "Abgeschlossen";
   if (status === "failed") return "Nicht abgeschlossen";
   if (status === "cancelled") return "Abgebrochen";

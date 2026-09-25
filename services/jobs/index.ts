@@ -37,6 +37,28 @@ export async function updateJobStatus(
   });
 }
 
+export async function setJobExecution(input: {
+  organizationId: string;
+  jobId: string;
+  status: JobStatus;
+  resumeState?: string | null;
+  pauseReason?: string | null;
+  scheduledAt?: Date | null;
+  completedAt?: Date | null;
+}) {
+  assertOrganizationId(input.organizationId);
+  return prisma.job.updateMany({
+    where: { id: input.jobId, organizationId: input.organizationId },
+    data: {
+      status: input.status,
+      ...(input.resumeState !== undefined ? { resumeState: input.resumeState } : {}),
+      ...(input.pauseReason !== undefined ? { pauseReason: input.pauseReason } : {}),
+      ...(input.scheduledAt !== undefined ? { scheduledAt: input.scheduledAt } : {}),
+      ...(input.completedAt !== undefined ? { completedAt: input.completedAt } : {}),
+    },
+  });
+}
+
 export async function addJobStep(input: {
   organizationId: string;
   jobId: string;

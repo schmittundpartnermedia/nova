@@ -19,6 +19,7 @@ const PALETTES: Record<OrbState, Palette> = {
   WORKING: { a: [110, 170, 230], b: [210, 230, 255], c: [40, 80, 140], speed: 1.35, amp: 0.09, glow: 0.62 },
   SPEAKING: { a: [120, 190, 230], b: [230, 245, 255], c: [40, 90, 140], speed: 1.05, amp: 0.055, glow: 0.58 },
   WAITING_FOR_APPROVAL: { a: [220, 176, 110], b: [250, 230, 190], c: [120, 80, 30], speed: 0.85, amp: 0.05, glow: 0.55 },
+  WAITING_FOR_REVIEW: { a: [220, 176, 110], b: [250, 230, 190], c: [120, 80, 30], speed: 0.85, amp: 0.05, glow: 0.55 },
   DONE: { a: [150, 200, 160], b: [230, 245, 220], c: [50, 110, 70], speed: 0.9, amp: 0.04, glow: 0.5 },
   ERROR: { a: [190, 110, 110], b: [240, 210, 210], c: [90, 40, 40], speed: 0.95, amp: 0.07, glow: 0.45 },
 };

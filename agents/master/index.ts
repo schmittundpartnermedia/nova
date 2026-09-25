@@ -15,6 +15,8 @@ import { detectCalendarIntent } from "@/agents/calendar/intent";
 import { detectWatchIntent } from "@/agents/watch/intent";
 import { detectContactIntent } from "@/agents/contacts/intent";
 import { detectTicketIntent, guessTicketTitle } from "@/agents/tickets/intent";
+import { fileArtifact } from "@/services/artifacts";
+import { handleReviewUtterance } from "@/services/review/handle";
 import { detectMailIntent } from "@/lib/mail/intent";
 import { createApprovalRequest, standingApprovalAllows, consumeStandingApproval } from "@/services/approvals";
 import { isRealConnectorEnabled } from "@/connectors/registry";
@@ -283,6 +285,26 @@ export async function runMaster(input: {
 }): Promise<MasterRunResult> {
   bootstrapAgents();
   await emit(input.onEvent, { type: "status", orbState: "THINKING", statusMessage: "Ich denke nach …" });
+
+  const reviewHit = await handleReviewUtterance({
+    organizationId: input.organizationId,
+    userRequest: input.userRequest,
+  });
+  if (reviewHit) {
+    await emit(input.onEvent, {
+      type: "status",
+      orbState: reviewHit.orbState,
+      statusMessage: reviewHit.statusMessage,
+    });
+    if (reviewHit.reply) await emit(input.onEvent, { type: "delta", delta: reviewHit.reply });
+    return {
+      ...reviewHit,
+      mock: false,
+      providerMode: "fallback",
+      providerId: "nova-review",
+      model: "nova-review",
+    };
+  }
 
   const dialog = detectDialogMove(input.userRequest);
   const computerIntent = detectComputerIntent(input.userRequest);
@@ -877,12 +899,35 @@ ${input.userRequest}`,
 
   const researchUnavailable = researchBlocked || researchFailed;
   const researchOnly = Boolean(researchAnswer) && communicationIds.length === 0 && !wantsExternal;
+  let filingNote = "";
+  let reviewWaiting = false;
+  if (researchAnswer && !researchUnavailable) {
+    try {
+      const filed = await fileArtifact({
+        organizationId: input.organizationId,
+        jobId: job.id,
+        projectId: project?.id,
+        type: "RESEARCH_REPORT",
+        title: goal.slice(0, 80),
+        description: input.userRequest.slice(0, 240),
+        body: `# ${goal}\n\n${researchAnswer}\n`,
+        source: "research",
+        openReview: communicationIds.length === 0,
+        metadata: { userRequest: input.userRequest },
+      });
+      filingNote = filed.message;
+      reviewWaiting = Boolean(filed.reviewSessionId);
+      if (filingNote) agentNotes.push(filingNote);
+    } catch (error) {
+      filingNote = error instanceof Error ? error.message : "Ablage fehlgeschlagen.";
+    }
+  }
   let reply = "";
   if (researchUnavailable && communicationIds.length === 0) {
     reply = "Ich kann die aktuelle Information gerade nicht zuverlässig prüfen.";
     await emit(input.onEvent, { type: "delta", delta: reply });
   } else if (researchOnly) {
-    reply = researchAnswer;
+    reply = filingNote ? `${researchAnswer}\n\n${filingNote}` : researchAnswer;
     await emit(input.onEvent, { type: "delta", delta: reply });
   } else {
     reply = await collectStream({
@@ -929,6 +974,11 @@ Formuliere die Nutzerantwort. Wenn ein Entwurf erzeugt wurde, zeige ihn.${
         void emit(input.onEvent, { type: "delta", delta });
       },
     });
+    if (filingNote) {
+      const extra = `\n\n${filingNote}`;
+      reply += extra;
+      await emit(input.onEvent, { type: "delta", delta: extra });
+    }
   }
 
   if (memoryItems.length === 0 && plan.remember) {
@@ -970,7 +1020,11 @@ Formuliere die Nutzerantwort. Wenn ein Entwurf erzeugt wurde, zeige ihn.${
     }
   }
 
-  if (!wantsExternal || communicationIds.length === 0) {
+  if (reviewWaiting) {
+    orbState = "WAITING_FOR_REVIEW";
+    statusMessage = "Das Ergebnis liegt zur Prüfung bereit.";
+    await updateJobStatus(input.organizationId, job.id, "waiting_for_review");
+  } else if (!wantsExternal || communicationIds.length === 0) {
     await updateJobStatus(input.organizationId, job.id, "completed", { completedAt: new Date() });
   }
 
@@ -983,7 +1037,11 @@ Formuliere die Nutzerantwort. Wenn ein Entwurf erzeugt wurde, zeige ihn.${
 
   return {
     jobId: job.id,
-    status: orbState === "WAITING_FOR_APPROVAL" ? "waiting_for_approval" : "completed",
+    status: reviewWaiting
+      ? "waiting_for_review"
+      : orbState === "WAITING_FOR_APPROVAL"
+        ? "waiting_for_approval"
+        : "completed",
     orbState,
     statusMessage,
     reply,

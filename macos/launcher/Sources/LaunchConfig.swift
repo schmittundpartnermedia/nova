@@ -20,6 +20,8 @@ enum SupervisorState: String {
     case waitingApplicationHealth
     case startingDesktopService
     case waitingDesktopHealth
+    case startingWorker
+    case waitingWorkerHealth
     case checkingNativeHelper
     case ready
     case startFailed
@@ -72,6 +74,14 @@ struct LaunchConfig {
         novaDir.appendingPathComponent("desktop-service.pid")
     }
 
+    var workerPidFile: URL {
+        novaDir.appendingPathComponent("worker.pid")
+    }
+
+    var workerHeartbeatFile: URL {
+        novaDir.appendingPathComponent("worker.heartbeat")
+    }
+
     var launcherPidFile: URL {
         novaDir.appendingPathComponent("launcher.pid")
     }
@@ -110,6 +120,10 @@ struct LaunchConfig {
 
     var desktopLogFile: URL {
         logDir.appendingPathComponent("desktop-service.log")
+    }
+
+    var workerLogFile: URL {
+        logDir.appendingPathComponent("worker.log")
     }
 
     var volumeRoot: URL? {

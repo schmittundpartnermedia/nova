@@ -12,6 +12,7 @@ NOVA.app
     → CHECKING_RUNTIME
     → Application Service  (Next.js auf 127.0.0.1:3100, Health: /api/nova/ready)
     → Desktop Service      (127.0.0.1:47821 /health)
+    → Worker               (Heartbeat `.nova/worker.heartbeat`, überlebt das Schließen des Fensters)
     → Native Helper        (bestehendes signiertes Helper-Bundle)
   → NOVA UI                (bestehende Oberfläche, kein neues Frontend)
 ```
@@ -53,7 +54,7 @@ Bundle Identifier: `io.elevum.nova`
 
 ## App-Icon
 
-Aktuelles Icon: Navy-Quadrat mit Cyan-Aura und der Schrift **NOVA**, in den Farben der Oberfläche.
+Aktuelles Icon: schwarzes Quadrat mit weißer Schrift **NOVA**, ohne Farbakzent.
 
 **Dateien:**
 
@@ -70,9 +71,12 @@ Lokal, ohne Secrets:
 - `.nova/logs/launcher.log`
 - `.nova/logs/nova-web.log`
 - `.nova/logs/desktop-service.log`
+- `.nova/logs/worker.log`
 
 Startfehler nennen den Supervisor-Zustand, PID, Executable, cwd und den letzten Logausschnitt. Secrets werden redigiert.
 
 ## Beenden
 
 NOVA.app beendet nur Prozesse, die diese Session selbst gestartet hat. Bereits laufende gesunde Dienste werden wiederverwendet und beim Quit nicht angefasst.
+
+Das Schließen des NOVA-Fensters beendet die App nicht. Application Service, Desktop Service und Worker laufen weiter, damit freigegebene Jobs nicht am offenen Fenster hängen. Ein explizites Beenden fährt die selbst gestarteten Prozesse herunter.

@@ -5,6 +5,7 @@ export type OrbState =
   | "WORKING"
   | "SPEAKING"
   | "WAITING_FOR_APPROVAL"
+  | "WAITING_FOR_REVIEW"
   | "DONE"
   | "ERROR";
 
@@ -13,6 +14,8 @@ export type JobStatus =
   | "planning"
   | "running"
   | "waiting_for_approval"
+  | "waiting_for_review"
+  | "paused"
   | "completed"
   | "failed"
   | "cancelled";
@@ -38,7 +41,10 @@ export type ActivityType =
   | "computer"
   | "coding"
   | "knowledge"
-  | "mail";
+  | "mail"
+  | "artifact"
+  | "review"
+  | "workspace";
 
 export type ApprovalStatus = "pending" | "approved" | "rejected";
 

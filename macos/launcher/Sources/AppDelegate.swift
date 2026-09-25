@@ -81,7 +81,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
-        uiReady && !showingError && !shuttingDown
+        false
     }
 
     private func bootstrap() {
