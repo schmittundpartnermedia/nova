@@ -324,6 +324,10 @@ export async function runMaster(input: {
     return runKnowledgeMasterPath(input, knowledgeIntent.statusMessage);
   }
 
+  if (dialog.kind !== "social" && knowledgeIntent.kind === "query") {
+    return runKnowledgeQueryPath(input, knowledgeIntent.statusMessage);
+  }
+
   if (dialog.kind !== "social" && computerIntent.kind !== "none") {
     return runComputerMasterPath(input, computerIntent.statusMessage);
   }
@@ -1001,6 +1005,38 @@ Formuliere die Nutzerantwort. Wenn ein Entwurf erzeugt wurde, zeige ihn.${
     await updateJobStatus(input.organizationId, job.id, "failed", { completedAt: new Date() });
     throw error;
   }
+}
+
+async function runKnowledgeQueryPath(
+  input: {
+    organizationId: string;
+    userRequest: string;
+    conversationId?: string;
+    sourceMessageId?: string;
+    onEvent?: (event: MasterEvent) => void;
+  },
+  statusMessage: string,
+): Promise<MasterRunResult> {
+  await emit(input.onEvent, { type: "status", orbState: "THINKING", statusMessage });
+  const result = await runKnowledgeAgent({
+    organizationId: input.organizationId,
+    userRequest: input.userRequest,
+    query: input.userRequest,
+  });
+  if (result.reply) {
+    await emit(input.onEvent, { type: "delta", delta: result.reply });
+  }
+  return {
+    jobId: "",
+    status: "completed",
+    orbState: "DONE",
+    statusMessage: result.statusMessage,
+    reply: result.reply,
+    mock: false,
+    providerMode: "fallback",
+    providerId: "knowledge",
+    model: "nova-knowledge",
+  };
 }
 
 async function runKnowledgeMasterPath(

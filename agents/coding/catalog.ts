@@ -110,7 +110,9 @@ async function findExisting(organizationId: string, hint: string | undefined, na
 }
 
 function extractExplicitPath(request: string): string | undefined {
-  const match = request.match(/(?:^|[\s"'`])(\/(?:tmp|Users|Volumes|home)\/[^\s"'`]+)/);
+  const match = request.match(
+    /(?:^|[\s"'`])(\/(?:tmp|var\/folders|private\/var\/folders|Users|Volumes|home)\/[^\s"'`]+)/,
+  );
   const candidate = match?.[1];
   if (!candidate) return undefined;
   const resolved = path.resolve(candidate);
@@ -119,7 +121,8 @@ function extractExplicitPath(request: string): string | undefined {
 }
 
 function inferHint(request: string): string | undefined {
-  const lower = request.toLowerCase();
+  const withoutPaths = request.replace(/(?:^|[\s"'`])\/[^\s"'`]+/g, " ");
+  const lower = withoutPaths.toLowerCase();
   return ALIASES.find((item) => item.names.some((name) => lower.includes(name)))?.key;
 }
 

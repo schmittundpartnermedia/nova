@@ -211,6 +211,11 @@ export function pageConsoleEntries(page: Page): BrowserConsoleEntry[] {
   return [...(pageConsole.get(page) ?? [])];
 }
 
+export function clearPageConsole(page: Page): void {
+  const entries = pageConsole.get(page);
+  if (entries) entries.length = 0;
+}
+
 function bindPage(page: Page): void {
   page.removeAllListeners("download");
   page.on("download", (download) => {

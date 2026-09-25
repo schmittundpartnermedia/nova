@@ -72,12 +72,11 @@ export async function upsertDurableMemory(input: SaveMemoryInput) {
   });
 
   if (existing) {
-    const sameContent = existing.content === content;
     const updated = await prisma.memoryEntry.update({
       where: { id: existing.id },
       data: {
-        content: sameContent ? existing.content : content,
-        fulltext: memoryFulltext({ ...input, title, content: sameContent ? existing.content : content }),
+        content,
+        fulltext: memoryFulltext({ ...input, title, content }),
         sourceId: input.sourceId ?? existing.sourceId,
         sourceType: input.sourceType,
         sourceReference: input.sourceReference ?? existing.sourceReference,
@@ -89,16 +88,13 @@ export async function upsertDurableMemory(input: SaveMemoryInput) {
         version: { increment: 1 },
       },
     });
-    if (!sameContent || !updated.embeddingRef) {
-      await indexMemoryEmbedding({
-        organizationId: input.organizationId,
-        memoryId: updated.id,
-        title: updated.title,
-        content: updated.content,
-      }).catch(() => undefined);
-      return prisma.memoryEntry.findFirstOrThrow({ where: { id: updated.id, organizationId: input.organizationId } });
-    }
-    return updated;
+    await indexMemoryEmbedding({
+      organizationId: input.organizationId,
+      memoryId: updated.id,
+      title: updated.title,
+      content: updated.content,
+    }).catch(() => undefined);
+    return prisma.memoryEntry.findFirstOrThrow({ where: { id: updated.id, organizationId: input.organizationId } });
   }
 
   return saveMemory({ ...input, title, content });

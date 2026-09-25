@@ -1,4 +1,4 @@
-import { chromium, type Browser } from "playwright";
+import type { Browser } from "playwright";
 import { wrapExternalContent } from "@/lib/computer/injection";
 import { applyPlaywrightBrowsersPath } from "@/lib/computer/config";
 import { extractHtmlContent } from "@/lib/research/html";
@@ -15,6 +15,7 @@ export class ResearchPlaywrightFetcher {
     applyPlaywrightBrowsersPath();
     try {
       if (!this.browser) {
+        const { chromium } = await import("playwright");
         this.browser = await chromium.launch({
           headless: true,
           args: ["--disable-dev-shm-usage"],

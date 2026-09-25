@@ -26,6 +26,7 @@ import {
   ensureBrowserSession,
   getActivePage,
   listBrowserTabs,
+  clearPageConsole,
   openBrowserTab,
   pageConsoleEntries,
   persistDownload,
@@ -175,6 +176,7 @@ async function handleNavigate(
   const blocked = approvalIfNeeded(action, url, startedAt, approvalToken);
   if (blocked) return blocked;
   const { page } = await ensureBrowserSession();
+  clearPageConsole(page);
   const before = await snapshot(page);
   const response = await page.goto(allowed.url, { waitUntil: "domcontentloaded", timeout: NAV_TIMEOUT_MS });
   await page.waitForLoadState("domcontentloaded").catch(() => undefined);

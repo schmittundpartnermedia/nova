@@ -480,14 +480,16 @@ export function NovaShell() {
     }
   }, []);
 
-  watchSpeakRef.current = {
-    voiceEnabled,
-    idle: orbState === "IDLE" || orbState === "LISTENING",
-    speechPlaying,
-    busy,
-    beginTurn,
-    flush,
-  };
+  useEffect(() => {
+    watchSpeakRef.current = {
+      voiceEnabled,
+      idle: orbState === "IDLE" || orbState === "LISTENING",
+      speechPlaying,
+      busy,
+      beginTurn,
+      flush,
+    };
+  }, [beginTurn, busy, flush, orbState, speechPlaying, voiceEnabled]);
 
   const applyStatusPayload = useCallback(
     (data: {
