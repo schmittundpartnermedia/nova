@@ -358,9 +358,7 @@ func captureScreen() -> [String: Any] {
 }
 
 func automationTrusted() -> Bool {
-    guard let target = NSAppleEventDescriptor(bundleIdentifier: "com.apple.systemevents") else {
-        return false
-    }
+    let target = NSAppleEventDescriptor(bundleIdentifier: "com.apple.systemevents")
     let status = AEDeterminePermissionToAutomateTarget(
         target.aeDesc,
         typeWildCard,

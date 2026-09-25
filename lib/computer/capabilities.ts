@@ -68,7 +68,17 @@ async function signNativeHelper(appPath: string): Promise<{ ok: boolean; reason:
   return { ok: true, reason: `Native Helper signiert mit ${identity.identity}.` };
 }
 
-export async function buildNativeHelper(): Promise<{ ok: boolean; reason: string }> {
+let helperBuildInFlight: Promise<{ ok: boolean; reason: string }> | null = null;
+
+export function buildNativeHelper(): Promise<{ ok: boolean; reason: string }> {
+  if (helperBuildInFlight) return helperBuildInFlight;
+  helperBuildInFlight = buildNativeHelperOnce().finally(() => {
+    helperBuildInFlight = null;
+  });
+  return helperBuildInFlight;
+}
+
+async function buildNativeHelperOnce(): Promise<{ ok: boolean; reason: string }> {
   if (os.platform() !== "darwin") {
     return { ok: false, reason: "Native Helper nur auf macOS." };
   }
@@ -80,16 +90,17 @@ export async function buildNativeHelper(): Promise<{ ok: boolean; reason: string
   if (!fs.existsSync(infoPlist)) {
     return { ok: false, reason: "Info.plist für den Native Helper fehlt." };
   }
-  const appPath = helperAppPath();
-  const bin = helperBinaryPath();
-  const macosDir = path.dirname(bin);
-  const contentsDir = path.dirname(macosDir);
-  fs.mkdirSync(macosDir, { recursive: true });
-  fs.copyFileSync(infoPlist, path.join(contentsDir, "Info.plist"));
+  const liveApp = helperAppPath();
+  const stagingRoot = path.join(path.dirname(liveApp), `.helper-staging-${process.pid}`);
+  const stagingApp = path.join(stagingRoot, HELPER_APP_NAME);
+  const stagingBin = path.join(stagingApp, "Contents/MacOS/nova-desktop-helper");
+  fs.rmSync(stagingRoot, { recursive: true, force: true });
+  fs.mkdirSync(path.dirname(stagingBin), { recursive: true });
+  fs.copyFileSync(infoPlist, path.join(stagingApp, "Contents/Info.plist"));
   const args = [
     "-O",
     "-o",
-    bin,
+    stagingBin,
     source,
     "-Xlinker",
     "-sectcreate",
@@ -114,10 +125,27 @@ export async function buildNativeHelper(): Promise<{ ok: boolean; reason: string
   ];
   const result = await runProcess("/usr/bin/swiftc", args, 90_000);
   if (result.code !== 0) {
+    fs.rmSync(stagingRoot, { recursive: true, force: true });
     return { ok: false, reason: result.stderr.slice(0, 500) || "swiftc fehlgeschlagen." };
   }
-  const signed = await signNativeHelper(appPath);
-  if (!signed.ok) return signed;
+  const signed = await signNativeHelper(stagingApp);
+  if (!signed.ok) {
+    fs.rmSync(stagingRoot, { recursive: true, force: true });
+    return signed;
+  }
+  const backup = path.join(path.dirname(liveApp), `.helper-previous-${process.pid}`);
+  fs.rmSync(backup, { recursive: true, force: true });
+  try {
+    if (fs.existsSync(liveApp)) fs.renameSync(liveApp, backup);
+    fs.renameSync(stagingApp, liveApp);
+  } catch (error) {
+    if (!fs.existsSync(liveApp) && fs.existsSync(backup)) fs.renameSync(backup, liveApp);
+    fs.rmSync(stagingRoot, { recursive: true, force: true });
+    const message = error instanceof Error ? error.message : "Austausch fehlgeschlagen.";
+    return { ok: false, reason: message };
+  }
+  fs.rmSync(stagingRoot, { recursive: true, force: true });
+  fs.rmSync(backup, { recursive: true, force: true });
   return { ok: true, reason: signed.reason };
 }
 
