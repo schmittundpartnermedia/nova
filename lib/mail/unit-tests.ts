@@ -14,6 +14,8 @@ import {
   inboxMetadataScript,
   mailMutationPolicy,
   mergeAppleCursor,
+  mergeAppleIdentityHeaders,
+  messageDetailScript,
   parseAppleCursor,
   replyDraftScript,
   threadKey,
@@ -114,7 +116,18 @@ export function runMailUnitTests(): string[] {
     const script = inboxMetadataScript("account-1", 4);
     assert.equal(assertMailScriptSafe(script).ok, true);
     assert.equal(assertMailScriptSafe('tell application "Mail" to get password of account 1').ok, false);
-    assert.equal(/\bsend\b/.test(replyDraftScript({ accountId: "a", mailbox: "INBOX", messageId: "1", body: "Hallo", replyAll: false })), false);
+    const detail = messageDetailScript("account-1", "INBOX", "61745", "<m@x>");
+    assert.equal(detail.includes("first message of mailbox"), false);
+    assert.match(detail, /first message of novaBox whose id is 61745/);
+    assert.match(detail, /whose message id is/);
+    assert.equal(/\bmessage \d+ of\b/.test(detail), false);
+    const reply = replyDraftScript({ accountId: "a", mailbox: "INBOX", messageId: "1", body: "Hallo", replyAll: false, internetMessageId: "<m@x>" });
+    assert.equal(/\bsend\b/.test(reply), false);
+    assert.match(reply, /whose message id is/);
+    const headers = mergeAppleIdentityHeaders({ "message-id": "<m@x>" }, ["61745", "61760"], "present");
+    assert.equal(headers["x-nova-presence"], "present");
+    assert.match(headers["x-nova-apple-ids"], /apple-id:61745/);
+    assert.match(headers["x-nova-apple-ids"], /apple-id:61760/);
     assert.equal(accountEmail("", "ABC").endsWith("@apple-mail.local"), true);
     assert.equal(threadKey({ messageId: "<m@x>", inReplyTo: "<p@x>", references: "<root@x>", appleId: "1" }).basis, "references");
     assert.equal(threadKey({ messageId: "<m@x>", appleId: "1" }).key, "<m@x>");

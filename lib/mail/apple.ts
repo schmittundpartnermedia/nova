@@ -218,6 +218,71 @@ function idClause(id: string): string {
   return /^\d+$/.test(id) ? id : quoted(id);
 }
 
+export function appleIdentityToken(id: string): string {
+  const trimmed = id.trim();
+  return trimmed ? `apple-id:${trimmed}` : "";
+}
+
+export function mergeAppleIdentityHeaders(
+  headers: Record<string, string>,
+  ids: string[],
+  presence: "present" | "missing",
+): Record<string, string> {
+  const tokens = new Set(
+    (headers["x-nova-apple-ids"] ?? "")
+      .split(",")
+      .map((item) => item.trim())
+      .filter((item) => item.startsWith("apple-id:")),
+  );
+  for (const id of ids) {
+    const token = appleIdentityToken(id);
+    if (token) tokens.add(token);
+  }
+  const current = [...ids].reverse().find((id) => id.trim()) ?? headers["x-nova-apple-id"] ?? "";
+  return {
+    ...headers,
+    "x-nova-apple-id": current,
+    "x-nova-apple-ids": [...tokens].slice(-8).join(","),
+    "x-nova-presence": presence,
+  };
+}
+
+function messageResolver(mailbox: string, messageId: string, internetMessageId = ""): string {
+  const header = internetMessageId.trim().slice(0, 500);
+  return `
+  set novaMessage to missing value
+  set novaMailbox to ""
+  set novaBox to missing value
+  if ${quoted(mailbox)} is not "" then
+    repeat with b in mailboxes of a
+      if (name of b as text) is ${quoted(mailbox)} then
+        set novaBox to b
+        exit repeat
+      end if
+    end repeat
+  end if
+  if novaBox is not missing value and ${quoted(messageId)} is not "" then
+    try
+      set novaMessage to first message of novaBox whose id is ${idClause(messageId)}
+      set novaMailbox to name of novaBox as text
+    end try
+  end if
+  if novaMessage is missing value and ${quoted(header)} is not "" then
+    repeat with b in mailboxes of a
+      try
+        set novaHits to messages of b whose message id is ${quoted(header)}
+        if (count of novaHits) > 0 then
+          set novaMessage to item 1 of novaHits
+          set novaMailbox to name of b as text
+          exit repeat
+        end if
+      end try
+    end repeat
+  end if
+  if novaMessage is missing value then error "nova-message-missing"
+  set m to novaMessage`;
+}
+
 export function accountListScript(): string {
   return `${SCRIPT_HELPER}
 tell application "Mail"
@@ -278,7 +343,7 @@ tell application "Mail"
         try
           set mid to message id of m
         end try
-        set out to out & (id of m as text) & sep & "INBOX" & sep & my novaClean(sender of m) & sep & my novaClean(subject of m) & sep & my novaStamp(date received of m) & sep & (read status of m as text) & sep & my novaClean(mid) & rec
+        set out to out & (id of m as text) & sep & my novaClean(name of box) & sep & my novaClean(sender of m) & sep & my novaClean(subject of m) & sep & my novaStamp(date received of m) & sep & (read status of m as text) & sep & my novaClean(mid) & rec
       end repeat
     end if
   end try
@@ -305,13 +370,13 @@ tell application "Mail"
 end tell`;
 }
 
-export function messageDetailScript(accountId: string, mailbox: string, messageId: string): string {
+export function messageDetailScript(accountId: string, mailbox: string, messageId: string, internetMessageId = ""): string {
   return `${SCRIPT_HELPER}
 tell application "Mail"
   set sep to character id 31
   set rec to character id 30
   set a to first account whose id is ${quoted(accountId)}
-  set m to first message of mailbox ${quoted(mailbox)} of a whose id is ${idClause(messageId)}
+  ${messageResolver(mailbox, messageId, internetMessageId)}
   set mid to ""
   set inReply to ""
   set refs to ""
@@ -391,7 +456,7 @@ tell application "Mail"
     set bodyText to content of m as text
     if (length of bodyText) > 20000 then set bodyText to text 1 thru 20000 of bodyText
   end try
-  return (id of m as text) & sep & my novaClean(mid) & sep & my novaClean(sender of m) & sep & my novaClean(subject of m) & sep & my novaStamp(date received of m) & sep & (read status of m as text) & sep & my novaClean(tos) & sep & my novaClean(ccs) & sep & my novaClean(bccs) & sep & my novaClean(inReply) & sep & my novaClean(refs) & sep & atts & rec & my novaFlat(bodyText)
+  return (id of m as text) & sep & my novaClean(mid) & sep & my novaClean(sender of m) & sep & my novaClean(subject of m) & sep & my novaStamp(date received of m) & sep & (read status of m as text) & sep & my novaClean(tos) & sep & my novaClean(ccs) & sep & my novaClean(bccs) & sep & my novaClean(inReply) & sep & my novaClean(refs) & sep & atts & sep & my novaClean(novaMailbox) & rec & my novaFlat(bodyText)
 end tell`;
 }
 
@@ -403,19 +468,25 @@ tell application "Mail"
   set rec to character id 30
   set out to ""
   set a to first account whose id is ${quoted(accountId)}
-  if exists mailbox "INBOX" of a then
-    set hits to messages of mailbox "INBOX" of a whose subject contains ${quoted(needle)}
-    set takeN to count of hits
-    if takeN > 3 then set takeN to 3
-    repeat with i from 1 to takeN
-      set m to item i of hits
-      set mid to ""
-      try
-        set mid to message id of m
-      end try
-      set out to out & (id of m as text) & sep & "INBOX" & sep & my novaClean(sender of m) & sep & my novaClean(subject of m) & sep & my novaStamp(date received of m) & sep & (read status of m as text) & sep & my novaClean(mid) & rec
-    end repeat
-  end if
+  set seen to 0
+  repeat with b in mailboxes of a
+    if seen ≥ 3 then exit repeat
+    try
+      set hits to messages of b whose subject contains ${quoted(needle)}
+      set takeN to count of hits
+      if takeN > 3 then set takeN to 3
+      repeat with i from 1 to takeN
+        if seen ≥ 3 then exit repeat
+        set m to item i of hits
+        set mid to ""
+        try
+          set mid to message id of m
+        end try
+        set out to out & (id of m as text) & sep & my novaClean(name of b) & sep & my novaClean(sender of m) & sep & my novaClean(subject of m) & sep & my novaStamp(date received of m) & sep & (read status of m as text) & sep & my novaClean(mid) & rec
+        set seen to seen + 1
+      end repeat
+    end try
+  end repeat
   return out
 end tell`;
 }
@@ -437,22 +508,30 @@ export function replyDraftScript(input: {
   messageId: string;
   body: string;
   replyAll: boolean;
+  internetMessageId?: string;
 }): string {
   return `${SCRIPT_HELPER}
 tell application "Mail"
   set a to first account whose id is ${quoted(input.accountId)}
-  set m to first message of mailbox ${quoted(input.mailbox)} of a whose id is ${idClause(input.messageId)}
+  ${messageResolver(input.mailbox, input.messageId, input.internetMessageId)}
   set theReply to reply m opening window false reply to all ${input.replyAll ? "true" : "false"}
   set content of theReply to ${quoted(input.body)}
   return id of theReply as text
 end tell`;
 }
 
-export function forwardDraftScript(input: { accountId: string; mailbox: string; messageId: string; to: string; body: string }): string {
+export function forwardDraftScript(input: {
+  accountId: string;
+  mailbox: string;
+  messageId: string;
+  to: string;
+  body: string;
+  internetMessageId?: string;
+}): string {
   return `${SCRIPT_HELPER}
 tell application "Mail"
   set a to first account whose id is ${quoted(input.accountId)}
-  set m to first message of mailbox ${quoted(input.mailbox)} of a whose id is ${idClause(input.messageId)}
+  ${messageResolver(input.mailbox, input.messageId, input.internetMessageId)}
   set theForward to forward m opening window false
   set content of theForward to ${quoted(input.body)}
   tell theForward
@@ -469,11 +548,12 @@ export function forwardSendScript(input: {
   to: string;
   body: string;
   sender: string;
+  internetMessageId?: string;
 }): string {
   return `${SCRIPT_HELPER}
 tell application "Mail"
   set a to first account whose id is ${quoted(input.accountId)}
-  set m to first message of mailbox ${quoted(input.mailbox)} of a whose id is ${idClause(input.messageId)}
+  ${messageResolver(input.mailbox, input.messageId, input.internetMessageId)}
   set theForward to forward m opening window false
   set content of theForward to ${quoted(input.body)}
   tell theForward
@@ -494,11 +574,12 @@ export function replySendScript(input: {
   body: string;
   replyAll: boolean;
   sender: string;
+  internetMessageId?: string;
 }): string {
   return `${SCRIPT_HELPER}
 tell application "Mail"
   set a to first account whose id is ${quoted(input.accountId)}
-  set m to first message of mailbox ${quoted(input.mailbox)} of a whose id is ${idClause(input.messageId)}
+  ${messageResolver(input.mailbox, input.messageId, input.internetMessageId)}
   set theReply to reply m opening window false reply to all ${input.replyAll ? "true" : "false"}
   set content of theReply to ${quoted(input.body)}
   try
@@ -554,16 +635,17 @@ tell application "Mail"
 end tell`;
 }
 
-export function markReadScript(accountId: string, mailbox: string, messageId: string): string {
+export function markReadScript(accountId: string, mailbox: string, messageId: string, internetMessageId = ""): string {
   return `
 tell application "Mail"
   set a to first account whose id is ${quoted(accountId)}
-  set read status of (first message of mailbox ${quoted(mailbox)} of a whose id is ${idClause(messageId)}) to true
-  return "ok"
+  ${messageResolver(mailbox, messageId, internetMessageId)}
+  set read status of m to true
+  return (id of m as text) & character id 31 & novaMailbox
 end tell`;
 }
 
-export function archiveScript(accountId: string, mailbox: string, messageId: string): string {
+export function archiveScript(accountId: string, mailbox: string, messageId: string, internetMessageId = ""): string {
   return `
 tell application "Mail"
   set a to first account whose id is ${quoted(accountId)}
@@ -573,9 +655,13 @@ tell application "Mail"
     if n is "Archive" or n is "Archiv" or n is "Alle Nachrichten" then set targetBox to b
   end repeat
   if targetBox is missing value then return "missing-archive"
-  set m to first message of mailbox ${quoted(mailbox)} of a whose id is ${idClause(messageId)}
+  ${messageResolver(mailbox, messageId, internetMessageId)}
   move m to targetBox
-  return "ok"
+  set novaMoved to ""
+  try
+    set novaMoved to id of m as text
+  end try
+  return novaMoved & character id 31 & (name of targetBox as text)
 end tell`;
 }
 
@@ -598,11 +684,12 @@ export function saveAttachmentScript(input: {
   messageId: string;
   attachmentId: string;
   destination: string;
+  internetMessageId?: string;
 }): string {
   return `${SCRIPT_HELPER}
 tell application "Mail"
   set a to first account whose id is ${quoted(input.accountId)}
-  set m to first message of mailbox ${quoted(input.mailbox)} of a whose id is ${idClause(input.messageId)}
+  ${messageResolver(input.mailbox, input.messageId, input.internetMessageId)}
   repeat with att in mail attachments of m
     if (id of att as text) is ${quoted(input.attachmentId)} then
       save att in POSIX file ${quoted(input.destination)}

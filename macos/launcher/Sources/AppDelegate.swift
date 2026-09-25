@@ -51,9 +51,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
-        if uiReady {
+        if uiReady, webWindow?.window != nil {
             webWindow?.window?.makeKeyAndOrderFront(nil)
             NSApp.activate(ignoringOtherApps: true)
+            return true
+        }
+        if uiReady {
+            openUI()
             return true
         }
         workQueue.async { [weak self] in
@@ -137,7 +141,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             uiReady = true
             NSWorkspace.shared.open(config.webURL)
         case .webview:
-            if webWindow?.pageURL != config.webURL {
+            if webWindow?.window == nil || webWindow?.pageURL != config.webURL {
                 webWindow?.close()
                 webWindow = nil
             }

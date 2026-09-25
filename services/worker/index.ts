@@ -23,29 +23,32 @@ function loadProjectEnv() {
 
 loadProjectEnv();
 
-const { tickWorker, writeWorkerHeartbeat } = await import("@/services/worker/runtime");
+async function main() {
+  const { tickWorker, writeWorkerHeartbeat } = await import("@/services/worker/runtime");
+  let stopping = false;
+  const workerId = `nova-worker-${process.pid}`;
 
-let stopping = false;
-const workerId = `nova-worker-${process.pid}`;
-
-function shutdown() {
-  stopping = true;
-}
-
-process.on("SIGINT", shutdown);
-process.on("SIGTERM", shutdown);
-
-writeWorkerHeartbeat();
-const heartbeat = setInterval(() => writeWorkerHeartbeat(), 5_000);
-
-while (!stopping) {
-  try {
-    await tickWorker(workerId);
-  } catch (error) {
-    console.error(error instanceof Error ? error.message : "Worker-Tick fehlgeschlagen");
+  function shutdown() {
+    stopping = true;
   }
-  await new Promise((resolve) => setTimeout(resolve, 2_000));
+
+  process.on("SIGINT", shutdown);
+  process.on("SIGTERM", shutdown);
+
+  writeWorkerHeartbeat();
+  const heartbeat = setInterval(() => writeWorkerHeartbeat(), 5_000);
+
+  while (!stopping) {
+    try {
+      await tickWorker(workerId);
+    } catch (error) {
+      console.error(error instanceof Error ? error.message : "Worker-Tick fehlgeschlagen");
+    }
+    await new Promise((resolve) => setTimeout(resolve, 2_000));
+  }
+
+  clearInterval(heartbeat);
+  process.exit(0);
 }
 
-clearInterval(heartbeat);
-process.exit(0);
+void main();

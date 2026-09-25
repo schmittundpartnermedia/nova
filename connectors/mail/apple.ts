@@ -5,8 +5,10 @@ import { prisma } from "@/lib/prisma";
 import { BaseMailProvider } from "@/connectors/mail/base";
 import { readMailAutomationState, runMailAppleScript } from "@/services/mail/apple-events";
 import {
+  appleIdentityToken,
   appleRefFromCapabilities,
   archiveScript,
+  mergeAppleIdentityHeaders,
   deliveryFromVerification,
   discardOutgoingScript,
   folderRole,
@@ -126,6 +128,72 @@ async function accountContext(organizationId: string, accountId: string) {
   return { account, appleId };
 }
 
+function readHeaders(raw: string): Record<string, string> {
+  try {
+    const parsed = JSON.parse(raw) as Record<string, unknown>;
+    return Object.fromEntries(Object.entries(parsed).map(([key, value]) => [key, String(value ?? "")]));
+  } catch {
+    return {};
+  }
+}
+
+async function loadStoredMessage(organizationId: string, accountId: string, providerMessageId: string) {
+  const token = appleIdentityToken(providerMessageId);
+  return prisma.mailMessage.findFirst({
+    where: {
+      organizationId,
+      accountId,
+      OR: [{ providerMessageId }, ...(token ? [{ headersJson: { contains: token } }] : [])],
+    },
+    orderBy: { updatedAt: "desc" },
+  });
+}
+
+async function rememberMailLocation(
+  row: { id: string; organizationId: string; accountId: string; providerMessageId: string; folder: string; internetMessageId: string | null; headersJson: string },
+  liveId: string,
+  liveMailbox: string,
+  headerId: string,
+) {
+  const headers = readHeaders(row.headersJson);
+  const nextId = liveId || row.providerMessageId;
+  const nextMailbox = liveMailbox || row.folder;
+  const nextHeaders = mergeAppleIdentityHeaders(headers, [row.providerMessageId, nextId], "present");
+  if (headerId) nextHeaders["message-id"] = headerId;
+  if (nextId !== row.providerMessageId) {
+    const occupant = await prisma.mailMessage.findFirst({
+      where: { organizationId: row.organizationId, accountId: row.accountId, providerMessageId: nextId },
+    });
+    if (occupant && occupant.id !== row.id) {
+      await prisma.mailMessage.update({
+        where: { id: row.id },
+        data: { headersJson: JSON.stringify(mergeAppleIdentityHeaders(headers, [row.providerMessageId], "missing")) },
+      });
+      return;
+    }
+  }
+  if (nextId === row.providerMessageId && nextMailbox === row.folder && headers["x-nova-presence"] === "present" && !headerId) return;
+  await prisma.mailMessage.update({
+    where: { id: row.id },
+    data: {
+      providerMessageId: nextId,
+      folder: nextMailbox,
+      internetMessageId: headerId || row.internetMessageId,
+      headersJson: JSON.stringify(nextHeaders),
+    },
+  });
+}
+
+async function markMailMissing(row: { id: string; providerMessageId: string; headersJson: string } | null) {
+  if (!row) return;
+  const headers = readHeaders(row.headersJson);
+  if (headers["x-nova-presence"] === "missing") return;
+  await prisma.mailMessage.update({
+    where: { id: row.id },
+    data: { headersJson: JSON.stringify(mergeAppleIdentityHeaders(headers, [row.providerMessageId], "missing")) },
+  });
+}
+
 export class AppleMailProvider extends BaseMailProvider {
   id = "apple-mail";
   mock = false;
@@ -177,21 +245,34 @@ export class AppleMailProvider extends BaseMailProvider {
     }
     const rows = parseRecords(listed.output);
     const unique = new Map<string, string[]>();
+    const seenHeaders = new Set<string>();
     for (const row of rows) {
-      if (row[0] && !unique.has(row[0])) unique.set(row[0], row);
+      const header = (row[6] ?? "").trim();
+      if (header && seenHeaders.has(header)) continue;
+      if (row[0] && !unique.has(row[0])) {
+        unique.set(row[0], row);
+        if (header) seenHeaders.add(header);
+      }
     }
-    const fresh = [...unique.values()].filter((row) => !known.includes(row[0] ?? "")).slice(0, limit);
+    const fresh = [...unique.values()]
+      .filter((row) => {
+        const appleId = row[0] ?? "";
+        const header = (row[6] ?? "").trim();
+        if (!known.includes(appleId)) return true;
+        return Boolean(header) && !known.includes(`rfc:${header}`);
+      })
+      .slice(0, limit);
     const messages: MailProviderMessage[] = [];
     for (const row of fresh) {
       const mailbox = row[1] || "INBOX";
-      const detail = await runMailAppleScript(messageDetailScript(context.appleId, mailbox, row[0] ?? ""), 20_000);
+      const detail = await runMailAppleScript(messageDetailScript(context.appleId, mailbox, row[0] ?? "", row[6] ?? ""), 20_000);
       if (!detail.ok) continue;
       const parsed = parseDetail(detail.output);
       messages.push(
         toMessage({
           ownAddress: context.account.emailAddress,
           appleId: parsed.fields[0] || row[0] || "",
-          mailbox,
+          mailbox: parsed.fields[12] || mailbox,
           sender: parsed.fields[2] || row[2] || "",
           subject: parsed.fields[3] || row[3] || "",
           stamp: parsed.fields[4] || row[4] || "",
@@ -213,17 +294,24 @@ export class AppleMailProvider extends BaseMailProvider {
   async getMessage(organizationId: string, accountId: string, providerMessageId: string) {
     const context = await accountContext(organizationId, accountId);
     if (!context) return null;
-    const stored = await prisma.mailMessage.findFirst({
-      where: { organizationId, accountId, providerMessageId },
-    });
+    const stored = await loadStoredMessage(organizationId, accountId, providerMessageId);
     const mailbox = stored?.folder || "INBOX";
-    const detail = await runMailAppleScript(messageDetailScript(context.appleId, mailbox, providerMessageId), 20_000);
-    if (!detail.ok) return null;
+    const detail = await runMailAppleScript(
+      messageDetailScript(context.appleId, mailbox, stored?.providerMessageId || providerMessageId, stored?.internetMessageId || ""),
+      20_000,
+    );
+    if (!detail.ok) {
+      if (detail.error.includes("nova-message-missing")) await markMailMissing(stored);
+      return null;
+    }
     const parsed = parseDetail(detail.output);
+    const liveId = parsed.fields[0] || stored?.providerMessageId || providerMessageId;
+    const liveMailbox = parsed.fields[12] || mailbox;
+    if (stored) await rememberMailLocation(stored, liveId, liveMailbox, parsed.fields[1] || stored.internetMessageId || "");
     return toMessage({
       ownAddress: context.account.emailAddress,
-      appleId: parsed.fields[0] || providerMessageId,
-      mailbox,
+      appleId: liveId,
+      mailbox: liveMailbox,
       sender: parsed.fields[2] || "",
       subject: parsed.fields[3] || "",
       stamp: parsed.fields[4] || "",
@@ -253,14 +341,14 @@ export class AppleMailProvider extends BaseMailProvider {
       const listed = await runMailAppleScript(searchInboxScript(appleId, term), 18_000);
       if (!listed.ok) continue;
       for (const row of parseRecords(listed.output).slice(0, 3)) {
-        const detail = await runMailAppleScript(messageDetailScript(appleId, row[1] || "INBOX", row[0] || ""), 18_000);
+        const detail = await runMailAppleScript(messageDetailScript(appleId, row[1] || "INBOX", row[0] || "", row[6] || ""), 18_000);
         if (!detail.ok) continue;
         const parsed = parseDetail(detail.output);
         messages.push(
           toMessage({
             ownAddress: account.emailAddress,
             appleId: parsed.fields[0] || row[0] || "",
-            mailbox: row[1] || "INBOX",
+            mailbox: parsed.fields[12] || row[1] || "INBOX",
             sender: parsed.fields[2] || row[2] || "",
             subject: parsed.fields[3] || row[3] || "",
             stamp: parsed.fields[4] || row[4] || "",
@@ -284,25 +372,26 @@ export class AppleMailProvider extends BaseMailProvider {
   async createDraft(input: MailSendInput): Promise<MailProviderDraft> {
     const context = input.accountId ? await accountContext(input.organizationId, input.accountId) : null;
     const appleId = context?.appleId;
-    const mailbox = input.accountId
-      ? (await prisma.mailMessage.findFirst({
-          where: { organizationId: input.organizationId, accountId: input.accountId, providerMessageId: input.providerMessageId },
-        }))?.folder
-      : undefined;
+    const stored =
+      input.accountId && input.providerMessageId
+        ? await loadStoredMessage(input.organizationId, input.accountId, input.providerMessageId)
+        : null;
     let script: string | null = null;
     if (input.compose === "reply" && appleId && input.providerMessageId) {
       script = replyDraftScript({
         accountId: appleId,
-        mailbox: mailbox || "INBOX",
-        messageId: input.providerMessageId,
+        mailbox: stored?.folder || "INBOX",
+        messageId: stored?.providerMessageId || input.providerMessageId,
+        internetMessageId: stored?.internetMessageId || "",
         body: input.body,
         replyAll: input.replyAll === true,
       });
     } else if (input.compose === "forward" && appleId && input.providerMessageId) {
       script = forwardDraftScript({
         accountId: appleId,
-        mailbox: mailbox || "INBOX",
-        messageId: input.providerMessageId,
+        mailbox: stored?.folder || "INBOX",
+        messageId: stored?.providerMessageId || input.providerMessageId,
+        internetMessageId: stored?.internetMessageId || "",
         to: input.to,
         body: input.body,
       });
@@ -344,14 +433,15 @@ export class AppleMailProvider extends BaseMailProvider {
   async reply(input: MailSendInput & { providerMessageId: string }): Promise<MailSendResult> {
     const context = input.accountId ? await accountContext(input.organizationId, input.accountId) : null;
     if (!context) return failed("Kein Apple-Mail-Konto für die Antwort.");
-    const stored = await prisma.mailMessage.findFirst({
-      where: { organizationId: input.organizationId, accountId: input.accountId, providerMessageId: input.providerMessageId },
-    });
+    const stored = input.accountId
+      ? await loadStoredMessage(input.organizationId, input.accountId, input.providerMessageId)
+      : null;
     const sent = await runMailAppleScript(
       replySendScript({
         accountId: context.appleId,
         mailbox: stored?.folder || "INBOX",
-        messageId: input.providerMessageId,
+        messageId: stored?.providerMessageId || input.providerMessageId,
+        internetMessageId: stored?.internetMessageId || "",
         body: input.body,
         replyAll: input.replyAll === true,
         sender: context.account.emailAddress,
@@ -365,14 +455,15 @@ export class AppleMailProvider extends BaseMailProvider {
   async forward(input: MailSendInput & { providerMessageId: string }): Promise<MailSendResult> {
     const context = input.accountId ? await accountContext(input.organizationId, input.accountId) : null;
     if (!context) return failed("Kein Apple-Mail-Konto für die Weiterleitung.");
-    const stored = await prisma.mailMessage.findFirst({
-      where: { organizationId: input.organizationId, accountId: input.accountId, providerMessageId: input.providerMessageId },
-    });
+    const stored = input.accountId
+      ? await loadStoredMessage(input.organizationId, input.accountId, input.providerMessageId)
+      : null;
     const sent = await runMailAppleScript(
       forwardSendScript({
         accountId: context.appleId,
         mailbox: stored?.folder || "INBOX",
-        messageId: input.providerMessageId,
+        messageId: stored?.providerMessageId || input.providerMessageId,
+        internetMessageId: stored?.internetMessageId || "",
         to: input.to,
         body: input.body,
         sender: context.account.emailAddress,
@@ -386,30 +477,42 @@ export class AppleMailProvider extends BaseMailProvider {
   async markRead(organizationId: string, accountId: string, providerMessageId: string) {
     const context = await accountContext(organizationId, accountId);
     if (!context) return { ok: false, executed: false, reason: "ACCOUNT_NOT_CONNECTED" };
-    const stored = await prisma.mailMessage.findFirst({
-      where: { organizationId, accountId, providerMessageId },
-    });
+    const stored = await loadStoredMessage(organizationId, accountId, providerMessageId);
     const result = await runMailAppleScript(
-      markReadScript(context.appleId, stored?.folder || "INBOX", providerMessageId),
+      markReadScript(context.appleId, stored?.folder || "INBOX", stored?.providerMessageId || providerMessageId, stored?.internetMessageId || ""),
       20_000,
     );
-    return { ok: result.ok, executed: result.ok, reason: result.ok ? "gelesen" : result.error };
+    if (!result.ok) {
+      if (result.error.includes("nova-message-missing")) await markMailMissing(stored);
+      return { ok: false, executed: false, reason: result.error };
+    }
+    const [liveId, liveMailbox] = result.output.split(String.fromCharCode(31));
+    if (stored) await rememberMailLocation(stored, liveId || stored.providerMessageId, liveMailbox || stored.folder, stored.internetMessageId || "");
+    return { ok: true, executed: true, reason: "gelesen" };
   }
 
   async archive(organizationId: string, accountId: string, providerMessageId: string) {
     const context = await accountContext(organizationId, accountId);
     if (!context) return { ok: false, executed: false, reason: "ACCOUNT_NOT_CONNECTED" };
-    const stored = await prisma.mailMessage.findFirst({
-      where: { organizationId, accountId, providerMessageId },
-    });
+    const stored = await loadStoredMessage(organizationId, accountId, providerMessageId);
     const result = await runMailAppleScript(
-      archiveScript(context.appleId, stored?.folder || "INBOX", providerMessageId),
+      archiveScript(
+        context.appleId,
+        stored?.folder || "INBOX",
+        stored?.providerMessageId || providerMessageId,
+        stored?.internetMessageId || "",
+      ),
       20_000,
     );
-    if (!result.ok) return { ok: false, executed: false, reason: result.error };
+    if (!result.ok) {
+      if (result.error.includes("nova-message-missing")) await markMailMissing(stored);
+      return { ok: false, executed: false, reason: result.error };
+    }
     if (result.output.includes("missing-archive")) {
       return { ok: false, executed: false, reason: "Kein Archiv-Postfach." };
     }
+    const [liveId, liveMailbox] = result.output.split(String.fromCharCode(31));
+    if (stored) await rememberMailLocation(stored, liveId || stored.providerMessageId, liveMailbox || stored.folder, stored.internetMessageId || "");
     return { ok: true, executed: true, reason: "archiviert" };
   }
 
@@ -426,15 +529,14 @@ export class AppleMailProvider extends BaseMailProvider {
   }) {
     const context = await accountContext(input.organizationId, input.accountId);
     if (!context) return { ok: false, reason: "ACCOUNT_NOT_CONNECTED" };
-    const stored = await prisma.mailMessage.findFirst({
-      where: {
-        organizationId: input.organizationId,
-        accountId: input.accountId,
-        providerMessageId: input.providerMessageId,
-      },
-      include: { attachments: true },
-    });
-    const meta = stored?.attachments.find((item) => item.contentId === input.attachmentId || item.filename === input.attachmentId);
+    const stored = await loadStoredMessage(input.organizationId, input.accountId, input.providerMessageId);
+    const storedWithAttachments = stored
+      ? await prisma.mailMessage.findFirst({
+          where: { id: stored.id },
+          include: { attachments: true },
+        })
+      : null;
+    const meta = storedWithAttachments?.attachments.find((item) => item.contentId === input.attachmentId || item.filename === input.attachmentId);
     const filename = meta?.filename || "anhang";
     if ((meta?.size ?? 0) > 8 * 1024 * 1024) return { ok: false, filename, reason: "too-large" };
     const destination = path.join(os.tmpdir(), `nova-mail-${Date.now()}-${filename.replace(/[^A-Za-z0-9._-]+/g, "_").slice(0, 60)}`);
@@ -442,7 +544,8 @@ export class AppleMailProvider extends BaseMailProvider {
       saveAttachmentScript({
         accountId: context.appleId,
         mailbox: stored?.folder || "INBOX",
-        messageId: input.providerMessageId,
+        messageId: stored?.providerMessageId || input.providerMessageId,
+        internetMessageId: stored?.internetMessageId || "",
         attachmentId: input.attachmentId,
         destination,
       }),

@@ -12,7 +12,7 @@ import { extractNewMessage } from "@/lib/mail/quotes";
 import { classifyMail, detectPriority, isConsumerDomain } from "@/lib/mail/classify";
 import { inspectMailContent } from "@/lib/mail/guard";
 import { auditMail } from "@/services/mail/audit";
-import { mergeAppleCursor } from "@/lib/mail/apple";
+import { mergeAppleCursor, mergeAppleIdentityHeaders } from "@/lib/mail/apple";
 import { completeFollowUpsForInbound, createMailFollowUp } from "@/services/mail/followup";
 import type { MailProvider, MailProviderMessage } from "@/types/connectors";
 import type { MemoryType } from "@/types";
@@ -221,7 +221,7 @@ export async function syncMailAccount(input: {
           syncCursor: apple
             ? mergeAppleCursor(
                 account.syncCursor,
-                normalized.map((item) => item.providerMessageId),
+                normalized.flatMap((item) => appleCursorIds(item)),
               )
             : JSON.stringify({ lastUid: maxUid, uidValidity: normalized.at(-1)?.uidValidity ?? cursor.uidValidity }),
         },
@@ -271,13 +271,84 @@ export async function importMailMessages(input: {
       data: {
         syncCursor: mergeAppleCursor(
           account.syncCursor,
-          input.messages.map((item) => item.providerMessageId),
+          input.messages.flatMap((item) => appleCursorIds(item)),
         ),
         lastSyncAt: new Date(),
       },
     });
   }
   return imported;
+}
+
+function appleCursorIds(message: { providerMessageId: string; internetMessageId?: string }): string[] {
+  return [message.providerMessageId, message.internetMessageId ? `rfc:${message.internetMessageId}` : ""].filter(Boolean);
+}
+
+function readStoredHeaders(raw: string): Record<string, string> {
+  try {
+    const parsed = JSON.parse(raw) as Record<string, unknown>;
+    return Object.fromEntries(Object.entries(parsed).map(([key, value]) => [key, String(value ?? "")]));
+  } catch {
+    return {};
+  }
+}
+
+async function refreshStoredMailIdentity(
+  existing: {
+    id: string;
+    organizationId: string;
+    accountId: string;
+    providerMessageId: string;
+    folder: string;
+    internetMessageId: string | null;
+    headersJson: string;
+    isRead: boolean;
+  },
+  message: MailProviderMessage,
+) {
+  const nextHeader = message.internetMessageId || existing.internetMessageId;
+  const changed =
+    existing.providerMessageId !== message.providerMessageId ||
+    existing.folder !== message.folder ||
+    existing.isRead !== message.isRead ||
+    Boolean(message.internetMessageId && existing.internetMessageId !== message.internetMessageId);
+  if (!changed) return;
+  if (existing.providerMessageId !== message.providerMessageId) {
+    const occupant = await prisma.mailMessage.findFirst({
+      where: {
+        organizationId: existing.organizationId,
+        accountId: existing.accountId,
+        providerMessageId: message.providerMessageId,
+      },
+    });
+    if (occupant && occupant.id !== existing.id) {
+      await prisma.mailMessage.update({
+        where: { id: existing.id },
+        data: {
+          headersJson: JSON.stringify(mergeAppleIdentityHeaders(readStoredHeaders(existing.headersJson), [existing.providerMessageId], "missing")),
+        },
+      });
+      return;
+    }
+  }
+  const headers = mergeAppleIdentityHeaders(
+    {
+      ...readStoredHeaders(existing.headersJson),
+      ...Object.fromEntries(Object.entries(message.headers).map(([key, value]) => [key, String(value ?? "")])),
+    },
+    [existing.providerMessageId, message.providerMessageId],
+    "present",
+  );
+  await prisma.mailMessage.update({
+    where: { id: existing.id },
+    data: {
+      providerMessageId: message.providerMessageId,
+      folder: message.folder,
+      internetMessageId: nextHeader,
+      isRead: message.isRead,
+      headersJson: JSON.stringify(headers),
+    },
+  });
 }
 
 async function upsertNormalizedMessage(input: {
@@ -287,14 +358,26 @@ async function upsertNormalizedMessage(input: {
   provider: MailProvider;
   message: MailProviderMessage & { normalizedText: string; injectionSuspected: boolean };
 }) {
-  const existing = await prisma.mailMessage.findFirst({
+  let existing = await prisma.mailMessage.findFirst({
     where: {
       organizationId: input.organizationId,
       accountId: input.accountId,
       providerMessageId: input.message.providerMessageId,
     },
   });
-  if (existing) return null;
+  if (!existing && input.message.internetMessageId) {
+    existing = await prisma.mailMessage.findFirst({
+      where: {
+        organizationId: input.organizationId,
+        accountId: input.accountId,
+        internetMessageId: input.message.internetMessageId,
+      },
+    });
+  }
+  if (existing) {
+    await refreshStoredMailIdentity(existing, input.message);
+    return null;
+  }
 
   const thread = await prisma.mailThread.upsert({
     where: {

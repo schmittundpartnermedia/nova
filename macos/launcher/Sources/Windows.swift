@@ -76,7 +76,7 @@ final class NovaWebWindowController: NSWindowController, WKNavigationDelegate, W
             defer: false
         )
         window.title = "NOVA"
-        window.isReleasedWhenClosed = true
+        window.isReleasedWhenClosed = false
         window.setFrameAutosaveName("NOVAMain")
         window.center()
         super.init(window: window)
