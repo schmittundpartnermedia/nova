@@ -1,66 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { assertOrganizationId } from "@/services/tenant";
 import { deleteMailSecret, readMailSecret, storeMailSecret, type MailSecret } from "@/services/mail/credentials";
-import { isConsumerDomain } from "@/lib/mail/classify";
-
-export function inferMailbox(email: string, host?: string): Pick<MailSecret, "imapHost" | "imapPort" | "imapSecure" | "smtpHost" | "smtpPort" | "smtpSecure"> | null {
-  const domain = email.split("@")[1]?.toLowerCase() ?? "";
-  const explicit = host?.trim();
-  if (explicit) {
-    return { imapHost: explicit, imapPort: 993, imapSecure: true, smtpHost: explicit.replace(/^imap\./, "smtp."), smtpPort: 465, smtpSecure: true };
-  }
-  if (domain === "gmail.com" || domain === "googlemail.com") {
-    return { imapHost: "imap.gmail.com", imapPort: 993, imapSecure: true, smtpHost: "smtp.gmail.com", smtpPort: 465, smtpSecure: true };
-  }
-  if (domain === "outlook.com" || domain === "hotmail.com" || domain === "live.com" || domain.endsWith(".onmicrosoft.com")) {
-    return { imapHost: "outlook.office365.com", imapPort: 993, imapSecure: true, smtpHost: "smtp.office365.com", smtpPort: 587, smtpSecure: false };
-  }
-  if (!domain || isConsumerDomain(domain)) return null;
-  return null;
-}
-
-export async function connectMailAccount(input: {
-  organizationId: string;
-  emailAddress: string;
-  displayName?: string;
-  password: string;
-  host?: string;
-  probe: (secret: MailSecret) => Promise<{ ok: boolean; reason: string }>;
-}) {
-  assertOrganizationId(input.organizationId);
-  const mailbox = inferMailbox(input.emailAddress, input.host);
-  if (!mailbox) {
-    return { ok: false as const, reason: "Für diese Adresse brauche ich den Mailserver. Host einmal angeben." };
-  }
-  const secret: MailSecret = {
-    username: input.emailAddress.trim(),
-    password: input.password,
-    ...mailbox,
-  };
-  const probed = await input.probe(secret);
-  if (!probed.ok) return { ok: false as const, reason: probed.reason };
-  const credentialRef = await storeMailSecret(input.organizationId, secret);
-  const account = await prisma.mailAccount.upsert({
-    where: { organizationId_emailAddress: { organizationId: input.organizationId, emailAddress: input.emailAddress.trim().toLowerCase() } },
-    create: {
-      organizationId: input.organizationId,
-      provider: "imap",
-      emailAddress: input.emailAddress.trim().toLowerCase(),
-      displayName: input.displayName,
-      status: "connected",
-      capabilities: JSON.stringify(["MAIL_READ", "MAIL_SEARCH", "MAIL_DRAFT", "MAIL_SEND"]),
-      credentialRef,
-    },
-    update: {
-      status: "connected",
-      displayName: input.displayName,
-      credentialRef,
-      lastError: null,
-      capabilities: JSON.stringify(["MAIL_READ", "MAIL_SEARCH", "MAIL_DRAFT", "MAIL_SEND"]),
-    },
-  });
-  return { ok: true as const, account: publicAccount(account) };
-}
+import { refreshMailAccessToken } from "@/services/mail/oauth";
 
 export async function listMailAccounts(organizationId: string) {
   assertOrganizationId(organizationId);
@@ -106,7 +47,22 @@ export async function loadAccountSecret(organizationId: string, accountId: strin
   if (!account?.credentialRef) return null;
   const secret = await readMailSecret(organizationId, account.credentialRef);
   if (!secret) return null;
-  return { account, secret };
+  const fresh = await currentSecret(organizationId, account.credentialRef, secret);
+  if (!fresh) return null;
+  return { account, secret: fresh };
+}
+
+async function currentSecret(organizationId: string, credentialRef: string, secret: MailSecret): Promise<MailSecret | null> {
+  if (new Date(secret.expiresAt).getTime() > Date.now() + 60_000) return secret;
+  const refreshed = await refreshMailAccessToken(secret);
+  if (!refreshed) return null;
+  await deleteMailSecret(organizationId, credentialRef);
+  const nextRef = await storeMailSecret(organizationId, refreshed);
+  await prisma.mailAccount.updateMany({
+    where: { organizationId, credentialRef },
+    data: { credentialRef: nextRef },
+  });
+  return refreshed;
 }
 
 export async function disconnectMailAccount(organizationId: string, accountId: string) {

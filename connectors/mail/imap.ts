@@ -3,6 +3,7 @@ import nodemailer from "nodemailer";
 import { simpleParser } from "mailparser";
 import { BaseMailProvider } from "@/connectors/mail/base";
 import { loadAccountSecret } from "@/services/mail/accounts";
+import { mailboxTransport } from "@/services/mail/oauth";
 import { redactSecrets } from "@/lib/computer/redaction";
 import type { MailProviderMessage, MailSendInput, MailSendResult } from "@/types/connectors";
 import type { MailSecret } from "@/services/mail/credentials";
@@ -12,11 +13,12 @@ function safeReason(error: unknown): string {
 }
 
 async function withImap<T>(secret: MailSecret, run: (client: ImapFlow) => Promise<T>): Promise<T> {
+  const mailbox = mailboxTransport(secret.provider);
   const client = new ImapFlow({
-    host: secret.imapHost,
-    port: secret.imapPort,
-    secure: secret.imapSecure,
-    auth: { user: secret.username, pass: secret.password },
+    host: mailbox.imapHost,
+    port: mailbox.imapPort,
+    secure: true,
+    auth: { user: secret.emailAddress, accessToken: secret.accessToken },
     logger: false,
   });
   await client.connect();
@@ -141,11 +143,12 @@ export class ImapSmtpMailProvider extends BaseMailProvider {
       return { ok: false, executed: false, mock: false, status: "FAILED", reason: "Antwort ohne In-Reply-To wird nicht gesendet." };
     }
     try {
+      const mailbox = mailboxTransport(loaded.secret.provider);
       const transport = nodemailer.createTransport({
-        host: loaded.secret.smtpHost,
-        port: loaded.secret.smtpPort,
-        secure: loaded.secret.smtpSecure,
-        auth: { user: loaded.secret.username, pass: loaded.secret.password },
+        host: mailbox.smtpHost,
+        port: mailbox.smtpPort,
+        secure: mailbox.smtpSecure,
+        auth: { type: "OAuth2", user: loaded.secret.emailAddress, accessToken: loaded.secret.accessToken },
       });
       const info = await transport.sendMail({
         from: loaded.account.emailAddress,

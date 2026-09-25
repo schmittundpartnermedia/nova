@@ -8,6 +8,7 @@ type Account = {
   displayName: string | null;
   status: string;
   provider: string;
+  lastSyncAt: string | null;
 };
 
 type Capabilities = Record<string, { state: string; reason?: string }>;
@@ -15,63 +16,60 @@ type Capabilities = Record<string, { state: string; reason?: string }>;
 export function MailConnect() {
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [capabilities, setCapabilities] = useState<Capabilities>({});
-  const [emailAddress, setEmailAddress] = useState("");
-  const [password, setPassword] = useState("");
-  const [host, setHost] = useState("");
+  const [providers, setProviders] = useState({ google: false, microsoft: false });
   const [message, setMessage] = useState("");
-  const [busy, setBusy] = useState(false);
-
-  async function load() {
-    const response = await fetch("/api/mail");
-    if (!response.ok) return;
-    const data = (await response.json()) as { accounts: Account[]; capabilities: Capabilities };
-    setAccounts(data.accounts);
-    setCapabilities(data.capabilities);
-  }
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
-      void load();
+      void fetch("/api/mail")
+        .then((response) => (response.ok ? response.json() : null))
+        .then((data: { accounts: Account[]; capabilities: Capabilities; providers: { google: { configured: boolean }; microsoft: { configured: boolean } } } | null) => {
+          if (!data) return;
+          setAccounts(data.accounts);
+          setCapabilities(data.capabilities);
+          setProviders({ google: data.providers.google.configured, microsoft: data.providers.microsoft.configured });
+        });
     }, 0);
     return () => window.clearTimeout(timer);
   }, []);
 
-  async function connect(event: React.FormEvent) {
-    event.preventDefault();
-    setBusy(true);
+  async function connect(provider: "google" | "microsoft") {
     setMessage("");
-    const response = await fetch("/api/mail", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ emailAddress, password, host: host || undefined }),
-    });
-    const data = (await response.json()) as { ok?: boolean; reason?: string };
-    setBusy(false);
-    setPassword("");
-    setMessage(data.ok ? "Mailkonto verbunden." : data.reason || "Verbindung fehlgeschlagen.");
-    if (data.ok) void load();
+    const response = await fetch(`/api/mail/oauth/start?provider=${provider}`);
+    const data = (await response.json()) as { ok?: boolean; url?: string; reason?: string };
+    if (data.url) {
+      window.location.assign(data.url);
+      return;
+    }
+    setMessage(data.reason === "PROVIDER_OAUTH_NOT_CONFIGURED" ? "OAuth ist für diesen Anbieter noch nicht eingerichtet." : "Verbindung blockiert.");
   }
 
-  const read = capabilities.MAIL_READ?.state ?? "BLOCKED";
+  const connection = capabilities.MAIL_CONNECTION;
+  const connected = accounts.filter((item) => item.status === "connected");
 
   return (
     <div className="nova-card nova-panel">
       <h3>Mail</h3>
-      <p className="nova-card-meta">Lesen {read === "AVAILABLE" ? "verfügbar" : "blockiert"}</p>
-      {accounts.filter((item) => item.status === "connected").map((account) => (
+      {connection?.reason === "PROVIDER_OAUTH_NOT_CONFIGURED" ? (
+        <p className="nova-card-meta">Verbinden blockiert: OAuth-App fehlt beim Anbieter.</p>
+      ) : (
+        <p className="nova-card-meta">{connected.length ? "Verbunden" : "Noch kein Konto"}</p>
+      )}
+      {connected.map((account) => (
         <p key={account.id}>
           <strong>{account.emailAddress}</strong>
-          <span className="nova-card-meta"> {account.provider}</span>
+          <span className="nova-card-meta"> {account.provider === "google" ? "Google" : "Microsoft"} · Verbunden</span>
+          {account.lastSyncAt ? <span className="nova-card-meta"> · Sync {account.lastSyncAt.slice(0, 16).replace("T", " ")}</span> : null}
         </p>
       ))}
-      <form onSubmit={connect} className="mt-4" style={{ display: "grid", gap: 8 }}>
-        <input className="nova-mail-input" type="email" required placeholder="E-Mail" value={emailAddress} onChange={(event) => setEmailAddress(event.target.value)} />
-        <input className="nova-mail-input" type="password" required placeholder="Passwort oder App-Passwort" value={password} onChange={(event) => setPassword(event.target.value)} autoComplete="current-password" />
-        <input className="nova-mail-input" placeholder="Mailserver, falls nötig" value={host} onChange={(event) => setHost(event.target.value)} />
-        <button className="nova-chip" type="submit" disabled={busy}>
-          {busy ? "Verbinde…" : "Mail verbinden"}
+      <div className="mt-4 flex gap-2" style={{ flexWrap: "wrap" }}>
+        <button type="button" className="nova-chip" disabled={!providers.microsoft} onClick={() => void connect("microsoft")}>
+          Mit Microsoft verbinden
         </button>
-      </form>
+        <button type="button" className="nova-chip" disabled={!providers.google} onClick={() => void connect("google")}>
+          Mit Google verbinden
+        </button>
+      </div>
       {message ? <p className="nova-card-meta">{message}</p> : null}
     </div>
   );

@@ -2,18 +2,30 @@ import { createCipheriv, createDecipheriv, randomBytes, scryptSync } from "node:
 import fs from "node:fs";
 import path from "node:path";
 
+export type MailOAuthProvider = "google" | "microsoft";
+
+/** Nur Autorisierungsdaten. Kein Benutzer- oder App-Passwort. */
 export type MailSecret = {
-  username: string;
-  password: string;
-  imapHost: string;
-  imapPort: number;
-  imapSecure: boolean;
-  smtpHost: string;
-  smtpPort: number;
-  smtpSecure: boolean;
+  provider: MailOAuthProvider;
+  accessToken: string;
+  refreshToken?: string;
+  expiresAt: string;
+  scopes: string[];
+  providerAccountId?: string;
+  emailAddress: string;
 };
 
+const FORBIDDEN_KEYS = /password|apppassword|auth\.pass|smtp_pass/i;
+
 const root = path.join(process.cwd(), ".nova", "mail-credentials");
+
+export function assertNoUserPassword(value: object): void {
+  for (const key of Object.keys(value)) {
+    if (FORBIDDEN_KEYS.test(key)) {
+      throw new Error("Mail-Credentials dürfen kein Benutzerpasswort enthalten.");
+    }
+  }
+}
 
 function masterKey(): Buffer {
   const fromEnv = process.env.NOVA_MAIL_KEY?.trim();
@@ -27,6 +39,7 @@ function masterKey(): Buffer {
 }
 
 export async function storeMailSecret(organizationId: string, secret: MailSecret): Promise<string> {
+  assertNoUserPassword(secret);
   const ref = randomBytes(16).toString("hex");
   const iv = randomBytes(12);
   const cipher = createCipheriv("aes-256-gcm", masterKey(), iv);
@@ -50,7 +63,9 @@ export async function readMailSecret(organizationId: string, credentialRef: stri
   const decipher = createDecipheriv("aes-256-gcm", masterKey(), iv);
   decipher.setAuthTag(tag);
   const json = Buffer.concat([decipher.update(body), decipher.final()]).toString("utf8");
-  return JSON.parse(json) as MailSecret;
+  const secret = JSON.parse(json) as MailSecret;
+  assertNoUserPassword(secret);
+  return secret;
 }
 
 export async function deleteMailSecret(organizationId: string, credentialRef: string): Promise<void> {

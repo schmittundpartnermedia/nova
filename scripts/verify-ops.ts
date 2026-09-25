@@ -7,7 +7,7 @@ import { MockMailProvider } from "@/connectors/mail/mock";
 import { scanWatch } from "@/agents/watch";
 import { standingApprovalAllows, createStandingPolicy, consumeStandingApproval } from "@/services/approvals";
 import { isRealConnectorEnabled } from "@/connectors/registry";
-import { smtpConfigured } from "@/connectors/mail/smtp";
+import { passwordSmtpEnabled } from "@/connectors/mail/smtp";
 import { resolveWorkspacePath } from "@/lib/computer/paths";
 import { volumeMountPath } from "@/lib/computer/volumes";
 import { LocalDiskStorageProvider } from "@/connectors/storage/local";
@@ -108,10 +108,8 @@ async function main() {
     body: "Nein",
   });
   assert(send.executed === false && send.mock === true, "Mock darf keinen Versand behaupten");
-  assert(
-    (await isRealConnectorEnabled(organization.id, "mail")) === smtpConfigured(),
-    "Mail gilt nur dann als real, wenn SMTP_HOST und SMTP_FROM gesetzt sind",
-  );
+  assert(passwordSmtpEnabled() === false, "SMTP_PASS darf den Mailpfad nicht freischalten");
+  assert((await isRealConnectorEnabled(organization.id, "mail")) === false, "Ohne OAuth-Konto ist Mail nicht verbunden");
 
   await createStandingPolicy({
     organizationId: organization.id,

@@ -68,19 +68,17 @@ async function main() {
   });
 
   const credentialRef = await storeMailSecret(orgA.id, {
-    username: "joachim@example.com",
-    password: "not-a-real-password",
-    imapHost: "imap.example.com",
-    imapPort: 993,
-    imapSecure: true,
-    smtpHost: "smtp.example.com",
-    smtpPort: 465,
-    smtpSecure: true,
+    provider: "google",
+    accessToken: "fixture-access-token",
+    refreshToken: "fixture-refresh-token",
+    expiresAt: new Date(Date.now() + 3600_000).toISOString(),
+    scopes: ["https://mail.google.com/"],
+    emailAddress: "joachim@example.com",
   });
   const account = await prisma.mailAccount.create({
     data: {
       organizationId: orgA.id,
-      provider: "imap",
+      provider: "google",
       emailAddress: "joachim@example.com",
       status: "connected",
       credentialRef,
@@ -197,7 +195,12 @@ async function main() {
   const audit = await prisma.mailAuditEvent.findMany({ where: { organizationId: orgA.id } });
   assert(audit.some((item) => item.action === "SYNC"), "Audit SYNC");
   assert(audit.some((item) => item.action === "SEND_VERIFIED"), "Audit SEND_VERIFIED");
-  assert(audit.every((item) => !/not-a-real-password|NOVA_MAIL_KEY/.test(item.detail ?? "")), "Secret im Audit");
+  assert(audit.every((item) => !/fixture-access-token|fixture-refresh-token|NOVA_MAIL_KEY/.test(item.detail ?? "")), "Token im Audit");
+  const caps = await getMailCapabilityMap(orgB.id);
+  assert(caps.MAIL_CONNECTION.state === "BLOCKED", "Verbindung ohne Konto muss blockiert sein");
+  if (!process.env.NOVA_GOOGLE_OAUTH_CLIENT_ID && !process.env.NOVA_MICROSOFT_OAUTH_CLIENT_ID) {
+    assert(caps.MAIL_CONNECTION.reason === "PROVIDER_OAUTH_NOT_CONFIGURED", caps.MAIL_CONNECTION.reason ?? "");
+  }
 
   const watch = await scanWatch(orgA.id);
   assert(Array.isArray(watch.newImportantMail), "Watch ohne Mail");

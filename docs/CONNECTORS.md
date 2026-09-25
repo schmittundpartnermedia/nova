@@ -15,7 +15,7 @@ Externe Systeme sind nie hart in der Business-Logik verdrahtet.
 
 ## V1
 
-Mail ist produktiv über `ImapSmtpMailProvider` (IMAP lesen, SMTP senden), sobald ein Konto verbunden ist. Ohne Konto ist Mail blockiert, nicht als Mock verfügbar. `MockMailProvider` und `FixtureMailProvider` bleiben Testadapter. Calendar, Storage, Tasks, Contacts und Browser bleiben Mock- oder Lokal-Implementierungen. Mocks führen **keine** echten Aktionen aus und behaupten das auch nicht.
+Mail ist produktiv über OAuth (Google oder Microsoft) und danach IMAP/SMTP mit Zugriffstoken. Ohne OAuth-App oder ohne verbundenes Konto ist Mail blockiert. Benutzerpasswörter werden nicht entgegengenommen. `MockMailProvider` und `FixtureMailProvider` bleiben Testadapter. Calendar, Storage, Tasks, Contacts und Browser bleiben Mock- oder Lokal-Implementierungen. Mocks führen **keine** echten Aktionen aus und behaupten das auch nicht.
 
 `SearchProvider` ist produktiv: `OpenAISearchProvider` nutzt OpenAI Web Search über `OPENAI_API_KEY`. Der Research Agent hängt am Interface, nicht am konkreten Anbieter.
 
