@@ -9,7 +9,7 @@ export type ChunkInput = {
   organizationId: string;
   objectType: string;
   objectId: string;
-  layer: "memory" | "knowledge" | "archive";
+  layer: "memory" | "knowledge" | "archive" | "mail";
   title: string;
   text: string;
   sourceId?: string | null;

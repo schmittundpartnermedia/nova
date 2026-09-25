@@ -48,6 +48,12 @@ model Organization {
   retrievalChunks   RetrievalChunk[]
   retrievalEmbeddings RetrievalEmbedding[]
   embeddingUsages   EmbeddingUsage[]
+  mailAccounts      MailAccount[]
+  mailThreads       MailThread[]
+  mailMessages      MailMessage[]
+  mailAttachments   MailAttachment[]
+  mailFollowUps     MailFollowUp[]
+  mailAuditEvents   MailAuditEvent[]
 
   @@map("organizations")
 }
@@ -407,6 +413,11 @@ model Communication {
   externalReference String?   @map("external_reference")
   externalUrl       String?   @map("external_url")
   sentAt            DateTime? @map("sent_at")
+  deliveryStatus    String    @default("PREPARED") @map("delivery_status")
+  mailAccountId     String?   @map("mail_account_id")
+  mailThreadId      String?   @map("mail_thread_id")
+  inReplyTo         String?   @map("in_reply_to")
+  referencesHeader  String?   @map("references_header")
   createdAt         DateTime  @default(now()) @map("created_at")
   updatedAt         DateTime  @updatedAt @map("updated_at")
 
@@ -947,4 +958,155 @@ model EmbeddingUsage {
 
   @@index([organizationId, createdAt])
   @@map("embedding_usages")
+}
+
+model MailAccount {
+  id             String    @id @default(cuid())
+  organizationId String    @map("organization_id")
+  provider       String
+  emailAddress   String    @map("email_address")
+  displayName    String?   @map("display_name")
+  status         String    @default("disconnected")
+  capabilities   String    @default("[]")
+  credentialRef  String?   @map("credential_ref")
+  lastSyncAt     DateTime? @map("last_sync_at")
+  syncCursor     String?   @map("sync_cursor")
+  lastError      String?   @map("last_error")
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
+
+  organization Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  threads      MailThread[]
+  messages     MailMessage[]
+
+  @@unique([organizationId, emailAddress])
+  @@index([organizationId, status])
+  @@map("mail_accounts")
+}
+
+model MailThread {
+  id               String    @id @default(cuid())
+  organizationId   String    @map("organization_id")
+  accountId        String    @map("account_id")
+  providerThreadId String    @map("provider_thread_id")
+  subject          String
+  participants     String    @default("[]")
+  lastMessageAt    DateTime? @map("last_message_at")
+  contactId        String?   @map("contact_id")
+  companyId        String?   @map("company_id")
+  projectId        String?   @map("project_id")
+  linkConfidence   Float?    @map("link_confidence")
+  status           String    @default("open")
+  createdAt        DateTime  @default(now()) @map("created_at")
+  updatedAt        DateTime  @updatedAt @map("updated_at")
+
+  organization Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  account      MailAccount    @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  messages     MailMessage[]
+  followUps    MailFollowUp[]
+
+  @@unique([organizationId, accountId, providerThreadId])
+  @@index([organizationId, lastMessageAt])
+  @@index([organizationId, projectId])
+  @@map("mail_threads")
+}
+
+model MailMessage {
+  id                 String    @id @default(cuid())
+  organizationId     String    @map("organization_id")
+  accountId          String    @map("account_id")
+  threadId           String    @map("thread_id")
+  providerMessageId  String    @map("provider_message_id")
+  providerThreadId   String    @map("provider_thread_id")
+  internetMessageId  String?   @map("internet_message_id")
+  folder             String
+  fromAddress        String    @map("from_address")
+  fromName           String?   @map("from_name")
+  toJson             String    @default("[]") @map("to_json")
+  ccJson             String    @default("[]") @map("cc_json")
+  bccJson            String    @default("[]") @map("bcc_json")
+  subject            String
+  textBody           String    @default("") @map("text_body")
+  htmlBody           String?   @map("html_body")
+  normalizedText     String    @default("") @map("normalized_text")
+  sentAt             DateTime? @map("sent_at")
+  receivedAt         DateTime? @map("received_at")
+  isRead             Boolean   @default(false) @map("is_read")
+  direction          String
+  headersJson        String    @default("{}") @map("headers_json")
+  classification     String    @default("UNKNOWN")
+  priority           String    @default("normal")
+  priorityReason     String?   @map("priority_reason")
+  injectionSuspected Boolean   @default(false) @map("injection_suspected")
+  uid                Int?
+  uidValidity        String?   @map("uid_validity")
+  createdAt          DateTime  @default(now()) @map("created_at")
+  updatedAt          DateTime  @updatedAt @map("updated_at")
+
+  organization Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  account      MailAccount      @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  thread       MailThread       @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  attachments  MailAttachment[]
+
+  @@unique([organizationId, accountId, providerMessageId])
+  @@index([organizationId, receivedAt])
+  @@index([organizationId, fromAddress])
+  @@index([threadId])
+  @@map("mail_messages")
+}
+
+model MailAttachment {
+  id                String  @id @default(cuid())
+  organizationId    String  @map("organization_id")
+  messageId         String  @map("message_id")
+  filename          String
+  mimeType          String  @map("mime_type")
+  size              Int
+  contentId         String? @map("content_id")
+  knowledgeSourceId String? @map("knowledge_source_id")
+  status            String  @default("pending")
+  skipReason        String? @map("skip_reason")
+  createdAt         DateTime @default(now()) @map("created_at")
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  message      MailMessage  @relation(fields: [messageId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, messageId])
+  @@map("mail_attachments")
+}
+
+model MailFollowUp {
+  id             String    @id @default(cuid())
+  organizationId String    @map("organization_id")
+  threadId       String    @map("thread_id")
+  expectedFrom   String?   @map("expected_from")
+  dueAt          DateTime  @map("due_at")
+  reason         String
+  status         String    @default("open")
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  thread       MailThread   @relation(fields: [threadId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, status, dueAt])
+  @@map("mail_follow_ups")
+}
+
+model MailAuditEvent {
+  id             String   @id @default(cuid())
+  organizationId String   @map("organization_id")
+  action         String
+  accountId      String?  @map("account_id")
+  messageId      String?  @map("message_id")
+  threadId       String?  @map("thread_id")
+  status         String
+  detail         String?
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, action])
+  @@index([organizationId, createdAt])
+  @@map("mail_audit_events")
 }

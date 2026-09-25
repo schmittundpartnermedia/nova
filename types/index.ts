@@ -37,7 +37,8 @@ export type ActivityType =
   | "execution"
   | "computer"
   | "coding"
-  | "knowledge";
+  | "knowledge"
+  | "mail";
 
 export type ApprovalStatus = "pending" | "approved" | "rejected";
 

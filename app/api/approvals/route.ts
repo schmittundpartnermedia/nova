@@ -7,7 +7,8 @@ import {
   isStandingActionType,
   standingActionLabel,
 } from "@/services/approvals";
-import { getOrganizationConnectors, isRealConnectorEnabled } from "@/connectors/registry";
+import { isRealConnectorEnabled } from "@/connectors/registry";
+import { deliverApprovedDraft } from "@/services/mail/send";
 import { recordActivity } from "@/services/archive";
 import { updateJobStatus } from "@/services/jobs";
 import { prisma } from "@/lib/prisma";
@@ -65,45 +66,19 @@ export async function POST(request: Request) {
     const payload = JSON.parse(approval.payload) as { communicationIds?: string[] };
     const ids = payload.communicationIds ?? [];
     const mailConnected = await isRealConnectorEnabled(tenant.organizationId, "mail");
-    const connectors = await getOrganizationConnectors(tenant.organizationId);
-    const drafts = ids.length
-      ? await prisma.communication.findMany({
-          where: { organizationId: tenant.organizationId, id: { in: ids } },
-          include: { contact: true },
-        })
-      : [];
-
     let sent = 0;
     const reasons: string[] = [];
-    if (mailConnected) {
-      for (const draft of drafts) {
-        const to = draft.contact?.email?.trim();
-        if (!to) {
-          reasons.push(`${draft.subject}: kein Empfänger.`);
-          continue;
-        }
-        const sendResult = await connectors.mail.send({
-          organizationId: tenant.organizationId,
-          to,
-          subject: draft.subject,
-          body: draft.body,
-        });
-        reasons.push(sendResult.reason);
-        if (sendResult.executed) {
-          sent += 1;
-          await prisma.communication.update({
-            where: { id: draft.id },
-            data: { status: "sent", sentAt: new Date(), isMock: false, externalReference: sendResult.messageId ?? undefined },
-          });
-        }
-      }
-    } else {
-      reasons.push( (await connectors.mail.send({
+    for (const communicationId of ids) {
+      const sendResult = await deliverApprovedDraft({
         organizationId: tenant.organizationId,
-        to: "unused@mock",
-        subject: "batch",
-        body: "batch",
-      })).reason);
+        communicationId,
+        approved: true,
+      });
+      reasons.push(sendResult.reason);
+      if (sendResult.status === "VERIFIED") sent += 1;
+    }
+    if (!ids.length) {
+      reasons.push(mailConnected ? "Kein Entwurf in der Freigabe." : "Kein Mailkonto verbunden. Es wurde nichts versendet.");
     }
 
     await recordActivity({
@@ -128,7 +103,7 @@ export async function POST(request: Request) {
         where: {
           organizationId: tenant.organizationId,
           id: { in: ids },
-          status: { not: "sent" },
+          status: { notIn: ["sent", "failed"] },
         },
         data: { status: "prepared" },
       });

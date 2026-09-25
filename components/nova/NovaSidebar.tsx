@@ -7,7 +7,8 @@ export type NovaSection =
   | "research"
   | "knowledge"
   | "archive"
-  | "approvals";
+  | "approvals"
+  | "mail";
 
 const ITEMS: Array<{ id: NovaSection; label: string; icon: string }> = [
   { id: "chat", label: "Chat", icon: "M4 6h16v10H7l-3 3V6Z" },
@@ -18,6 +19,7 @@ const ITEMS: Array<{ id: NovaSection; label: string; icon: string }> = [
   { id: "research", label: "Recherche", icon: "M11 18a7 7 0 1 1 7-7 7 7 0 0 1-7 7Zm5.5-1.5L21 21" },
   { id: "knowledge", label: "Wissen", icon: "M5 5h14v14H5zM8 8h8M8 12h8M8 16h5" },
   { id: "approvals", label: "Freigaben", icon: "M7 11V8a5 5 0 0 1 10 0v3M6 11h12v10H6V11Z" },
+  { id: "mail", label: "Mail", icon: "M3 6h18v12H3V6Zm0 0 9 7 9-7" },
   { id: "archive", label: "Archiv", icon: "M4 7h16v3H4V7Zm2 3v9h12v-9" },
 ];
 

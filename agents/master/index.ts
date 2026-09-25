@@ -15,8 +15,9 @@ import { detectCalendarIntent } from "@/agents/calendar/intent";
 import { detectWatchIntent } from "@/agents/watch/intent";
 import { detectContactIntent } from "@/agents/contacts/intent";
 import { detectTicketIntent, guessTicketTitle } from "@/agents/tickets/intent";
+import { detectMailIntent } from "@/lib/mail/intent";
 import { createApprovalRequest, standingApprovalAllows, consumeStandingApproval } from "@/services/approvals";
-import { getOrganizationConnectors, isRealConnectorEnabled } from "@/connectors/registry";
+import { isRealConnectorEnabled } from "@/connectors/registry";
 import { getDefaultProject, runAgentStep } from "@/agents/runtime";
 import { resolveAIProvider } from "@/providers/ai/registry";
 import { createJob, updateJobStatus } from "@/services/jobs";
@@ -326,6 +327,11 @@ export async function runMaster(input: {
 
   if (dialog.kind !== "social" && knowledgeIntent.kind === "query") {
     return runKnowledgeQueryPath(input, knowledgeIntent.statusMessage);
+  }
+
+  const mailIntent = detectMailIntent(input.userRequest);
+  if (dialog.kind !== "social" && mailIntent.kind !== "none") {
+    return runMailMasterPath(input, mailIntent.statusMessage);
   }
 
   if (dialog.kind !== "social" && computerIntent.kind !== "none") {
@@ -808,28 +814,15 @@ ${input.userRequest}`,
         description: `${communicationIds.length} Entwurf(e) über Dauerfreigabe.`,
         payload: { communicationIds },
       });
-      const connectors = await getOrganizationConnectors(input.organizationId);
-      const draftsToSend = await prisma.communication.findMany({
-        where: { organizationId: input.organizationId, id: { in: communicationIds } },
-        include: { contact: true },
-      });
+      const { deliverApprovedDraft } = await import("@/services/mail/send");
       let sent = 0;
-      for (const draft of draftsToSend) {
-        const to = draft.contact?.email?.trim();
-        if (!to) continue;
-        const result = await connectors.mail.send({
+      for (const communicationId of communicationIds) {
+        const result = await deliverApprovedDraft({
           organizationId: input.organizationId,
-          to,
-          subject: draft.subject,
-          body: draft.body,
+          communicationId,
+          approved: true,
         });
-        if (result.executed) {
-          sent += 1;
-          await prisma.communication.update({
-            where: { id: draft.id },
-            data: { status: "sent", sentAt: new Date(), isMock: false },
-          });
-        }
+        if (result.status === "VERIFIED") sent += 1;
       }
       await recordActivity({
         organizationId: input.organizationId,
@@ -1005,6 +998,34 @@ Formuliere die Nutzerantwort. Wenn ein Entwurf erzeugt wurde, zeige ihn.${
     await updateJobStatus(input.organizationId, job.id, "failed", { completedAt: new Date() });
     throw error;
   }
+}
+
+async function runMailMasterPath(
+  input: {
+    organizationId: string;
+    userRequest: string;
+    conversationId?: string;
+    sourceMessageId?: string;
+    onEvent?: (event: MasterEvent) => void;
+  },
+  statusMessage: string,
+): Promise<MasterRunResult> {
+  await emit(input.onEvent, { type: "status", orbState: "THINKING", statusMessage });
+  const { answerMail } = await import("@/services/mail/answer");
+  const result = await answerMail({ organizationId: input.organizationId, userRequest: input.userRequest });
+  await emit(input.onEvent, { type: "delta", delta: result.reply });
+  return {
+    jobId: "",
+    status: result.waitingApproval ? "waiting_for_approval" : "completed",
+    orbState: result.waitingApproval ? "WAITING_FOR_APPROVAL" : "DONE",
+    statusMessage: result.statusMessage,
+    reply: result.reply,
+    mock: false,
+    providerMode: "fallback",
+    providerId: "mail",
+    model: "nova-mail",
+    approvalId: result.approvalId,
+  };
 }
 
 async function runKnowledgeQueryPath(

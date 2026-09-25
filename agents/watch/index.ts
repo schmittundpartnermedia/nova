@@ -1,12 +1,15 @@
 import type { NovaAgent } from "@/types/agents";
 import { prisma } from "@/lib/prisma";
 import { assertOrganizationId } from "@/services/tenant";
+import { listDueFollowUps } from "@/services/mail/followup";
 
 export type WatchScan = {
   overdueTasks: Array<{ id: string; title: string; dueAt: Date | null }>;
   staleDrafts: Array<{ id: string; subject: string; createdAt: Date }>;
   upcomingMeetings: Array<{ id: string; title: string; startsAt: Date }>;
   soonMeetings: Array<{ id: string; title: string; startsAt: Date }>;
+  newImportantMail: Array<{ id: string; subject: string; from: string }>;
+  overdueFollowUps: Array<{ id: string; reason: string; dueAt: Date }>;
 };
 
 const SOON_MS = 15 * 60 * 1000;
@@ -17,7 +20,7 @@ export async function scanWatch(organizationId: string): Promise<WatchScan> {
   const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
   const weekAhead = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
 
-  const [overdueTasks, staleDrafts, upcomingMeetings] = await Promise.all([
+  const [overdueTasks, staleDrafts, upcomingMeetings, newImportantMail, overdueFollowUps] = await Promise.all([
     prisma.task.findMany({
       where: {
         organizationId,
@@ -47,6 +50,19 @@ export async function scanWatch(organizationId: string): Promise<WatchScan> {
       take: 8,
       select: { id: true, title: true, startsAt: true, organizationId: true },
     }),
+    prisma.mailMessage.findMany({
+      where: {
+        organizationId,
+        direction: "inbound",
+        isRead: false,
+        receivedAt: { gte: new Date(now.getTime() - 24 * 60 * 60 * 1000) },
+        classification: { in: ["IMPORTANT", "ACTION_REQUIRED", "REPLY_REQUIRED"] },
+      },
+      orderBy: { receivedAt: "desc" },
+      take: 5,
+      select: { id: true, subject: true, fromName: true, fromAddress: true, organizationId: true },
+    }),
+    listDueFollowUps(organizationId, now),
   ]);
 
   return {
@@ -56,6 +72,12 @@ export async function scanWatch(organizationId: string): Promise<WatchScan> {
     soonMeetings: upcomingMeetings.filter(
       (item) => item.organizationId === organizationId && item.startsAt.getTime() - now.getTime() <= SOON_MS,
     ),
+    newImportantMail: newImportantMail
+      .filter((item) => item.organizationId === organizationId)
+      .map((item) => ({ id: item.id, subject: item.subject, from: item.fromName || item.fromAddress })),
+    overdueFollowUps: overdueFollowUps
+      .filter((item) => item.organizationId === organizationId)
+      .map((item) => ({ id: item.id, reason: item.reason, dueAt: item.dueAt })),
   };
 }
 
@@ -81,6 +103,12 @@ export function formatWatchScan(scan: WatchScan): string {
         .map((item) => `- ${item.startsAt.toISOString().slice(0, 16).replace("T", " ")} ${item.title}`)
         .join("\n")}`,
     );
+  }
+  if (scan.newImportantMail.length) {
+    parts.push(`Neue wichtige Mails:\n${scan.newImportantMail.map((item) => `- ${item.from}: ${item.subject}`).join("\n")}`);
+  }
+  if (scan.overdueFollowUps.length) {
+    parts.push(`Überfällige Follow-ups:\n${scan.overdueFollowUps.map((item) => `- ${item.reason}`).join("\n")}`);
   }
   if (!parts.length) return "Nichts Überfälliges, keine alten Entwürfe, keine Termine in den nächsten sieben Tagen.";
   return parts.join("\n\n");
@@ -115,6 +143,12 @@ export function buildWatchAlert(scan: WatchScan): {
         .map((item) => item.title)
         .join("; ")}`,
     );
+  }
+  if (scan.newImportantMail.length) {
+    lines.push(`Neue Mail: ${scan.newImportantMail.slice(0, 2).map((item) => item.subject).join("; ")}`);
+  }
+  if (scan.overdueFollowUps.length) {
+    lines.push(`Follow-up überfällig: ${scan.overdueFollowUps[0]?.reason}`);
   }
   return {
     fingerprint,

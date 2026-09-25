@@ -61,5 +61,6 @@ export function layerPrior(layer: string, intent: string): number {
   }
   if (layer === "memory") return 1;
   if (layer === "knowledge") return 0.92;
+  if (layer === "mail") return 0.88;
   return 0.48;
 }

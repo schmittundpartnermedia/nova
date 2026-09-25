@@ -1,3 +1,4 @@
+import { MailConnect } from "@/components/nova/MailConnect";
 import { NovaProjectCard } from "@/components/nova/NovaProjectCard";
 import { NovaTaskCard } from "@/components/nova/NovaTaskCard";
 import type { NovaSection } from "@/components/nova/NovaSidebar";
@@ -103,6 +104,8 @@ export function NovaContextPanel({
           <p className="nova-quote">{approvalDescription}</p>
         </div>
       ) : null}
+
+      {section === "mail" ? <MailConnect /> : null}
 
       {section === "approvals" ? (
         <div className="nova-card nova-panel">

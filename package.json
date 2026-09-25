@@ -25,6 +25,7 @@
     "verify:knowledge": "tsx scripts/verify-knowledge.ts",
     "verify:chatgpt": "tsx scripts/verify-chatgpt.ts",
     "verify:retrieval": "tsx scripts/verify-retrieval.ts",
+    "verify:mail": "tsx scripts/verify-mail.ts",
     "verify:dialog": "tsx scripts/verify-dialog.ts",
     "verify:ops": "tsx scripts/verify-ops.ts",
     "import:chatgpt": "tsx scripts/import-chatgpt.ts",
@@ -36,7 +37,10 @@
   },
   "dependencies": {
     "@prisma/client": "^6.16.3",
+    "imapflow": "^2.0.7",
+    "mailparser": "^3.9.28",
     "next": "16.3.5",
+    "nodemailer": "^10.0.10",
     "openai": "^7.20.0",
     "playwright": "^1.63.0",
     "react": "19.2.8",
@@ -46,7 +50,9 @@
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
+    "@types/mailparser": "^3.4.6",
     "@types/node": "^20",
+    "@types/nodemailer": "^8.0.2",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "@types/three": "^0.186.0",
