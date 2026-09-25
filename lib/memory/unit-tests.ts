@@ -34,13 +34,13 @@ export async function runMemoryUnitTests(): Promise<string[]> {
 
   await check("hash embeddings rank related text higher", async () => {
     const provider = new LocalHashEmbeddingProvider();
-    const [query, related, other] = await provider.embed([
+    const [query, related, other] = await provider.embedBatch([
       "Hetzner Pilot drei Monate",
       "Alliance Partner Hetzner startet mit Pilot von drei Monaten",
       "Die Bürokaffeemaschine tropft seit Montag",
     ]);
     assert.ok(cosineSimilarity(query, related) > cosineSimilarity(query, other));
-    const stored = serializeEmbedding({ provider: provider.id, model: provider.model, vector: related });
+    const stored = serializeEmbedding({ provider: provider.id, model: provider.model(), vector: related });
     assert.ok(parseEmbedding(stored));
     assert.ok(embeddingSimilarity(query, parseEmbedding(stored)) > 0.2);
     assert.ok(lexicalMemoryScore("Hetzner Pilot", "Hetzner", "Pilot drei Monate", "hetzner pilot") > 0.5);

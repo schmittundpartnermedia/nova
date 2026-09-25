@@ -45,6 +45,9 @@ model Organization {
   knowledgeEmbeddings KnowledgeEmbedding[]
   knowledgeImports  KnowledgeImport[]
   knowledgeContradictions KnowledgeContradiction[]
+  retrievalChunks   RetrievalChunk[]
+  retrievalEmbeddings RetrievalEmbedding[]
+  embeddingUsages   EmbeddingUsage[]
 
   @@map("organizations")
 }
@@ -868,4 +871,80 @@ model KnowledgeImport {
   @@index([organizationId, status])
   @@index([organizationId, startedAt])
   @@map("knowledge_imports")
+}
+
+model RetrievalChunk {
+  id              String    @id @default(cuid())
+  organizationId  String    @map("organization_id")
+  objectType      String    @map("object_type")
+  objectId        String    @map("object_id")
+  layer           String
+  title           String
+  text            String
+  checksum        String
+  sourceId        String?   @map("source_id")
+  documentId      String?   @map("document_id")
+  conversationId  String?   @map("conversation_id")
+  messageIds      String?   @map("message_ids")
+  projectId       String?   @map("project_id")
+  page            Int?
+  section         String?
+  locationJson    String?   @map("location_json")
+  sourceType      String?   @map("source_type")
+  epistemicStatus String?   @map("epistemic_status")
+  superseded      Boolean   @default(false)
+  active          Boolean   @default(true)
+  occurredAt      DateTime? @map("occurred_at")
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+
+  organization Organization         @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  embeddings   RetrievalEmbedding[]
+
+  @@unique([organizationId, objectType, objectId, checksum])
+  @@index([organizationId, active])
+  @@index([organizationId, objectType])
+  @@index([organizationId, projectId])
+  @@index([organizationId, sourceId])
+  @@index([organizationId, checksum])
+  @@map("retrieval_chunks")
+}
+
+model RetrievalEmbedding {
+  id             String   @id @default(cuid())
+  organizationId String   @map("organization_id")
+  chunkId        String   @map("chunk_id")
+  provider       String
+  model          String
+  dimensions     Int
+  version        Int      @default(1)
+  checksum       String
+  vector         String
+  status         String   @default("active")
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  organization Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  chunk        RetrievalChunk @relation(fields: [chunkId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, chunkId, provider, model, version])
+  @@index([organizationId, provider, model, version, status])
+  @@index([organizationId, checksum, provider, model, version])
+  @@map("retrieval_embeddings")
+}
+
+model EmbeddingUsage {
+  id             String   @id @default(cuid())
+  organizationId String   @map("organization_id")
+  provider       String
+  model          String
+  calls          Int      @default(0)
+  texts          Int      @default(0)
+  tokens         Int      @default(0)
+  metadata       String?
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, createdAt])
+  @@map("embedding_usages")
 }

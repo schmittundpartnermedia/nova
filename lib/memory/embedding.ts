@@ -1,4 +1,3 @@
-import { prisma } from "@/lib/prisma";
 import {
   cosineSimilarity,
   getEmbeddingProvider,
@@ -58,8 +57,8 @@ export function lexicalMemoryScore(query: string, title: string, content: string
 
 export async function embedText(text: string, provider?: EmbeddingProvider): Promise<StoredEmbedding> {
   const active = provider ?? getEmbeddingProvider();
-  const [vector] = await active.embed([text.slice(0, 8000)]);
-  return { provider: active.id, model: active.model, vector };
+  const vector = await active.embedText(text.slice(0, 8000));
+  return { provider: active.id, model: active.model(), vector };
 }
 
 export async function indexMemoryEmbedding(input: {
@@ -68,9 +67,16 @@ export async function indexMemoryEmbedding(input: {
   title: string;
   content: string;
 }): Promise<void> {
-  const embedded = await embedText(`${input.title}\n${input.content}`);
-  await prisma.memoryEntry.updateMany({
-    where: { id: input.memoryId, organizationId: input.organizationId },
-    data: { embeddingRef: serializeEmbedding(embedded) },
-  });
+  const { upsertChunks } = await import("@/services/retrieval/embeddings");
+  await upsertChunks([
+    {
+      organizationId: input.organizationId,
+      objectType: "memory",
+      objectId: input.memoryId,
+      layer: "memory",
+      title: input.title,
+      text: `${input.title}\n${input.content}`,
+      sourceType: "memory",
+    },
+  ]);
 }

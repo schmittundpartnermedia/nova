@@ -42,6 +42,8 @@ export type KnowledgeImportStatus =
   | "BUILDING_RELATIONS"
   | "UPDATING_MEMORY"
   | "INDEXING"
+  | "PREPARING"
+  | "EMBEDDING"
   | "MEMORY_PROCESSING"
   | "VERIFYING"
   | "COMPLETED"

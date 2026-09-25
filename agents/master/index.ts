@@ -437,7 +437,7 @@ ${input.userRequest}`,
       plan.taskDraft = { title: guessTicketTitle(input.userRequest), description: input.userRequest, dueDays: 1 };
     }
   }
-  const allowMockCatalog = provider.id === "mock" && plan.mock === true;
+  const allowMockCatalog = false;
 
   const job = await createJob({
     organizationId: input.organizationId,

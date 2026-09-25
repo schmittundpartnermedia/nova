@@ -95,6 +95,31 @@ export async function getOrganizationConnectors(organizationId: string) {
   };
 }
 
+export type ConnectorCapabilityState = "AVAILABLE" | "LOCAL_ONLY" | "BLOCKED" | "MOCK" | "UNAVAILABLE";
+
+export async function getConnectorCapabilityMap(organizationId: string): Promise<Record<ConnectorType, ConnectorCapabilityState>> {
+  assertOrganizationId(organizationId);
+  const [search, mail, calendar, storage] = await Promise.all([
+    getSearchProvider(organizationId),
+    getMailProvider(organizationId),
+    getCalendarProvider(organizationId),
+    getStorageProvider(organizationId),
+  ]);
+  return {
+    search: search.mock ? "MOCK" : "AVAILABLE",
+    mail: mail.id === "smtp-mail" ? "AVAILABLE" : "MOCK",
+    calendar: calendar.id === "mock-calendar" ? "MOCK" : "LOCAL_ONLY",
+    storage: storage.id === "mock-storage" ? "MOCK" : "LOCAL_ONLY",
+    tasks: "MOCK",
+    contacts: "MOCK",
+    browser: "MOCK",
+  };
+}
+
+export function isMockCapability(state: ConnectorCapabilityState): boolean {
+  return state === "MOCK";
+}
+
 export async function isRealConnectorEnabled(
   organizationId: string,
   type: ConnectorType,

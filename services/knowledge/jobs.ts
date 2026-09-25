@@ -84,6 +84,8 @@ export async function requestKnowledgeCancel(organizationId: string): Promise<nu
           "BUILDING_RELATIONS",
           "UPDATING_MEMORY",
           "INDEXING",
+          "PREPARING",
+          "EMBEDDING",
           "MEMORY_PROCESSING",
           "VERIFYING",
         ],

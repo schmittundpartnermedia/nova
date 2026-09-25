@@ -1,74 +1,49 @@
 import { hasOpenAIApiKey } from "@/lib/secrets";
+import { MockEmbeddingProvider } from "@/providers/embedding/mock";
+import { OpenAIEmbeddingProvider } from "@/providers/embedding/openai";
+import type { EmbeddingProvider } from "@/providers/embedding/types";
 
-export interface EmbeddingProvider {
-  id: string;
-  model: string;
-  embed(texts: string[]): Promise<number[][]>;
-}
+export type { EmbeddingProvider, EmbeddingUsageRecord } from "@/providers/embedding/types";
+export { EMBEDDING_VERSION } from "@/providers/embedding/types";
+export { MockEmbeddingProvider } from "@/providers/embedding/mock";
+export { OpenAIEmbeddingProvider } from "@/providers/embedding/openai";
+export { LocalHashEmbeddingProvider } from "@/providers/embedding/legacy-hash";
+export { SDK_DEFAULT_EMBEDDING_MODEL, SDK_EMBEDDING_MODELS, resolveOpenAIEmbeddingModel } from "@/providers/embedding/models";
 
-const DIM = 64;
+class UnavailableEmbeddingProvider implements EmbeddingProvider {
+  id = "unavailable";
 
-function hashToken(token: string): number {
-  let h = 2166136261;
-  for (let i = 0; i < token.length; i += 1) {
-    h ^= token.charCodeAt(i);
-    h = Math.imul(h, 16777619);
+  model(): string {
+    return "none";
   }
-  return h >>> 0;
-}
 
-export class LocalHashEmbeddingProvider implements EmbeddingProvider {
-  id = "local-hash";
-  model = "ngram-hash-64";
-
-  async embed(texts: string[]): Promise<number[][]> {
-    return texts.map((text) => {
-      const vector = new Array<number>(DIM).fill(0);
-      const tokens = text
-        .toLowerCase()
-        .split(/[^a-z0-9äöüß]+/i)
-        .filter((token) => token.length > 1);
-      for (const token of tokens) {
-        vector[hashToken(token) % DIM] += 1;
-        if (token.length > 3) {
-          for (let i = 0; i < token.length - 2; i += 1) {
-            vector[hashToken(token.slice(i, i + 3)) % DIM] += 0.3;
-          }
-        }
-      }
-      const norm = Math.sqrt(vector.reduce((sum, value) => sum + value * value, 0)) || 1;
-      return vector.map((value) => value / norm);
-    });
+  dimensions(): number {
+    return 0;
   }
-}
 
-export class OpenAIEmbeddingProvider implements EmbeddingProvider {
-  id = "openai";
-  model = "text-embedding-3-small";
+  async embedText(): Promise<number[]> {
+    throw new Error("Embedding-Provider nicht verfügbar.");
+  }
 
-  async embed(texts: string[]): Promise<number[][]> {
-    const key = process.env.OPENAI_API_KEY?.trim();
-    if (!key) throw new Error("OPENAI_API_KEY fehlt für Embeddings.");
-    const response = await fetch("https://api.openai.com/v1/embeddings", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${key}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({ model: this.model, input: texts.slice(0, 32) }),
-    });
-    if (!response.ok) throw new Error("OpenAI Embeddings nicht erreichbar.");
-    const body = (await response.json()) as { data?: Array<{ embedding: number[] }> };
-    return (body.data ?? []).map((item) => item.embedding);
+  async embedBatch(): Promise<number[][]> {
+    throw new Error("Embedding-Provider nicht verfügbar.");
   }
 }
 
 let override: EmbeddingProvider | null = null;
+let openaiSingleton: OpenAIEmbeddingProvider | null = null;
+
+export function embeddingProviderAvailable(provider: EmbeddingProvider = getEmbeddingProvider()): boolean {
+  return provider.id !== "unavailable" && provider.dimensions() > 0;
+}
 
 export function getEmbeddingProvider(): EmbeddingProvider {
   if (override) return override;
-  if (hasOpenAIApiKey()) return new OpenAIEmbeddingProvider();
-  return new LocalHashEmbeddingProvider();
+  if (hasOpenAIApiKey()) {
+    openaiSingleton ??= new OpenAIEmbeddingProvider();
+    return openaiSingleton;
+  }
+  return new UnavailableEmbeddingProvider();
 }
 
 export function setEmbeddingProviderForTests(provider: EmbeddingProvider | null): void {
@@ -76,15 +51,19 @@ export function setEmbeddingProviderForTests(provider: EmbeddingProvider | null)
 }
 
 export function cosineSimilarity(a: number[], b: number[]): number {
-  const len = Math.min(a.length, b.length);
+  if (!a.length || a.length !== b.length) return 0;
   let dot = 0;
   let na = 0;
   let nb = 0;
-  for (let i = 0; i < len; i += 1) {
+  for (let i = 0; i < a.length; i += 1) {
     dot += a[i] * b[i];
     na += a[i] * a[i];
     nb += b[i] * b[i];
   }
   const denom = Math.sqrt(na) * Math.sqrt(nb);
   return denom ? dot / denom : 0;
+}
+
+export function createTestEmbeddingProvider(): EmbeddingProvider {
+  return new MockEmbeddingProvider();
 }

@@ -24,7 +24,9 @@ import {
 } from "@/lib/knowledge/security";
 import { unzipSync } from "@/lib/knowledge/zip";
 import { parseProjectSnapshot } from "@/lib/knowledge/parsers/special";
-import { cosineSimilarity, getEmbeddingProvider } from "@/providers/embedding";
+import { getEmbeddingProvider } from "@/providers/embedding";
+import { upsertChunks } from "@/services/retrieval/embeddings";
+import { retrieveV2 } from "@/services/retrieval/hybrid";
 import {
   formatImportSummary,
   formatKnowledgeAnswer,
@@ -262,23 +264,22 @@ async function indexItem(input: {
   itemId: string;
   text: string;
 }) {
-  const provider = getEmbeddingProvider();
-  const [vector] = await provider.embed([input.text.slice(0, KNOWLEDGE_LIMITS.maxEmbedChars)]);
-  const saved = await prisma.knowledgeEmbedding.create({
-    data: {
-      organizationId: input.organizationId,
-      sourceId: input.sourceId,
-      itemId: input.itemId,
-      provider: provider.id,
-      model: provider.model,
-      vector: JSON.stringify(vector),
-      text: input.text.slice(0, KNOWLEDGE_LIMITS.maxEmbedChars),
-    },
-  });
-  await prisma.knowledgeItem.updateMany({
-    where: { id: input.itemId, organizationId: input.organizationId },
-    data: { embeddingRef: saved.id },
-  });
+  await upsertChunks(
+    [
+      {
+        organizationId: input.organizationId,
+        objectType: "knowledge_item",
+        objectId: input.itemId,
+        layer: "knowledge",
+        title: input.text.slice(0, 80),
+        text: input.text.slice(0, KNOWLEDGE_LIMITS.maxEmbedChars),
+        sourceId: input.sourceId,
+        documentId: input.sourceId,
+        sourceType: "document",
+      },
+    ],
+    getEmbeddingProvider(),
+  ).catch(() => undefined);
 }
 
 async function ingestBuffer(input: {
@@ -913,12 +914,15 @@ export async function searchKnowledge(input: KnowledgeSearchInput): Promise<Rank
     orderBy: { extractedAt: "desc" },
   });
   const isolated = items.filter((item) => item.organizationId === input.organizationId);
-  const embeddings = await prisma.knowledgeEmbedding.findMany({
-    where: { organizationId: input.organizationId, itemId: { in: isolated.map((item) => item.id) } },
-  });
-  const embeddingByItem = new Map(embeddings.map((item) => [item.itemId ?? "", item]));
-  const provider = getEmbeddingProvider();
-  const [queryVector] = input.query.trim() ? await provider.embed([input.query]) : [[]];
+  const retrieved = input.query.trim()
+    ? await retrieveV2({
+        organizationId: input.organizationId,
+        query: input.query,
+        projectId: input.projectId,
+        limit: Math.max(limit, 12),
+      })
+    : null;
+  const semanticByObject = new Map((retrieved?.hits ?? []).map((hit) => [hit.objectId, hit.semantic]));
   const relatedNames = new Set<string>();
   if (input.query.trim()) {
     const memories = await prisma.memoryEntry.findMany({
@@ -962,15 +966,7 @@ export async function searchKnowledge(input: KnowledgeSearchInput): Promise<Rank
       extractedAt: item.extractedAt,
       createdAt: item.createdAt,
     };
-    const stored = embeddingByItem.get(item.id);
-    let semantic = 0;
-    if (stored && queryVector.length) {
-      try {
-        semantic = cosineSimilarity(queryVector, JSON.parse(stored.vector) as number[]);
-      } catch {
-        semantic = 0;
-      }
-    }
+    const semantic = semanticByObject.get(item.id) ?? 0;
     const relation =
       item.entityName && relatedNames.has(item.entityName.toLowerCase())
         ? 1
@@ -998,6 +994,12 @@ export async function buildKnowledgeContext(input: KnowledgeSearchInput): Promis
   answer: string;
 }> {
   const hits = await searchKnowledge(input);
+  const retrieved = await retrieveV2({
+    organizationId: input.organizationId,
+    query: input.query,
+    projectId: input.projectId,
+    limit: input.limit ?? 12,
+  });
   const contradictions = await prisma.knowledgeContradiction.findMany({
     where: { organizationId: input.organizationId, status: "open" },
     take: 20,
@@ -1025,7 +1027,9 @@ export async function buildKnowledgeContext(input: KnowledgeSearchInput): Promis
       lines.push(`- [CONTRADICTION] ${row.topic}: ${row.values.join(" vs. ")}`);
     }
   }
-  const promptBlock = lines.length ? `Knowledge (kompakt, mit Quellen):\n${lines.join("\n")}` : "Knowledge: keine Treffer.";
+  const promptBlock = retrieved.semantic === "unavailable"
+    ? `${retrieved.context.promptBlock || (lines.length ? `Knowledge (kompakt, mit Quellen):\n${lines.join("\n")}` : "Knowledge: keine Treffer.")}\nSemantic Retrieval: unavailable`
+    : retrieved.context.promptBlock || (lines.length ? `Knowledge (kompakt, mit Quellen):\n${lines.join("\n")}` : "Knowledge: keine Treffer.");
   return {
     promptBlock: promptBlock.slice(0, KNOWLEDGE_LIMITS.maxContextChars),
     hits,

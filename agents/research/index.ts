@@ -100,10 +100,9 @@ export const researchAgent: NovaAgent = {
   async run(input, context) {
     assertOrganizationId(context.organizationId);
     const projectId = typeof input.projectId === "string" ? input.projectId : context.projectId;
-    const allowMockCatalog = input.allowMockCatalog === true;
     const query = String(input.query ?? context.userRequest ?? context.goal ?? "").trim();
 
-    if (allowMockCatalog) {
+    if (input.allowMockCatalog === true && process.env.NOVA_ALLOW_MOCK_CATALOG === "1") {
       return runMockCatalog(input, context.organizationId, projectId);
     }
 
