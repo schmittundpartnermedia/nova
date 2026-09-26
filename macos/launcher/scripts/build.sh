@@ -31,9 +31,11 @@ swiftc -O \
   "$SRC"/HealthMonitor.swift \
   "$SRC"/ProcessSupervisor.swift \
   "$SRC"/Windows.swift \
+  "$SRC"/MailConsent.swift \
   "$SRC"/AppDelegate.swift \
   "$SRC"/main.swift \
   -framework AppKit \
+  -framework ApplicationServices \
   -framework WebKit \
   -framework AVFoundation \
   -framework Speech \

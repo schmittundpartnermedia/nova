@@ -4,8 +4,9 @@ import { deleteMailSecret } from "@/services/mail/credentials";
 import { clearMailAutomationCache, readMailAutomationState, runMailAppleScript } from "@/services/mail/apple-events";
 import { startMailSync } from "@/services/mail/sync";
 import { getMailProvider } from "@/connectors/registry";
-import { accountEmail, accountListScript, parseRecords, permissionProbeScript } from "@/lib/mail/apple";
+import { accountEmail, accountListScript, parseRecords } from "@/lib/mail/apple";
 import { publicAccount } from "@/services/mail/accounts";
+import { requestMailConsentFromNovaApp } from "@/services/mail/nova-consent";
 
 const CAPABILITIES = ["MAIL_READ", "MAIL_SEARCH", "MAIL_DRAFT", "MAIL_SEND"];
 
@@ -13,8 +14,9 @@ export async function promptMailAutomationAccess() {
   clearMailAutomationCache();
   const before = await readMailAutomationState();
   if (before === "granted" || before === "denied") return before;
-  await runMailAppleScript(permissionProbeScript(), 60_000);
+  const prompted = await requestMailConsentFromNovaApp();
   clearMailAutomationCache();
+  if (prompted) return prompted;
   return readMailAutomationState();
 }
 

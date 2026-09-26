@@ -9,7 +9,11 @@ import { decideApproval } from "@/services/approvals";
 import { prepareMailAccess } from "@/services/mail/access";
 import { ensureAppleMailFresh } from "@/services/mail/apple-connect";
 
-export async function answerMail(input: { organizationId: string; userRequest: string }) {
+export async function answerMail(input: {
+  organizationId: string;
+  userRequest: string;
+  onConsentPrompt?: () => void;
+}) {
   assertOrganizationId(input.organizationId);
   const intent = detectMailIntent(input.userRequest);
   if (intent.kind === "inbox") {
@@ -17,6 +21,7 @@ export async function answerMail(input: { organizationId: string; userRequest: s
       organizationId: input.organizationId,
       capability: "MAIL_READ",
       action: "lesen",
+      onConsentPrompt: input.onConsentPrompt,
     });
     if (!access.ready) {
       return { reply: access.reply, statusMessage: access.statusMessage, waitingApproval: false };
@@ -30,6 +35,7 @@ export async function answerMail(input: { organizationId: string; userRequest: s
       organizationId: input.organizationId,
       capability: "MAIL_SEARCH",
       action: "suchen",
+      onConsentPrompt: input.onConsentPrompt,
     });
     if (!access.ready) {
       return { reply: access.reply, statusMessage: access.statusMessage, waitingApproval: false };

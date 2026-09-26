@@ -13,6 +13,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var uiReady = false
     private var showingError = false
     private var lockFd: Int32 = -1
+    private var mailConsent: MailConsentBridge?
     private let workQueue = DispatchQueue(label: "io.elevum.nova.supervisor", qos: .userInitiated)
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -37,6 +38,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 return
             }
             supervisor = ProcessSupervisor(config: config, log: log)
+            let consent = MailConsentBridge(novaDir: config.novaDir, log: log)
+            mailConsent = consent
+            consent.start()
             showStatus("CHECKING_ENVIRONMENT", "Dependencies prüfen")
             log.info("NOVA.app gestartet", fields: [
                 "microphoneTcc": microphoneTccLabel(AVCaptureDevice.authorizationStatus(for: .audio)),
@@ -70,6 +74,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if didShutdown { return .terminateNow }
         if shuttingDown { return .terminateLater }
         shuttingDown = true
+        mailConsent?.stop()
         supervisor?.cancel()
         closeVisibleWindows(keepAlert: true)
         workQueue.async { [weak self] in
@@ -200,6 +205,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         showingError = false
         guard fatal else { return }
         shuttingDown = true
+        mailConsent?.stop()
         workQueue.async { [weak self] in
             self?.supervisor?.shutdownOwned()
             DispatchQueue.main.async {

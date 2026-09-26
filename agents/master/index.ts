@@ -1070,7 +1070,21 @@ async function runMailMasterPath(
 ): Promise<MasterRunResult> {
   await emit(input.onEvent, { type: "status", orbState: "THINKING", statusMessage });
   const { answerMail } = await import("@/services/mail/answer");
-  const result = await answerMail({ organizationId: input.organizationId, userRequest: input.userRequest });
+  const result = await answerMail({
+    organizationId: input.organizationId,
+    userRequest: input.userRequest,
+    onConsentPrompt: () => {
+      void emit(input.onEvent, {
+        type: "status",
+        orbState: "THINKING",
+        statusMessage: "macOS benötigt einmalig deine Freigabe für Apple Mail.",
+      });
+      void emit(input.onEvent, {
+        type: "delta",
+        delta: "macOS benötigt einmalig deine Freigabe für Apple Mail.",
+      });
+    },
+  });
   await emit(input.onEvent, { type: "delta", delta: result.reply });
   return {
     jobId: "",
