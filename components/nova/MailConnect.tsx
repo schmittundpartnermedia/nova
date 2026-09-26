@@ -54,6 +54,8 @@ export function MailConnect() {
     if (data.capabilities) setCapabilities(data.capabilities);
     if (data.reason === "AUTOMATION_PERMISSION_REQUIRED") {
       setMessage("Apple Mail bleibt blockiert, bis du im macOS-Dialog erlaubst, dass der NOVA Desktop Helper Mail steuert.");
+    } else if (data.reason === "AUTOMATION_DENIED") {
+      setMessage("macOS blockiert die Mail-Automatisierung. Erlaube den NOVA Desktop Helper unter Datenschutz → Automation.");
     } else if (!data.ok) {
       setMessage("Apple Mail ist gerade nicht erreichbar.");
     }
@@ -76,6 +78,8 @@ export function MailConnect() {
         <p className="nova-card-meta">Verbunden</p>
       ) : connection?.reason === "AUTOMATION_PERMISSION_REQUIRED" ? (
         <p className="nova-card-meta">Blockiert: Automatisierung für Mail fehlt.</p>
+      ) : connection?.reason === "AUTOMATION_DENIED" ? (
+        <p className="nova-card-meta">Blockiert: Mail-Automatisierung verweigert.</p>
       ) : (
         <p className="nova-card-meta">Noch nicht verbunden</p>
       )}

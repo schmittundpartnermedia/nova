@@ -101,6 +101,7 @@ export function runMailUnitTests(): string[] {
 
   check("intent inbox search draft confirm", () => {
     assert.equal(detectMailIntent("Gibt es neue wichtige Mails?").kind, "inbox");
+    assert.equal(detectMailIntent("Lies meine neuesten E-Mails.").kind, "inbox");
     assert.equal(detectMailIntent("Was hat Hetzner zuletzt geschrieben?").kind, "search");
     assert.equal(detectMailIntent("Antworte, dass wir nächste Woche telefonieren können.").kind, "draft");
     assert.equal(detectMailIntent("Ja, senden.").kind, "send-confirm");

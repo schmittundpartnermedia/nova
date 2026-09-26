@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { assertOrganizationId } from "@/services/tenant";
+import { ensureNativeHelper } from "@/lib/computer/capabilities";
 import { readMailAutomationState } from "@/services/mail/apple-events";
 
 export type MailCapabilityName = "MAIL_CONNECTION" | "MAIL_READ" | "MAIL_SEARCH" | "MAIL_DRAFT" | "MAIL_SEND";
@@ -28,7 +29,16 @@ export async function getMailCapabilityMap(organizationId: string): Promise<Reco
   if (apple) {
     const automation = await readMailAutomationState();
     if (automation !== "granted") {
-      return blocked(automation === "unavailable" ? "PROVIDER_UNAVAILABLE" : "AUTOMATION_PERMISSION_REQUIRED");
+      const helper = await ensureNativeHelper();
+      const reason =
+        automation === "denied"
+          ? "AUTOMATION_DENIED"
+          : automation === "required"
+            ? "AUTOMATION_PERMISSION_REQUIRED"
+            : automation === "unavailable" && !helper.ok
+              ? "PROVIDER_UNAVAILABLE"
+              : "AUTOMATION_PERMISSION_REQUIRED";
+      return blocked(reason);
     }
     const offline = apple.lastError?.includes("PROVIDER_UNAVAILABLE");
     return {

@@ -12,7 +12,10 @@ export function detectMailIntent(userRequest: string): MailIntent {
   if (/^(ja[,.]?\s+)?(senden|schick(e)? (sie|die mail|es)|mail raus)\.?$/i.test(text)) {
     return { kind: "send-confirm", statusMessage: "Ich prüfe die Freigabe." };
   }
-  if (/\b(neue|ungelesene|wichtige)\b/i.test(text) && /\bmails?\b/i.test(text)) {
+  if (/\b(neue|neueste|neuesten|neuer|ungelesene|wichtige)\b/i.test(text) && /\bmails?\b/i.test(text)) {
+    return { kind: "inbox", statusMessage: "Ich schaue ins Postfach." };
+  }
+  if (/\b(liest|lies|lese|vor)\b/i.test(text) && /\b(neuest|letzt|mails?)\b/i.test(text)) {
     return { kind: "inbox", statusMessage: "Ich schaue ins Postfach." };
   }
   if (/\bwas ist neu\b/i.test(text) && /\bmail/i.test(text)) {

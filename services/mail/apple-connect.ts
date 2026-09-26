@@ -9,32 +9,35 @@ import { publicAccount } from "@/services/mail/accounts";
 
 const CAPABILITIES = ["MAIL_READ", "MAIL_SEARCH", "MAIL_DRAFT", "MAIL_SEND"];
 
+export async function promptMailAutomationAccess() {
+  clearMailAutomationCache();
+  const before = await readMailAutomationState();
+  if (before === "granted" || before === "denied") return before;
+  await runMailAppleScript(permissionProbeScript(), 60_000);
+  clearMailAutomationCache();
+  return readMailAutomationState();
+}
+
 export async function connectAppleMail(organizationId: string) {
   assertOrganizationId(organizationId);
   clearMailAutomationCache();
   let state = await readMailAutomationState();
   if (state === "required" || state === "unavailable") {
-    const probe = await runMailAppleScript(permissionProbeScript(), 60_000);
-    clearMailAutomationCache();
-    if (!probe.ok && probe.permission) {
+    state = await promptMailAutomationAccess();
+    if (state === "required") {
       return { ok: false as const, permission: "required" as const, accounts: [], reason: "AUTOMATION_PERMISSION_REQUIRED" };
     }
-    if (!probe.ok) {
-      state = await readMailAutomationState();
-      if (state !== "granted") {
-        return {
-          ok: false as const,
-          permission: state,
-          accounts: [],
-          reason: state === "denied" ? "AUTOMATION_PERMISSION_REQUIRED" : probe.error,
-        };
-      }
-    } else {
-      state = "granted";
+    if (state !== "granted" && state !== "denied") {
+      return {
+        ok: false as const,
+        permission: state,
+        accounts: [],
+        reason: state === "unavailable" ? "PROVIDER_UNAVAILABLE" : "AUTOMATION_PERMISSION_REQUIRED",
+      };
     }
   }
   if (state === "denied") {
-    return { ok: false as const, permission: state, accounts: [], reason: "AUTOMATION_PERMISSION_REQUIRED" };
+    return { ok: false as const, permission: state, accounts: [], reason: "AUTOMATION_DENIED" };
   }
   if (state !== "granted") {
     return { ok: false as const, permission: state, accounts: [], reason: "PROVIDER_UNAVAILABLE" };

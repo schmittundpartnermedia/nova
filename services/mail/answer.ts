@@ -6,27 +6,33 @@ import { getMailThread, searchMail } from "@/services/mail/search";
 import { prepareMailDraft } from "@/services/mail/draft";
 import { deliverApprovedDraft } from "@/services/mail/send";
 import { decideApproval } from "@/services/approvals";
-import { getMailCapabilityMap } from "@/services/mail/capabilities";
+import { prepareMailAccess } from "@/services/mail/access";
 import { ensureAppleMailFresh } from "@/services/mail/apple-connect";
 
 export async function answerMail(input: { organizationId: string; userRequest: string }) {
   assertOrganizationId(input.organizationId);
   const intent = detectMailIntent(input.userRequest);
-  const capabilities = await getMailCapabilityMap(input.organizationId);
   if (intent.kind === "inbox") {
-    if (capabilities.MAIL_READ.state === "BLOCKED") {
-      const reason = capabilities.MAIL_READ.reason === "AUTOMATION_PERMISSION_REQUIRED"
-        ? "Mail ist nicht verbunden. Die macOS-Automatisierung für Apple Mail fehlt noch."
-        : "Mail ist nicht verbunden. Liesestand: blockiert, Grund: Konto nicht verbunden.";
-      return { reply: reason, statusMessage: "Mail nicht verbunden.", waitingApproval: false };
+    const access = await prepareMailAccess({
+      organizationId: input.organizationId,
+      capability: "MAIL_READ",
+      action: "lesen",
+    });
+    if (!access.ready) {
+      return { reply: access.reply, statusMessage: access.statusMessage, waitingApproval: false };
     }
     await ensureAppleMailFresh(input.organizationId).catch(() => undefined);
     const reply = await summarizeInbox(input.organizationId);
     return { reply, statusMessage: "Postfach geprüft.", waitingApproval: false };
   }
   if (intent.kind === "search" || intent.kind === "show") {
-    if (capabilities.MAIL_SEARCH.state === "BLOCKED") {
-      return { reply: "Ich kann noch nicht im Postfach suchen. Es ist kein Mailkonto verbunden.", statusMessage: "Suche blockiert.", waitingApproval: false };
+    const access = await prepareMailAccess({
+      organizationId: input.organizationId,
+      capability: "MAIL_SEARCH",
+      action: "suchen",
+    });
+    if (!access.ready) {
+      return { reply: access.reply, statusMessage: access.statusMessage, waitingApproval: false };
     }
     await ensureAppleMailFresh(input.organizationId).catch(() => undefined);
     const hits = await searchMail({ organizationId: input.organizationId, query: intent.query, limit: 5 });
