@@ -1,31 +1,37 @@
 import { prisma } from "@/lib/prisma";
 import { assertOrganizationId } from "@/services/tenant";
+import { formatDevelopmentStatusReply, summarizeCursorGoal } from "@/lib/development/status-text";
 
-const ACTIVE = ["planned", "developing", "built", "tests_passed", "verified", "waiting_review", "blocked"];
+const ACTIVE_CURSOR = ["PENDING", "STARTING", "RUNNING", "WAITING", "VERIFYING", "NEEDS_FIX", "WAITING_FOR_APPROVAL"];
 
 export async function explainDevelopment(organizationId: string, userRequest: string) {
   assertOrganizationId(organizationId);
-  const order = await prisma.developmentOrder.findFirst({
-    where: { organizationId },
-    orderBy: { updatedAt: "desc" },
+  const [orders, sessions] = await Promise.all([
+    prisma.developmentOrder.findMany({
+      where: { organizationId },
+      orderBy: { updatedAt: "desc" },
+      take: 8,
+    }),
+    prisma.cursorSession.findMany({
+      where: { organizationId, status: { in: ACTIVE_CURSOR } },
+      orderBy: { updatedAt: "desc" },
+      take: 5,
+    }),
+  ]);
+
+  return formatDevelopmentStatusReply({
+    userRequest,
+    orders: orders.map((order) => ({
+      status: order.status,
+      goal: order.goal,
+      iteration: order.iteration,
+      maxIterations: order.maxIterations,
+      resultSummary: order.resultSummary,
+    })),
+    cursorWork: sessions.map((session) => ({
+      status: session.status,
+      projectPath: session.projectPath,
+      goal: summarizeCursorGoal(session.initialPrompt),
+    })),
   });
-  if (!order) {
-    return { reply: "Es liegt kein Entwicklungsauftrag vor.", statusMessage: "Kein Auftrag." };
-  }
-  const askingFailure = /fehlgeschlagen|nicht fertig/i.test(userRequest);
-  const askingChange = /geändert|geaendert/i.test(userRequest);
-  const lines = [
-    `Status: ${order.status}.`,
-    `Ziel: ${order.goal}`,
-    `Iteration: ${order.iteration} von ${order.maxIterations}.`,
-  ];
-  if (order.resultSummary) lines.push(order.resultSummary);
-  if (askingFailure && order.status !== "failed" && order.status !== "blocked") {
-    lines.push("Ein Fehler ist im letzten Stand nicht vermerkt.");
-  }
-  if (askingChange) lines.push("Geändert wird nur das, was Cursor im beauftragten Workspace umgesetzt hat.");
-  if (!ACTIVE.includes(order.status) && order.status === "completed") {
-    lines.push("Der Auftrag ist abgeschlossen.");
-  }
-  return { reply: lines.join("\n"), statusMessage: `Entwicklung: ${order.status}` };
 }

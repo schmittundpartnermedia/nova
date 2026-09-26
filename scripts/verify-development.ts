@@ -37,8 +37,9 @@ async function main() {
   assert(created?.status === "planned", "Auftrag nicht geplant");
   assert(created?.userRequest === request, "Ursprünglicher Wunsch fehlt");
 
-  const explained = await explainDevelopment(orgId, "Wie weit ist die neue Funktion?");
-  assert(/planned|developing/.test(explained.reply), "Statusantwort fehlt");
+  const explained = await explainDevelopment(orgId, "Woran arbeitet Cursor gerade?");
+  assert(/Stand der Entwicklungsaufträge|Cursor arbeitet/.test(explained.reply), "Statusantwort fehlt");
+  assert(/planned|developing/.test(explained.reply), "Auftragsstatus fehlt in der Statusantwort");
 
   await tickWorker("verify-development");
   const after = await prisma.developmentOrder.findUnique({ where: { id: commissioned.orderId } });

@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { detectDevelopmentIntent } from "@/lib/development/intent";
 import { buildCursorCommission, draftDevelopmentOrder, mapCodingOutcome } from "@/lib/development/brief";
+import { formatDevelopmentStatusReply, summarizeCursorGoal } from "@/lib/development/status-text";
 
 export function runDevelopmentUnitTests(): string[] {
   const failures: string[] = [];
@@ -19,6 +20,14 @@ export function runDevelopmentUnitTests(): string[] {
     assert.equal(intent.kind, "commission");
     assert.equal(detectDevelopmentIntent("Lies meine neuesten E-Mails.").kind, "none");
     assert.equal(detectDevelopmentIntent("Was baut Cursor gerade?").kind, "status");
+    assert.equal(detectDevelopmentIntent("Woran arbeitet Cursor gerade?").kind, "status");
+    assert.equal(detectDevelopmentIntent("Wie ist der Stand deiner Entwicklungsaufträge?").kind, "status");
+    assert.equal(
+      detectDevelopmentIntent(
+        "NOVA, ich möchte, dass du mir künftig sagen kannst, woran Cursor gerade für dich arbeitet und wie der aktuelle Stand deiner Entwicklungsaufträge ist.",
+      ).kind,
+      "commission",
+    );
   });
 
   check("cursor brief keeps the wish and does not prescribe files", () => {
@@ -55,6 +64,41 @@ export function runDevelopmentUnitTests(): string[] {
     );
     assert.equal(mapCodingOutcome({ verified: false, status: "UNVERIFIED", summary: "Build rot", iteration: 0, maxIterations: 2 }), "developing");
     assert.equal(mapCodingOutcome({ verified: false, status: "UNVERIFIED", summary: "Build rot", iteration: 1, maxIterations: 2 }), "failed");
+  });
+
+  check("status reply names cursor work and orders", () => {
+    const prompt = [
+      "Entwicklungsauftrag von NOVA.",
+      "",
+      "Ursprünglicher Wunsch: Bitte baue die Statusantwort.",
+      "",
+      "Ziel: Bitte baue die Statusantwort.",
+    ].join("\n");
+    assert.equal(summarizeCursorGoal(prompt), "Bitte baue die Statusantwort.");
+    const formatted = formatDevelopmentStatusReply({
+      userRequest: "Woran arbeitet Cursor gerade?",
+      cursorWork: [
+        {
+          status: "RUNNING",
+          projectPath: "/tmp/demo",
+          goal: summarizeCursorGoal(prompt),
+        },
+      ],
+      orders: [
+        {
+          status: "developing",
+          goal: "Bitte baue die Statusantwort.",
+          iteration: 0,
+          maxIterations: 2,
+          resultSummary: "Cursor läuft.",
+        },
+      ],
+    });
+    assert.match(formatted.reply, /Woran Cursor gerade für mich arbeitet/);
+    assert.match(formatted.reply, /RUNNING: Bitte baue die Statusantwort/);
+    assert.match(formatted.reply, /Stand der Entwicklungsaufträge/);
+    assert.match(formatted.reply, /developing: Bitte baue die Statusantwort/);
+    assert.match(formatted.statusMessage, /Entwicklung: RUNNING/);
   });
 
   return failures;
