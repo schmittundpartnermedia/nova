@@ -18,6 +18,9 @@ import { detectTicketIntent, guessTicketTitle } from "@/agents/tickets/intent";
 import { fileArtifact } from "@/services/artifacts";
 import { handleReviewUtterance } from "@/services/review/handle";
 import { detectMailIntent } from "@/lib/mail/intent";
+import { detectDevelopmentIntent } from "@/lib/development/intent";
+import { commissionDevelopment } from "@/services/development/commission";
+import { explainDevelopment } from "@/services/development/status";
 import { createApprovalRequest, standingApprovalAllows, consumeStandingApproval } from "@/services/approvals";
 import { isRealConnectorEnabled } from "@/connectors/registry";
 import { getDefaultProject, runAgentStep } from "@/agents/runtime";
@@ -313,6 +316,43 @@ export async function runMaster(input: {
   if (computerIntent.kind === "cancel" || knowledgeIntent.kind === "cancel") {
     await requestKnowledgeCancel(input.organizationId);
     return runComputerMasterPath(input, computerIntent.statusMessage || knowledgeIntent.statusMessage);
+  }
+
+  const developmentIntent = detectDevelopmentIntent(input.userRequest);
+  if (dialog.kind !== "social" && developmentIntent.kind === "status") {
+    const explained = await explainDevelopment(input.organizationId, input.userRequest);
+    await emit(input.onEvent, { type: "status", orbState: "DONE", statusMessage: explained.statusMessage });
+    await emit(input.onEvent, { type: "delta", delta: explained.reply });
+    return {
+      jobId: "",
+      status: "completed",
+      orbState: "DONE",
+      statusMessage: explained.statusMessage,
+      reply: explained.reply,
+      mock: false,
+      providerMode: "fallback",
+      providerId: "development",
+      model: "nova-development",
+    };
+  }
+  if (dialog.kind !== "social" && developmentIntent.kind === "commission") {
+    await emit(input.onEvent, { type: "status", orbState: "WORKING", statusMessage: developmentIntent.statusMessage });
+    const commissioned = await commissionDevelopment({
+      organizationId: input.organizationId,
+      userRequest: input.userRequest,
+    });
+    await emit(input.onEvent, { type: "delta", delta: commissioned.reply });
+    return {
+      jobId: commissioned.jobId,
+      status: "running",
+      orbState: "WORKING",
+      statusMessage: commissioned.statusMessage,
+      reply: commissioned.reply,
+      mock: false,
+      providerMode: "fallback",
+      providerId: "development",
+      model: "nova-development",
+    };
   }
 
   const codingIntent = detectCodingIntent(input.userRequest);

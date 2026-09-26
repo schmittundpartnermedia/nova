@@ -34,6 +34,7 @@
     "desktop-service": "tsx services/desktop-service/index.ts",
     "worker": "tsx services/worker/index.ts",
     "verify:workspace": "tsx scripts/verify-workspace.ts",
+    "verify:development": "tsx scripts/verify-development.ts",
     "macos:build": "bash macos/launcher/scripts/build.sh",
     "verify:launcher": "bash scripts/verify-launcher-startup.sh",
     "generate:dev-rig": "tsx scripts/generate-dev-rig.ts"

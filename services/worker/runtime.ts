@@ -9,6 +9,7 @@ import {
   recoverExpiredLeases,
   withExternalEffect,
 } from "@/services/worker/queue";
+import { runDevelopmentWork } from "@/services/development/run";
 
 export type WorkHandler = (item: {
   id: string;
@@ -28,6 +29,8 @@ export function registerWorkHandler(kind: string, handler: WorkHandler) {
 registerWorkHandler("system.ping", async () => ({ ok: true, note: "pong" }));
 
 registerWorkHandler("review.wait", async () => ({ ok: true, retry: false, note: "bleibt in Prüfung" }));
+
+registerWorkHandler("development.run", runDevelopmentWork);
 
 export async function tickWorker(workerId: string, now = new Date()) {
   await prisma.$queryRawUnsafe("PRAGMA journal_mode=WAL;");

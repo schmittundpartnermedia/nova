@@ -1,0 +1,61 @@
+import assert from "node:assert/strict";
+import { detectDevelopmentIntent } from "@/lib/development/intent";
+import { buildCursorCommission, draftDevelopmentOrder, mapCodingOutcome } from "@/lib/development/brief";
+
+export function runDevelopmentUnitTests(): string[] {
+  const failures: string[] = [];
+  const check = (name: string, fn: () => void) => {
+    try {
+      fn();
+    } catch (error) {
+      failures.push(`${name}: ${error instanceof Error ? error.message : "fail"}`);
+    }
+  };
+
+  check("vision becomes a commission", () => {
+    const intent = detectDevelopmentIntent(
+      "NOVA, ich möchte, dass du künftig meine wichtigen E-Mails erkennst und mich nur bei relevanten Dingen informierst.",
+    );
+    assert.equal(intent.kind, "commission");
+    assert.equal(detectDevelopmentIntent("Lies meine neuesten E-Mails.").kind, "none");
+    assert.equal(detectDevelopmentIntent("Was baut Cursor gerade?").kind, "status");
+  });
+
+  check("cursor brief keeps the wish and does not prescribe files", () => {
+    const wish = "Ich möchte, dass du meinen Kalender bedienen kannst.";
+    const draft = draftDevelopmentOrder(wish, "Coding Agent ist vorhanden.");
+    const brief = buildCursorCommission({
+      userRequest: wish,
+      draft,
+      existingCapabilities: "Coding Agent ist vorhanden.",
+      previousFinding: "Tests rot",
+    });
+    assert.match(brief, /Ursprünglicher Wunsch: Ich möchte, dass du meinen Kalender bedienen kannst/);
+    assert.match(brief, /Untersuche das Repository selbst/);
+    assert.equal(/lege die datei|in der datei |klasse \w+ anlegen/i.test(brief), false);
+    assert.match(brief, /Tests rot/);
+    assert.equal(draft.goal, wish);
+  });
+
+  check("only a verified run waits for review", () => {
+    assert.equal(mapCodingOutcome({ verified: true, status: "VERIFIED", summary: "ok", iteration: 0, maxIterations: 2 }), "waiting_review");
+    assert.equal(
+      mapCodingOutcome({ verified: false, status: "FAILED", summary: "Cursor Agent CLI ist nicht angemeldet.", iteration: 0, maxIterations: 2 }),
+      "blocked",
+    );
+    assert.equal(
+      mapCodingOutcome({
+        verified: false,
+        status: "FAILED",
+        summary: "Pfad liegt außerhalb erlaubter Arbeitsverzeichnisse: /tmp/x",
+        iteration: 0,
+        maxIterations: 2,
+      }),
+      "blocked",
+    );
+    assert.equal(mapCodingOutcome({ verified: false, status: "UNVERIFIED", summary: "Build rot", iteration: 0, maxIterations: 2 }), "developing");
+    assert.equal(mapCodingOutcome({ verified: false, status: "UNVERIFIED", summary: "Build rot", iteration: 1, maxIterations: 2 }), "failed");
+  });
+
+  return failures;
+}

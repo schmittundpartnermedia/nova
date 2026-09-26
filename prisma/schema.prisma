@@ -59,6 +59,7 @@ model Organization {
   reviewSessions    ReviewSession[]
   workItems         WorkItem[]
   workEffects       WorkEffect[]
+  developmentOrders DevelopmentOrder[]
 
   @@map("organizations")
 }
@@ -237,10 +238,41 @@ model Job {
   artifacts        Artifact[]
   reviewSessions   ReviewSession[]
   workItems        WorkItem[]
+  developmentOrders DevelopmentOrder[]
 
   @@index([organizationId])
   @@index([organizationId, status])
   @@map("jobs")
+}
+
+model DevelopmentOrder {
+  id                   String   @id @default(cuid())
+  organizationId       String   @map("organization_id")
+  jobId                String?  @map("job_id")
+  userRequest          String   @map("user_request")
+  goal                 String
+  desiredBehavior      String   @map("desired_behavior")
+  existingCapabilities String   @map("existing_capabilities")
+  gap                  String
+  requirements         String
+  constraints          String
+  approvalRules        String   @map("approval_rules")
+  acceptance           String
+  status               String   @default("planned")
+  iteration            Int      @default(0)
+  maxIterations        Int      @default(2) @map("max_iterations")
+  history              String   @default("[]")
+  resultSummary        String?  @map("result_summary")
+  cursorSessionId      String?  @map("cursor_session_id")
+  workspacePath        String?  @map("workspace_path")
+  createdAt            DateTime @default(now()) @map("created_at")
+  updatedAt            DateTime @updatedAt @map("updated_at")
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  job          Job?         @relation(fields: [jobId], references: [id], onDelete: SetNull)
+
+  @@index([organizationId, status])
+  @@map("development_orders")
 }
 
 model JobStep {

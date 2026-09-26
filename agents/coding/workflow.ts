@@ -1,3 +1,5 @@
+import fs from "node:fs";
+import path from "node:path";
 import { randomUUID } from "node:crypto";
 import { runDesktopAction, cancelDesktopJobs } from "@/agents/computer/client";
 import { recordComputerAction } from "@/services/computer/audit";
@@ -39,6 +41,7 @@ export async function runCodingWorkflow(input: {
   organizationId: string;
   jobId?: string;
   userRequest: string;
+  workspacePath?: string;
   intent: CodingIntent;
   onStatus?: (message: string) => void;
 }): Promise<CodingAgentResult> {
@@ -50,12 +53,20 @@ export async function runCodingWorkflow(input: {
 
   input.onStatus?.("Ich lade den Projektkontext.");
   const website = input.intent.kind === "website_build";
-  const resolved = await resolveCodingProject({
-    organizationId: input.organizationId,
-    userRequest: input.userRequest,
-    projectHint: input.intent.projectHint,
-    createIfMissing: website,
-  });
+  const resolved =
+    input.workspacePath && fs.existsSync(input.workspacePath)
+      ? {
+          name: path.basename(input.workspacePath),
+          localPath: input.workspacePath,
+          created: false as const,
+          source: "filesystem" as const,
+        }
+      : await resolveCodingProject({
+          organizationId: input.organizationId,
+          userRequest: input.userRequest,
+          projectHint: input.intent.projectHint,
+          createIfMissing: website,
+        });
 
   if ("needsPath" in resolved) {
     return {

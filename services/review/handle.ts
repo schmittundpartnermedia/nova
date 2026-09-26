@@ -7,6 +7,7 @@ import { isRealConnectorEnabled } from "@/connectors/registry";
 import { deliverApprovedDraft } from "@/services/mail/send";
 import { setJobExecution } from "@/services/jobs";
 import { closeReviewWindow, findActiveReview } from "@/services/review";
+import { applyDevelopmentReview } from "@/services/development/review";
 import { cancelWorkItem, completeWorkItem, pauseWorkItem } from "@/services/worker/queue";
 import type { OrbState } from "@/types";
 
@@ -84,6 +85,38 @@ export async function handleReviewUtterance(input: {
 
   const work = await linkedWorkItem(input.organizationId, session.id);
   const now = new Date();
+  const development = await applyDevelopmentReview({
+    organizationId: input.organizationId,
+    jobId: session.jobId,
+    command,
+  });
+  if (development) {
+    await prisma.reviewSession.update({
+      where: { id: session.id },
+      data: {
+        status: command.kind === "changes" ? "CHANGES_REQUESTED" : "APPROVED",
+        resolution: input.userRequest.trim(),
+        resolvedAt: command.kind === "changes" ? undefined : now,
+        instruction: command.kind === "changes" ? command.instruction : undefined,
+      },
+    });
+    if (command.kind !== "changes") {
+      if (session.artifactId) {
+        await markArtifactStatus({
+          organizationId: input.organizationId,
+          artifactId: session.artifactId,
+          status: "APPROVED",
+        });
+      }
+      await closeReviewWindow({
+        organizationId: input.organizationId,
+        jobId: session.jobId,
+        sessionId: session.id,
+        ownership: session.ownership,
+      });
+    }
+    return development;
+  }
 
   if (command.kind === "changes") {
     await prisma.reviewSession.update({

@@ -44,6 +44,7 @@ export async function runCodingAgent(input: {
   organizationId: string;
   jobId?: string;
   userRequest: string;
+  workspacePath?: string;
   onStatus?: (message: string) => void;
 }): Promise<CodingAgentResult> {
   const intent = detectCodingIntent(input.userRequest);
@@ -51,6 +52,7 @@ export async function runCodingAgent(input: {
     organizationId: input.organizationId,
     jobId: input.jobId,
     userRequest: input.userRequest,
+    workspacePath: input.workspacePath,
     intent: intent.kind === "none" ? { ...intent, kind: "implement", userCommissioned: true, statusMessage: "Cursor setzt den Auftrag um." } : intent,
     onStatus: input.onStatus,
   });

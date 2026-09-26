@@ -19,7 +19,7 @@ export function classifyReviewUtterance(text: string): ReviewCommand | null {
   if (/^(ablehnen|nein danke|das will ich nicht)[.!]?$/i.test(value)) {
     return { kind: "reject" };
   }
-  if (/^(nochmal|nicht gut|änder\w*|aender\w*|bitte änder\w*|bitte aender\w*)\b/i.test(value)) {
+  if (/^(nochmal|nicht gut|änder\w*|aender\w*|bitte änder\w*|bitte aender\w*|funktioniert nicht|anders machen)\b/i.test(value)) {
     return { kind: "changes", instruction: value };
   }
   if (/^(weiter)[.!]?$/i.test(value)) {
