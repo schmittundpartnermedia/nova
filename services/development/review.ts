@@ -34,12 +34,13 @@ export async function applyDevelopmentReview(input: {
       completedAt: new Date(),
       pauseReason: null,
     });
+    const goal = order.goal.replace(/^[„“”"«»']+|[„“”"«»']+$/g, "").trim();
     return {
       jobId: input.jobId,
       status: "completed" as const,
       orbState: "DONE" as const,
       statusMessage: "Entwicklung abgenommen.",
-      reply: "Abgenommen. Die Funktion ist abgeschlossen.",
+      reply: `Abgenommen. Der Entwicklungsauftrag ist abgeschlossen: ${goal}`,
     };
   }
 

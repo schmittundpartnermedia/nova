@@ -81,7 +81,19 @@ export async function handleReviewUtterance(input: {
   const command = classifyReviewUtterance(input.userRequest);
   if (!command) return null;
   const session = await findActiveReview(input.organizationId);
-  if (!session) return null;
+  if (!session) {
+    const waiting = await prisma.developmentOrder.findFirst({
+      where: { organizationId: input.organizationId, status: "waiting_review", jobId: { not: null } },
+      orderBy: { updatedAt: "desc" },
+    });
+    if (!waiting?.jobId) return null;
+    const development = await applyDevelopmentReview({
+      organizationId: input.organizationId,
+      jobId: waiting.jobId,
+      command,
+    });
+    return development;
+  }
 
   const work = await linkedWorkItem(input.organizationId, session.id);
   const now = new Date();

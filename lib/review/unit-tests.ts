@@ -13,6 +13,7 @@ export function runReviewUnitTests(): string[] {
 
   check("approve phrases", () => {
     assert.deepEqual(classifyReviewUtterance("Passt."), { kind: "approve", alsoSend: false });
+    assert.deepEqual(classifyReviewUtterance("„Passt.“"), { kind: "approve", alsoSend: false });
     assert.deepEqual(classifyReviewUtterance("Freigeben."), { kind: "approve", alsoSend: false });
     assert.deepEqual(classifyReviewUtterance("Passt, senden"), { kind: "approve", alsoSend: true });
     assert.deepEqual(classifyReviewUtterance("Senden."), { kind: "approve", alsoSend: true });

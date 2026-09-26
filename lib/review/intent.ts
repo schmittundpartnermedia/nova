@@ -8,8 +8,15 @@ export type ReviewCommand =
 const NEW_TASK =
   /^(recherchiere|suche\b|schreib|oeffne|öffne|bau|erstelle|importier|schick mir|was ist|wer ist|leg[e]? an|mach )/i;
 
+function spokenText(text: string): string {
+  return text
+    .replace(/[„“”"«»']/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 export function classifyReviewUtterance(text: string): ReviewCommand | null {
-  const value = text.trim().replace(/\s+/g, " ");
+  const value = spokenText(text);
   if (!value || value.length > 160) return null;
   if (NEW_TASK.test(value)) return null;
 
