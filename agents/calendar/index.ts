@@ -2,6 +2,19 @@ import type { NovaAgent } from "@/types/agents";
 import { getOrganizationConnectors } from "@/connectors/registry";
 import { parseWhen, guessTitle } from "@/lib/calendar/when";
 
+function localWhen(value: Date | string | undefined): string {
+  if (!value) return "?";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "?";
+  return new Intl.DateTimeFormat("de-DE", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(date);
+}
+
 export const calendarAgent: NovaAgent = {
   definition: {
     id: "calendar",
@@ -20,11 +33,35 @@ export const calendarAgent: NovaAgent = {
     const calendar = connectors.calendar;
     const lower = request.toLowerCase();
 
-    if (/\b(absag|lösch|stornier)\b/i.test(lower)) {
+    if (/\b(absag|lösch|stornier)\b/i.test(lower) || /\bsag(?:e|t|en)?\b.{0,80}\bab\b/i.test(lower)) {
+      const from = new Date();
+      const to = new Date(from.getTime() + 120 * 24 * 60 * 60 * 1000);
+      const events = (await calendar.list(context.organizationId, from, to)) as Array<{
+        id?: string;
+        title?: string;
+        startsAt?: Date | string;
+      }>;
+      const titled = events.filter((item) => item.id && item.title);
+      const matched = titled.filter((item) => lower.includes(String(item.title).toLowerCase()));
+      const target = matched.length === 1 ? matched[0] : titled.length === 1 ? titled[0] : null;
+      if (!target?.id) {
+        const lines = titled.slice(0, 8).map((item) => {
+          const when = localWhen(item.startsAt);
+          return `- ${when} ${item.title}`;
+        });
+        return {
+          ok: false,
+          summary: titled.length
+            ? `Welchen Termin soll ich absagen?\n${lines.join("\n")}`
+            : "Im NOVA-Kalender liegt kein Termin zum Absagen.",
+          data: { executed: false, action: "cancel" },
+        };
+      }
+      const cancelled = await calendar.cancel(context.organizationId, target.id);
       return {
-        ok: false,
-        summary: "Zum Absagen brauche ich den konkreten Termin aus der Liste, nicht nur „lösch den Termin“.",
-        data: { executed: false, action: "cancel" },
+        ok: cancelled.ok && cancelled.executed,
+        summary: cancelled.reason,
+        data: { executed: cancelled.executed, action: "cancel", eventId: target.id },
       };
     }
 
@@ -42,7 +79,7 @@ export const calendarAgent: NovaAgent = {
       const lines = events
         .slice(0, 12)
         .map((item) => {
-          const when = item.startsAt ? new Date(item.startsAt).toISOString().slice(0, 16).replace("T", " ") : "?";
+          const when = localWhen(item.startsAt);
           return `- ${when} ${item.title ?? "Termin"}`;
         });
       return {

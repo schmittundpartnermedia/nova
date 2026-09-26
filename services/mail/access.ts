@@ -2,6 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { assertOrganizationId } from "@/services/tenant";
 import { getMailCapabilityMap, type MailCapabilityName } from "@/services/mail/capabilities";
 import { promptMailAutomationAccess } from "@/services/mail/apple-connect";
+import { openMailIfClosed } from "@/services/mail/apple-events";
 
 type MailAccessCapability = Extract<MailCapabilityName, "MAIL_READ" | "MAIL_SEARCH">;
 
@@ -48,6 +49,7 @@ export async function prepareMailAccess(input: {
   onConsentPrompt?: () => void;
 }): Promise<{ ready: true } | { ready: false; reply: string; statusMessage: string }> {
   assertOrganizationId(input.organizationId);
+  await openMailIfClosed();
   const appleAccounts = await prisma.mailAccount.count({
     where: { organizationId: input.organizationId, provider: "apple-mail", status: "connected" },
   });

@@ -4,6 +4,9 @@ import { detectUserTone } from "@/lib/dialog/tone";
 import { needsFlagshipModel, needsSpecialistWork } from "@/agents/master/intent";
 import { needsLiveResearch } from "@/lib/research/intent";
 import { detectKnowledgeIntent } from "@/agents/knowledge/intent";
+import { approvalSupersedesReview, classifySituationTurn } from "@/lib/dialog/situation";
+import { detectCodingIntent } from "@/agents/coding/intent";
+import { detectMailIntent } from "@/lib/mail/intent";
 
 export function runDialogUnitTests(): string[] {
   const failures: string[] = [];
@@ -80,6 +83,61 @@ export function runDialogUnitTests(): string[] {
     assert.equal(needsFlagshipModel("Bau eine Website für Testkunde"), true);
     assert.equal(needsFlagshipModel("Finde aktuelle Unternehmen, die als Sponsor passen."), true);
     assert.equal(needsFlagshipModel("Wer ist derzeit Bundeskanzler?"), false);
+  });
+
+  check("situation binds short answers to open work", () => {
+    const idle = {
+      pendingApproval: null,
+      approvalCreatedAt: null,
+      reviewOpenedAt: null,
+      activeReview: false,
+      resumableComputer: false,
+      lastActivityType: null,
+    };
+    assert.equal(classifySituationTurn("Ja", idle).kind, "none");
+    assert.equal(classifySituationTurn("Wie ist der Stand?", idle).kind, "status");
+    assert.equal(classifySituationTurn("Was ist der aktuelle Stand?", idle).kind, "status");
+    assert.equal(classifySituationTurn("Was ist der aktuelle Preis?", idle).kind, "none");
+    assert.equal(classifySituationTurn("Stopp", idle).kind, "cancel-active");
+    assert.equal(
+      classifySituationTurn("Ja", { ...idle, pendingApproval: { actionType: "mail.send", hardBlocked: false } }).kind,
+      "confirm-pending",
+    );
+    assert.equal(
+      classifySituationTurn("Nein", { ...idle, pendingApproval: { actionType: "mail.send", hardBlocked: false } }).kind,
+      "reject-pending",
+    );
+    assert.equal(
+      classifySituationTurn("Ändere den Entwurf, schreib dass ich nächste Woche schaue.", { ...idle, activeReview: true }).kind,
+      "revise-mail",
+    );
+    const reviewAt = new Date("2026-09-26T12:00:00Z");
+    const approvalAt = new Date("2026-09-26T12:05:00Z");
+    assert.equal(
+      approvalSupersedesReview({ approvalAt, reviewAt, confirmsApproval: true }),
+      true,
+    );
+    assert.equal(
+      approvalSupersedesReview({ approvalAt: reviewAt, reviewAt: approvalAt, confirmsApproval: true }),
+      false,
+    );
+  });
+
+  check("addressing nova is not a coding project", () => {
+    assert.equal(detectCodingIntent("NOVA, ändere den Entwurf").kind, "none");
+    assert.equal(detectCodingIntent("Ändere die Startseite von rankPilot").kind, "implement");
+  });
+
+  check("mail word alone is not a mailbox search", () => {
+    assert.equal(detectMailIntent("Erkläre mir das Mailkonzept").kind, "none");
+    assert.equal(detectMailIntent("Such die Mail von Hetzner").kind, "search");
+    const linkedin = detectMailIntent("Finde Mails von LinkedIn");
+    assert.equal(linkedin.kind, "search");
+    if (linkedin.kind === "search") assert.equal(linkedin.query, "LinkedIn");
+    const postfach = detectMailIntent("Suche im Postfach nach LinkedIn");
+    assert.equal(postfach.kind, "search");
+    if (postfach.kind === "search") assert.match(postfach.query, /LinkedIn/);
+    assert.equal(detectMailIntent("Gibt es neue wichtige Mails?").kind, "inbox");
   });
 
   return failures;

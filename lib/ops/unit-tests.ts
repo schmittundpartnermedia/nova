@@ -73,8 +73,10 @@ export function runOpsUnitTests(): string[] {
 
   check("contact and ticket intent", () => {
     assert.equal(detectContactIntent("Speicher Kontakt Clara Hetzner"), "create");
+    assert.equal(detectContactIntent("Speichere den Kontakt Probekette Nova."), "create");
     assert.equal(detectContactIntent("Wer ist Clara"), "search");
-    assert.equal(detectTicketIntent("Neues Ticket für Hetzner Rechnung"), true);
+    assert.equal(detectTicketIntent("Neues Ticket für Hetzner Rechnung"), "create");
+    assert.equal(detectTicketIntent("Welche Tickets habe ich?"), "list");
     assert.equal(detectTicketIntent("Was steht an?"), false);
   });
 

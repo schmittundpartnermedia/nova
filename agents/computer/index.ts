@@ -14,6 +14,8 @@ import {
 } from "@/services/computer/audit";
 import { pickControlFromInspect } from "@/lib/computer/ax-pick";
 import { guessAppName, guessControlName, type PlannedStep } from "@/agents/computer/planner";
+import { prisma } from "@/lib/prisma";
+import { loadEffectResult, withExternalEffect } from "@/services/worker/queue";
 import { createApprovalRequest } from "@/services/approvals";
 import { recordActivity } from "@/services/archive";
 import { cancelCodingSessions } from "@/services/coding/sessions";
@@ -85,17 +87,58 @@ export const computerAgent: NovaAgent = {
   },
 };
 
+async function runGuardedDesktopAction(input: {
+  organizationId: string;
+  workItemId?: string;
+  computerJobId: string;
+  cursor: number;
+  step: PlannedStep;
+  run: () => Promise<ActionResult>;
+}): Promise<{ result?: ActionResult; uncertain?: boolean }> {
+  if (!input.workItemId) return { result: await input.run() };
+  const action = String((input.step.payload as { action?: string }).action ?? "");
+  const payload = input.step.payload as { path?: string; url?: string; name?: string };
+  const target = String(payload.path ?? payload.url ?? payload.name ?? "");
+  const idempotencyKey = `desktop:${input.computerJobId}:${input.cursor}:${input.step.tool}:${action}:${target}`;
+  const effect = await withExternalEffect({
+    organizationId: input.organizationId,
+    workItemId: input.workItemId,
+    idempotencyKey,
+    effectType: `computer.${input.step.tool}`,
+    run: input.run,
+  });
+  if (effect.decision === "needs_verification") return { uncertain: true };
+  if (effect.decision === "already_committed") {
+    const stored = await loadEffectResult<ActionResult>(input.organizationId, idempotencyKey);
+    return stored ? { result: stored } : { uncertain: true };
+  }
+  const value = effect.value;
+  if (value?.error?.code === "approval_required") {
+    await prisma.workEffect.deleteMany({
+      where: { organizationId: input.organizationId, idempotencyKey },
+    });
+    await prisma.workItem.updateMany({
+      where: { id: input.workItemId, organizationId: input.organizationId },
+      data: { externalEffect: "none" },
+    });
+  }
+  return { result: value };
+}
+
 export async function runComputerAgent(input: {
   organizationId: string;
   jobId?: string;
   userRequest: string;
+  approvalToken?: string;
+  workItemId?: string;
   onStatus?: (message: string) => void;
 }): Promise<ComputerAgentResult> {
   const intent = detectComputerIntent(input.userRequest);
   input.onStatus?.(intent.statusMessage || "Computeraktion wird vorbereitet");
   await interruptStaleComputerJobs(input.organizationId);
 
-  if (intent.kind === "cancel" || consumeCancelOrganization(input.organizationId)) {
+  if (intent.kind === "cancel") {
+    consumeCancelOrganization(input.organizationId);
     const count = await requestComputerCancel(input.organizationId);
     await requestKnowledgeCancel(input.organizationId);
     await cancelDesktopJobs();
@@ -109,6 +152,7 @@ export async function runComputerAgent(input: {
       statusMessage: "Abgebrochen",
     };
   }
+  consumeCancelOrganization(input.organizationId);
 
   const injection = isInjectionAttempt(input.userRequest);
   const hard = detectHardBlock(input.userRequest);
@@ -147,7 +191,10 @@ export async function runComputerAgent(input: {
   let startAt = 0;
 
   if (intent.kind === "resume") {
-    const resumable = await findResumableComputerJob(input.organizationId);
+    const resumable = await findResumableComputerJob(
+      input.organizationId,
+      input.approvalToken ? { jobId: input.jobId, waitingApproval: true } : undefined,
+    );
     if (!resumable) {
       return {
         ok: false,
@@ -263,6 +310,7 @@ export async function runComputerAgent(input: {
       const argv = Array.isArray((step.payload as { argv?: unknown }).argv)
         ? ((step.payload as { argv: string[] }).argv)
         : undefined;
+      let stepApprovalToken: string | undefined;
       const risk = classifyComputerAction({
         tool: step.tool,
         action: String((step.payload as { action?: string }).action ?? ""),
@@ -272,6 +320,33 @@ export async function runComputerAgent(input: {
       });
 
       if (risk.hardBlocked || (risk.approvalRequired && risk.approvalClass === "C" && step.tool === "filesystem")) {
+        const actionType = `computer.${step.tool}.${String((step.payload as { action?: string }).action ?? "action")}`;
+        const prior = input.jobId
+          ? await prisma.approvalRequest.findFirst({
+              where: {
+                organizationId: input.organizationId,
+                jobId: input.jobId,
+                status: "approved",
+                actionType,
+              },
+              orderBy: { approvedAt: "desc" },
+            })
+          : null;
+        const priorPayload = prior ? (JSON.parse(prior.payload) as { hardBlocked?: boolean }) : null;
+        if (risk.hardBlocked || priorPayload?.hardBlocked) {
+          return {
+            ok: true,
+            status: "WAITING_FOR_APPROVAL",
+            summary: "Sicherheitsgrenze bleibt.",
+            reply: "Diese Löschung führe ich nicht aus. Es wurde nichts gelöscht.",
+            approvalId: prior?.id,
+            actions,
+            verified: true,
+            statusMessage: "Nicht ausgeführt",
+          };
+        } else if (input.approvalToken || (prior && !priorPayload?.hardBlocked)) {
+          stepApprovalToken = input.approvalToken || prior?.id;
+        } else {
         const approval = await createApprovalRequest({
           organizationId: input.organizationId,
           jobId: input.jobId,
@@ -296,6 +371,7 @@ export async function runComputerAgent(input: {
           verified: true,
           statusMessage: "Freigabe erforderlich",
         };
+        }
       }
 
       if (intent.kind === "cursor_ask" && String((step.payload as { action?: string }).action) === "ask") {
@@ -306,15 +382,47 @@ export async function runComputerAgent(input: {
         }
       }
 
-      const result = await runDesktopAction({
+      if (!stepApprovalToken && input.approvalToken && !risk.hardBlocked) {
+        stepApprovalToken = input.approvalToken;
+      }
+      const guarded = await runGuardedDesktopAction({
         organizationId: input.organizationId,
-        jobId: input.jobId,
-        requestId: randomUUID(),
-        source: "nova_plan",
-        tool: step.tool,
-        payload: step.payload,
-        userCommissioned: step.userCommissioned,
+        workItemId: input.workItemId,
+        computerJobId: computerJob.id,
+        cursor,
+        step,
+        run: () =>
+          runDesktopAction({
+            organizationId: input.organizationId,
+            jobId: input.jobId,
+            requestId: randomUUID(),
+            source: "nova_plan",
+            tool: step.tool,
+            payload: step.payload,
+            userCommissioned: step.userCommissioned,
+            approvalToken: stepApprovalToken,
+          }),
       });
+      if (guarded.uncertain || !guarded.result) {
+        await saveComputerPlan({
+          organizationId: input.organizationId,
+          id: computerJob.id,
+          status: "INTERRUPTED",
+          plan: { steps: allSteps, cursor },
+          error: "unconfirmed",
+          finished: true,
+        });
+        return {
+          ok: false,
+          status: "INTERRUPTED",
+          summary: "Externe Aktion nicht bestätigt.",
+          reply: "Dieser Schritt ist nicht bestätigt. Ich führe ihn nicht noch einmal aus.",
+          actions,
+          verified: false,
+          statusMessage: "Nicht bestätigt",
+        };
+      }
+      const result = guarded.result;
       actions.push(result);
       await recordComputerAction({
         organizationId: input.organizationId,
@@ -378,11 +486,25 @@ export async function runComputerAgent(input: {
       }
 
       if (!result.success && result.error?.code === "approval_required") {
+        if (stepApprovalToken || input.approvalToken) {
+          return {
+            ok: false,
+            status: "FAILED",
+            summary: result.error.message,
+            reply: "Die Freigabe liegt vor, die Aktion wurde trotzdem nicht ausgeführt. Es wurde nichts weiter unternommen.",
+            actions,
+            verified: false,
+            statusMessage: "Nicht ausgeführt",
+          };
+        }
+        const targetName = String((step.payload as { name?: string }).name ?? "").trim();
         const approval = await createApprovalRequest({
           organizationId: input.organizationId,
           jobId: input.jobId,
           actionType: `computer.${step.tool}`,
-          description: result.error.message,
+          description: targetName
+            ? `${targetName} beenden. Erst nach deiner Freigabe. Bisher wurde nichts ausgeführt.`
+            : result.error.message,
           payload: { step, executed: false },
         });
         await saveComputerPlan({
@@ -521,12 +643,14 @@ export async function resumeComputerWork(input: {
   organizationId: string;
   jobId?: string;
   userRequest?: string;
+  approvalToken?: string;
   onStatus?: (message: string) => void;
 }): Promise<ComputerAgentResult> {
   return runComputerAgent({
     organizationId: input.organizationId,
     jobId: input.jobId,
     userRequest: input.userRequest?.trim() || "mach weiter",
+    approvalToken: input.approvalToken,
     onStatus: input.onStatus,
   });
 }
@@ -671,6 +795,16 @@ function userReply(
       return `Gefunden:\n${matches.map((item) => `- ${item}`).join("\n")}`;
     }
     return root ? `Unter ${root} ist nichts Passendes.` : "Keine Dateien gefunden.";
+  }
+  if (intent.kind === "quit_app") {
+    const quit = actions.find((item) => item.action === "quit");
+    const name = quit?.target?.trim() || "Die App";
+    return quit?.success ? `${name} ist beendet.` : `${name} läuft noch.`;
+  }
+  if (intent.kind === "open_app") {
+    const launch = actions.find((item) => item.action === "launch");
+    const name = launch?.target?.trim() || "Die App";
+    return launch?.success ? `${name} ist geöffnet.` : `${name} konnte ich nicht öffnen.`;
   }
   if (intent.kind === "run_script") {
     const scripted = actions.find((item) => item.action === "runScript");

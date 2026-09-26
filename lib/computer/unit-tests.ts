@@ -114,6 +114,11 @@ export function runComputerUnitTests(): string[] {
     assert.equal(detectComputerIntent("Ändere auf rankPilot die Startseite und lass Cursor das umsetzen.").kind, "none");
     assert.equal(detectComputerIntent("NOVA, lösche das NOVA-Projekt.").kind, "delete_dangerous");
     assert.equal(detectComputerIntent("NOVA, öffne Finder").kind, "open_app");
+    assert.equal(detectComputerIntent("Beende Finder.").kind, "quit_app");
+    const quit = planComputerTask({ kind: "quit_app", userRequest: "Beende Finder.", workspace: "/tmp" });
+    assert.equal(quit.length, 1);
+    assert.equal((quit[0]?.payload as { action?: string }).action, "quit");
+    assert.equal((quit[0]?.payload as { name?: string }).name, "Finder");
     assert.equal(detectComputerIntent("Klick auf Speichern in TextEdit").kind, "ui_click");
     assert.equal(guessAppName("Klick auf Speichern in TextEdit"), "TextEdit");
     assert.equal(guessControlName("Klick auf Speichern in TextEdit"), "Speichern");

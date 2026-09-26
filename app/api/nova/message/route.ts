@@ -1,4 +1,5 @@
 import { getCurrentTenant } from "@/services/tenant";
+import { failJobsLeftByFailedRequest } from "@/services/jobs/recover";
 import { runMaster, type MasterEvent } from "@/agents/master";
 import { getOrCreateActiveConversation, appendMessage } from "@/services/conversation";
 import { recordConversationTurn } from "@/services/archive";
@@ -85,12 +86,14 @@ export async function POST(request: Request) {
         let resultReply = "";
         let resultPayload: Record<string, unknown> | null = null;
 
+        const startedAt = new Date();
         try {
           const result = await runMaster({
             organizationId: tenant.organizationId,
             userRequest: parsed.message,
             conversationId: conversation.id,
             sourceMessageId: userMessage.id,
+            signal: request.signal,
             onEvent: (event: MasterEvent) => {
               send(event);
             },
@@ -105,6 +108,7 @@ export async function POST(request: Request) {
             orbState: result.orbState,
             statusMessage: result.statusMessage,
             reply: result.reply,
+            replyStored: result.replyStored === true,
             approvalId: result.approvalId,
             actionType: result.actionType ?? null,
             mock: result.mock,
@@ -115,6 +119,7 @@ export async function POST(request: Request) {
             humanRequired: result.humanRequired ?? null,
           };
         } catch (error) {
+          await failJobsLeftByFailedRequest(tenant.organizationId, startedAt).catch(() => undefined);
           resultReply = publicErrorMessage(error);
           send({
             type: "error",
@@ -126,7 +131,7 @@ export async function POST(request: Request) {
           });
         }
 
-        if (resultReply) {
+        if (resultReply && !resultPayload?.replyStored) {
           const assistantMessage = await appendMessage({
             organizationId: tenant.organizationId,
             conversationId: conversation.id,

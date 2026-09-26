@@ -3,7 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { prisma } from "@/lib/prisma";
 import { BaseMailProvider } from "@/connectors/mail/base";
-import { readMailAutomationState, runMailAppleScript } from "@/services/mail/apple-events";
+import { openMailIfClosed, readMailAutomationState, runMailAppleScript } from "@/services/mail/apple-events";
 import {
   appleIdentityToken,
   appleRefFromCapabilities,
@@ -206,6 +206,7 @@ export class AppleMailProvider extends BaseMailProvider {
   }
 
   async healthCheck(organizationId: string) {
+    await openMailIfClosed();
     const state = await readMailAutomationState();
     if (state !== "granted") {
       return {
@@ -565,8 +566,13 @@ export class AppleMailProvider extends BaseMailProvider {
 
   private async confirmSent(appleId: string, subject: string, recipient: string, scriptOutput: string): Promise<MailSendResult> {
     const accepted = /true/i.test(scriptOutput);
-    const lookup = await runMailAppleScript(sentLookupScript(appleId, subject, recipient), 25_000);
-    const messageId = lookup.ok ? lookup.output.trim() : "";
+    let messageId = "";
+    for (let attempt = 0; attempt < 6; attempt += 1) {
+      const lookup = await runMailAppleScript(sentLookupScript(appleId, subject, recipient), 25_000);
+      messageId = lookup.ok ? lookup.output.trim() : "";
+      if (messageId) break;
+      await new Promise((resolve) => setTimeout(resolve, 1500));
+    }
     const status = deliveryFromVerification(accepted, Boolean(messageId));
     if (status !== "VERIFIED") {
       return failed("Die Nachricht ist nicht im Ordner Gesendet bestätigt.");

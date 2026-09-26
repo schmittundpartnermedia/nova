@@ -2,11 +2,10 @@
 import AppKit
 import Foundation
 
-let navy = NSColor(calibratedRed: 7 / 255, green: 16 / 255, blue: 24 / 255, alpha: 1)
-let navyLift = NSColor(calibratedRed: 18 / 255, green: 42 / 255, blue: 62 / 255, alpha: 1)
-let cyan = NSColor(calibratedRed: 62 / 255, green: 198 / 255, blue: 255 / 255, alpha: 1)
-let ice = NSColor(calibratedRed: 126 / 255, green: 200 / 255, blue: 255 / 255, alpha: 1)
-let paper = NSColor(calibratedRed: 244 / 255, green: 247 / 255, blue: 251 / 255, alpha: 1)
+let black = NSColor.black
+let ink = NSColor(calibratedWhite: 0.08, alpha: 1)
+let paper = NSColor.white
+let mist = NSColor(calibratedWhite: 0.78, alpha: 1)
 
 enum Mark {
     case wordmark
@@ -43,12 +42,12 @@ func render(pixels: Int) -> NSBitmapImageRep {
     let ctx = context.cgContext
     let rect = CGRect(x: 0, y: 0, width: size, height: size)
 
-    ctx.setFillColor(navy.cgColor)
+    ctx.setFillColor(black.cgColor)
     ctx.fill(rect)
 
     let background = CGGradient(
-        colorsSpace: CGColorSpaceCreateDeviceRGB(),
-        colors: [navyLift.cgColor, navy.cgColor] as CFArray,
+        colorsSpace: CGColorSpaceCreateDeviceGray(),
+        colors: [ink.cgColor, black.cgColor] as CFArray,
         locations: [0, 1]
     )!
     ctx.drawLinearGradient(
@@ -77,11 +76,11 @@ func render(pixels: Int) -> NSBitmapImageRep {
 func drawGlow(ctx: CGContext, size: CGFloat) {
     let center = CGPoint(x: size * 0.5, y: size * 0.58)
     let glow = CGGradient(
-        colorsSpace: CGColorSpaceCreateDeviceRGB(),
+        colorsSpace: CGColorSpaceCreateDeviceGray(),
         colors: [
-            ice.withAlphaComponent(0.42).cgColor,
-            cyan.withAlphaComponent(0.18).cgColor,
-            navy.withAlphaComponent(0).cgColor,
+            paper.withAlphaComponent(0.38).cgColor,
+            mist.withAlphaComponent(0.14).cgColor,
+            black.withAlphaComponent(0).cgColor,
         ] as CFArray,
         locations: [0, 0.38, 1]
     )!
@@ -97,10 +96,10 @@ func drawGlow(ctx: CGContext, size: CGFloat) {
 
 func drawSheen(ctx: CGContext, size: CGFloat) {
     let sheen = CGGradient(
-        colorsSpace: CGColorSpaceCreateDeviceRGB(),
+        colorsSpace: CGColorSpaceCreateDeviceGray(),
         colors: [
-            NSColor.white.withAlphaComponent(0.14).cgColor,
-            NSColor.white.withAlphaComponent(0).cgColor,
+            paper.withAlphaComponent(0.14).cgColor,
+            paper.withAlphaComponent(0).cgColor,
         ] as CFArray,
         locations: [0, 1]
     )!
@@ -116,8 +115,8 @@ func drawCore(ctx: CGContext, size: CGFloat) {
     let inset = size * 0.22
     let rect = CGRect(x: inset, y: inset, width: size - inset * 2, height: size - inset * 2)
     let core = CGGradient(
-        colorsSpace: CGColorSpaceCreateDeviceRGB(),
-        colors: [ice.cgColor, cyan.cgColor, NSColor(calibratedRed: 29 / 255, green: 79 / 255, blue: 154 / 255, alpha: 1).cgColor] as CFArray,
+        colorsSpace: CGColorSpaceCreateDeviceGray(),
+        colors: [paper.cgColor, mist.cgColor, NSColor(calibratedWhite: 0.22, alpha: 1).cgColor] as CFArray,
         locations: [0, 0.45, 1]
     )!
     ctx.saveGState()
@@ -149,7 +148,7 @@ func drawWord(ctx: CGContext, size: CGFloat, text: String, fontSize: CGFloat, ac
         y: (size - textSize.height) / 2 + size * 0.02
     )
     ctx.saveGState()
-    ctx.setShadow(offset: CGSize(width: 0, height: flipped ? size * 0.012 : -size * 0.012), blur: size * 0.06, color: cyan.withAlphaComponent(0.55).cgColor)
+    ctx.setShadow(offset: CGSize(width: 0, height: flipped ? size * 0.012 : -size * 0.012), blur: size * 0.06, color: paper.withAlphaComponent(0.45).cgColor)
     attributed.draw(at: origin)
     ctx.restoreGState()
     attributed.draw(at: origin)
@@ -159,7 +158,7 @@ func drawWord(ctx: CGContext, size: CGFloat, text: String, fontSize: CGFloat, ac
     let barHeight = max(2, size * 0.012)
     let gap = size * 0.045
     let barY = flipped ? origin.y + textSize.height + gap : origin.y - gap - barHeight
-    cyan.setFill()
+    paper.setFill()
     NSRect(x: (size - barWidth) / 2, y: barY, width: barWidth, height: barHeight).fill()
 }
 

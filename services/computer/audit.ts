@@ -134,14 +134,18 @@ export async function interruptStaleComputerJobs(organizationId?: string) {
   });
 }
 
-export async function findResumableComputerJob(organizationId: string) {
+export async function findResumableComputerJob(
+  organizationId: string,
+  options?: { jobId?: string; waitingApproval?: boolean },
+) {
   assertOrganizationId(organizationId);
-  await interruptStaleComputerJobs(organizationId);
+  if (!options?.waitingApproval) await interruptStaleComputerJobs(organizationId);
   const job = await prisma.computerJob.findFirst({
     where: {
       organizationId,
       cancelRequested: false,
-      status: { in: [...RESUMABLE_COMPUTER_STATUSES] },
+      status: { in: options?.waitingApproval ? ["WAITING_FOR_APPROVAL"] : [...RESUMABLE_COMPUTER_STATUSES] },
+      ...(options?.jobId ? { jobId: options.jobId } : {}),
     },
     orderBy: { startedAt: "desc" },
   });

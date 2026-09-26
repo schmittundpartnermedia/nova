@@ -10,7 +10,7 @@ export type ChatGPTImportIntent = {
 };
 
 const IMPORT_RE =
-  /\b(?:chatgpt|chat\s*gpt)\b.{0,80}\b(?:importier(?:e|en)?|verlauf|export|zip|übernehm(?:e|en)?)\b/i;
+  /\b(?:chatgpt|chat\s*gpt)\b.{0,80}\b(?:importier(?:e|en)?|export|zip|übernehm(?:e|en)?)\b/i;
 const IMPORT_ALT_RE =
   /\b(?:importier(?:e|en)?|übernehm(?:e|en)?|nimm\s+auf)\b.{0,80}\b(?:chatgpt|chat\s*gpt|chatgpt-verlauf|chatgpt\s+export)\b/i;
 

@@ -4,12 +4,15 @@ import { prisma } from "@/lib/prisma";
 import {
   completeWorkItem,
   failWorkItem,
+  keepWorkLease,
   leaseDueWork,
   markWorkRunning,
   recoverExpiredLeases,
   withExternalEffect,
 } from "@/services/worker/queue";
+import { executeCodingWork, executeComputerWork, executeKnowledgeWork, executePlannerWork } from "@/services/jobs/owned-run";
 import { runDevelopmentWork } from "@/services/development/run";
+import { pauseAbandonedJobs } from "@/services/jobs/recover";
 
 export type WorkHandler = (item: {
   id: string;
@@ -31,9 +34,14 @@ registerWorkHandler("system.ping", async () => ({ ok: true, note: "pong" }));
 registerWorkHandler("review.wait", async () => ({ ok: true, retry: false, note: "bleibt in Prüfung" }));
 
 registerWorkHandler("development.run", runDevelopmentWork);
+registerWorkHandler("computer.run", executeComputerWork);
+registerWorkHandler("coding.run", executeCodingWork);
+registerWorkHandler("knowledge.run", executeKnowledgeWork);
+registerWorkHandler("planner.run", executePlannerWork);
 
 export async function tickWorker(workerId: string, now = new Date()) {
   await prisma.$queryRawUnsafe("PRAGMA journal_mode=WAL;");
+  await pauseAbandonedJobs(now);
   await recoverExpiredLeases(now);
   const leased = await leaseDueWork(workerId, now);
   for (const item of leased) {
@@ -55,6 +63,7 @@ export async function tickWorker(workerId: string, now = new Date()) {
       });
       continue;
     }
+    const release = keepWorkLease(item.id, item.organizationId, workerId);
     try {
       const payload = JSON.parse(item.payload) as Record<string, unknown>;
       const result = await handler({
@@ -65,6 +74,11 @@ export async function tickWorker(workerId: string, now = new Date()) {
         payload,
         attempts: item.attempts,
       });
+      const current = await prisma.workItem.findFirst({
+        where: { id: item.id, organizationId: item.organizationId },
+        select: { status: true },
+      });
+      if (current?.status === "needs_verification") continue;
       if (result.ok) await completeWorkItem(item.id, item.organizationId, result.note);
       else {
         await failWorkItem({
@@ -81,6 +95,8 @@ export async function tickWorker(workerId: string, now = new Date()) {
         error: error instanceof Error ? error.message : "Worker-Fehler",
         retry: true,
       });
+    } finally {
+      release();
     }
   }
   return leased.length;

@@ -380,22 +380,22 @@ async function main() {
 
   const shoulderGeo = new THREE.CapsuleGeometry(0.09, 0.22, 8, 16);
   shoulderGeo.rotateZ(Math.PI / 2);
-  const shoulders = new THREE.Mesh(shoulderGeo, skinMaterial("#1a2a38", 0.72, 0.28, "#123044"));
+  const shoulders = new THREE.Mesh(shoulderGeo, skinMaterial("#1a1a1a", 0.72, 0.28, "#8a8a8a"));
   shoulders.name = "ShoulderMesh";
   shoulders.position.set(0, 0.04, 0);
   (shoulders.material as THREE.MeshStandardMaterial).name = "Cybernetic";
   spineBone?.add(shoulders);
 
   const eyeMat = new THREE.MeshStandardMaterial({
-    color: "#0b1a24",
-    emissive: "#3ec6ff",
+    color: "#111111",
+    emissive: "#ffffff",
     emissiveIntensity: 0.7,
     roughness: 0.18,
     metalness: 0.2,
   });
   eyeMat.name = "Eye";
   const corneaMat = new THREE.MeshPhysicalMaterial({
-    color: "#d9f4ff",
+    color: "#e8e8e8",
     transmission: 0.72,
     roughness: 0.04,
     thickness: 0.02,

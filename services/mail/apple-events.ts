@@ -7,6 +7,21 @@ export function clearMailAutomationCache(): void {
   cached = null;
 }
 
+export async function openMailIfClosed(): Promise<void> {
+  if (process.platform !== "darwin") return;
+  clearMailAutomationCache();
+  const state = await readMailAutomationState();
+  if (state !== "unavailable") return;
+  const launched = await invokeNativeHelper({ cmd: "app.launch", app: "com.apple.mail" }, 12_000);
+  if (!launched.ok) return;
+  for (let attempt = 0; attempt < 10; attempt += 1) {
+    await new Promise((resolve) => setTimeout(resolve, 400));
+    clearMailAutomationCache();
+    const next = await readMailAutomationState();
+    if (next !== "unavailable") return;
+  }
+}
+
 export async function readMailAutomationState(): Promise<MailAutomationState> {
   if (cached && Date.now() - cached.at < 15_000) return cached.state;
   if (process.platform !== "darwin") return "unavailable";

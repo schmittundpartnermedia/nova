@@ -54,6 +54,16 @@ export function formatDevelopmentStatusReply(input: {
     if (olderOpen > 0) lines.push(`Weitere offene Aufträge: ${olderOpen}.`);
   }
 
+  if (/geplant/i.test(input.userRequest)) {
+    const planned = input.orders.filter((order) => order.status === "planned");
+    if (planned.length === 0) {
+      lines.push("Es steht kein Entwicklungsauftrag auf geplant.");
+    } else {
+      lines.push(planned.length === 1 ? "Geplanter Auftrag, noch nicht gestartet:" : "Geplante Aufträge, noch nicht gestartet:");
+      for (const order of planned) lines.push(`- ${cleanGoal(order.goal)}`);
+    }
+  }
+
   const askingFailure = /fehlgeschlagen|nicht fertig/i.test(input.userRequest);
   const askingChange = /geändert|geaendert/i.test(input.userRequest);
   const latest = input.orders[0];

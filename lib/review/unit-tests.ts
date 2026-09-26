@@ -26,6 +26,7 @@ export function runReviewUnitTests(): string[] {
     assert.equal(classifyReviewUtterance("Nochmal.")?.kind, "changes");
     assert.equal(classifyReviewUtterance("Nicht gut.")?.kind, "changes");
     assert.equal(classifyReviewUtterance("Abbrechen.")?.kind, "cancel");
+    assert.equal(classifyReviewUtterance("Ändere den Entwurf, schreib dass ich nächste Woche schaue."), null);
   });
 
   check("new task is not a review", () => {

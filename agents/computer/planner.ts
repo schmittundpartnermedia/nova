@@ -132,6 +132,18 @@ export function planComputerTask(input: {
         },
       ];
     }
+    case "quit_app": {
+      const app = guessAppName(input.userRequest);
+      if (!app) return [];
+      return [
+        {
+          tool: "application",
+          payload: { action: "quit", name: app },
+          purpose: `${app} beenden`,
+          userCommissioned: true,
+        },
+      ];
+    }
     case "open_app": {
       const app = guessAppName(input.userRequest);
       return [

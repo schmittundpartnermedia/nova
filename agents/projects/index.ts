@@ -54,7 +54,7 @@ export const projectAgent: NovaAgent = {
         ok: true,
         summary:
           projects.length > 0
-            ? `Projekte: ${projects.map((item) => item.name).join(", ")}`
+            ? `${projects.length} ${projects.length === 1 ? "Projekt" : "Projekte"}: ${projects.map((item) => item.name).join(", ")}`
             : "Keine Projekte in dieser Organization gespeichert.",
         data: {
           projects: projects.map((item) => ({
@@ -67,13 +67,18 @@ export const projectAgent: NovaAgent = {
       };
     }
 
+    const named = typeof input.name === "string" ? input.name.trim() : "";
     const project = input.projectId
       ? await prisma.project.findFirst({
           where: { id: String(input.projectId), organizationId: context.organizationId },
         })
-      : await prisma.project.findFirst({
-          where: { organizationId: context.organizationId, status: "active" },
-        });
+      : named
+        ? await prisma.project.findFirst({
+            where: { organizationId: context.organizationId, name: { contains: named } },
+          })
+        : await prisma.project.findFirst({
+            where: { organizationId: context.organizationId, status: "active" },
+          });
 
     if (!project) {
       return {
@@ -90,7 +95,7 @@ export const projectAgent: NovaAgent = {
 
     return {
       ok: true,
-      summary: `Projektkontext geladen: ${project.name}`,
+        summary: `${project.name}: ${tasks} offene ${tasks === 1 ? "Aufgabe" : "Aufgaben"}, ${companies} ${companies === 1 ? "Firma" : "Firmen"}.`,
       data: {
         projectId: project.id,
         projectName: project.name,

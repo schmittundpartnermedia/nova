@@ -84,7 +84,7 @@ export function prepareAvatarMaterials(root: THREE.Object3D, anisotropy: number)
         physical.roughness = THREE.MathUtils.clamp(physical.roughness || 0.48, 0.38, 0.62);
         physical.sheen = 0.28;
         physical.sheenRoughness = 0.55;
-        physical.sheenColor = new THREE.Color("#c08a78");
+        physical.sheenColor = new THREE.Color("#c4c4c4");
         physical.envMapIntensity = 0.35;
         return physical;
       }
@@ -93,7 +93,7 @@ export function prepareAvatarMaterials(root: THREE.Object3D, anisotropy: number)
         material.metalness = Math.min(material.metalness, 0.12);
         material.envMapIntensity = 0.85;
         if (material.emissive.getHex() === 0) {
-          material.emissive = new THREE.Color("#1a6a88");
+          material.emissive = new THREE.Color("#9a9a9a");
           material.emissiveIntensity = 0.18;
         }
         return material;
@@ -115,7 +115,7 @@ export function prepareAvatarMaterials(root: THREE.Object3D, anisotropy: number)
         material.roughness = Math.min(material.roughness || 0.28, 0.35);
         material.envMapIntensity = 0.9;
         if (material.emissive.getHex() === 0) {
-          material.emissive = new THREE.Color("#123044");
+          material.emissive = new THREE.Color("#8a8a8a");
           material.emissiveIntensity = 0.45;
         }
         return material;

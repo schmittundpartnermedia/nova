@@ -2,8 +2,13 @@ export function detectContactIntent(text: string): "create" | "search" | "list" 
   const value = text.trim();
   if (!value) return false;
   if (/\b(neues ticket|ticket anlegen|ticket erstell)\b/i.test(value)) return false;
-  if (/\b(speicher(?:e)? kontakt|leg(?:e)? kontakt|neuer kontakt|kontakt anlegen)\b/i.test(value)) return "create";
-  if (/\b(wer ist|kontakt (?:von|zu)|zeig(?:e)? kontakt|such(?:e)? kontakt)\b/i.test(value)) return "search";
+  if (/\b(?:speicher(?:e)?|leg(?:e)?)\b(?:\s+\S+){0,4}\s+kontakt\b/i.test(value)) return "create";
+  if (/\b(?:neuer kontakt|kontakt anlegen)\b/i.test(value)) return "create";
+  if (/\b(kontakt (?:von|zu)|zeig(?:e)? kontakt|such(?:e)? kontakt)\b/i.test(value)) return "search";
+  if (/\bwer ist\b/i.test(value)) {
+    if (/\b(derzeit|aktuell|heute|jetzt|gerade|kanzler|präsident|praesident|minister)\b/i.test(value)) return false;
+    return "search";
+  }
   if (/\b(welche kontakte|kontaktliste|alle kontakte)\b/i.test(value)) return "list";
   return false;
 }

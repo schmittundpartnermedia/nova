@@ -15,7 +15,7 @@ const PROJECT_HINTS = [
   { key: "rankpilot", re: /rank\s*pilot/i },
   { key: "planexus", re: /planexus/i },
   { key: "elevum", re: /elevum/i },
-  { key: "nova", re: /(?:^|[^\w-])nova(?:[^\w-]|$)/i },
+  { key: "nova", re: /\bnova[- ]?(?:projekt|repo|repository|codebase|code)\b/i },
 ];
 
 export function detectCodingIntent(userRequest: string): CodingIntent {

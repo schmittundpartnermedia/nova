@@ -37,6 +37,7 @@ export function runMailUnitTests(): string[] {
     );
     assert.match(text, /Angebot 1200/);
     assert.equal(/alert|color:red|pixel/.test(text), false);
+    assert.equal(htmlToNormalizedText("Hallo\u034f \u200bWelt").includes("\u034f"), false);
   });
 
   check("quoted reply is separated", () => {
@@ -104,6 +105,10 @@ export function runMailUnitTests(): string[] {
     assert.equal(detectMailIntent("Lies meine neuesten E-Mails.").kind, "inbox");
     assert.equal(detectMailIntent("Was hat Hetzner zuletzt geschrieben?").kind, "search");
     assert.equal(detectMailIntent("Antworte, dass wir nächste Woche telefonieren können.").kind, "draft");
+    assert.equal(
+      detectMailIntent("Schreib einen Mailentwurf von info@rankpilot.de an joachimschmitt2012@googlemail.com. Betreff: NOVA Testmail.").kind,
+      "draft",
+    );
     assert.equal(detectMailIntent("Ja, senden.").kind, "send-confirm");
     assert.equal(detectMailIntent("Wie spät ist es?").kind, "none");
   });

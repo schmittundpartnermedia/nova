@@ -27,6 +27,7 @@ export function classifyReviewUtterance(text: string): ReviewCommand | null {
     return { kind: "reject" };
   }
   if (/^(nochmal|nicht gut|änder\w*|aender\w*|bitte änder\w*|bitte aender\w*|funktioniert nicht|anders machen)\b/i.test(value)) {
+    if (/\b(?:entwurf|e-?mail)\b/i.test(value)) return null;
     return { kind: "changes", instruction: value };
   }
   if (/^(weiter)[.!]?$/i.test(value)) {

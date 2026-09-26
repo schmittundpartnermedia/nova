@@ -1,7 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { assertOrganizationId } from "@/services/tenant";
 import { deleteMailSecret } from "@/services/mail/credentials";
-import { clearMailAutomationCache, readMailAutomationState, runMailAppleScript } from "@/services/mail/apple-events";
+import { clearMailAutomationCache, openMailIfClosed, readMailAutomationState, runMailAppleScript } from "@/services/mail/apple-events";
 import { startMailSync } from "@/services/mail/sync";
 import { getMailProvider } from "@/connectors/registry";
 import { accountEmail, accountListScript, parseRecords } from "@/lib/mail/apple";
@@ -127,6 +127,7 @@ export async function connectAppleMail(organizationId: string) {
 
 export async function ensureAppleMailFresh(organizationId: string) {
   assertOrganizationId(organizationId);
+  await openMailIfClosed();
   const state = await readMailAutomationState();
   if (state !== "granted") return { refreshed: false };
   const account = await prisma.mailAccount.findFirst({

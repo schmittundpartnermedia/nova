@@ -11,11 +11,20 @@ export function htmlToNormalizedText(html: string): string {
   source = source.replace(/<[^>]+>/g, " ");
   source = decodeEntities(source);
   return source
+    .replace(/[\u034f\u200b-\u200d\ufeff\u00ad\ufffc]/g, "")
     .replace(/\u00a0/g, " ")
     .replace(/[ \t]+\n/g, "\n")
     .replace(/\n{3,}/g, "\n\n")
     .replace(/[ \t]{2,}/g, " ")
     .trim();
+}
+
+export function mailExcerpt(text: string, max = 360): string {
+  return text
+    .replace(/[\u034f\u200b-\u200d\ufeff\u00ad\ufffc]/g, "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, max);
 }
 
 function decodeEntities(value: string): string {

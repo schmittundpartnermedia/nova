@@ -23,6 +23,8 @@ export function runDevelopmentUnitTests(): string[] {
     assert.equal(detectDevelopmentIntent("Woran arbeitet Cursor gerade?").kind, "status");
     assert.equal(detectDevelopmentIntent("Wie ist der Stand deiner Entwicklungsaufträge?").kind, "status");
     assert.equal(detectDevelopmentIntent("Wie ist der aktuelle Stand meines Entwicklungsauftrags?").kind, "status");
+    assert.equal(detectDevelopmentIntent("Und die geplanten Aufträge?").kind, "status");
+    assert.equal(detectDevelopmentIntent("Für Hetzner ist ein Auftrag geplant.").kind, "none");
     assert.equal(
       detectDevelopmentIntent(
         "NOVA, ich möchte, dass du mir künftig sagen kannst, woran Cursor gerade für dich arbeitet und wie der aktuelle Stand deiner Entwicklungsaufträge ist.",
@@ -100,6 +102,16 @@ export function runDevelopmentUnitTests(): string[] {
     assert.match(formatted.reply, /Aktueller Entwicklungsauftrag/);
     assert.match(formatted.reply, /developing: Bitte baue die Statusantwort/);
     assert.match(formatted.statusMessage, /Entwicklung: RUNNING/);
+    const planned = formatDevelopmentStatusReply({
+      userRequest: "Und die geplanten Aufträge?",
+      cursorWork: [],
+      orders: [
+        { status: "completed", goal: "Erledigt.", iteration: 0, maxIterations: 2 },
+        { status: "planned", goal: "Kalender bedienen.", iteration: 0, maxIterations: 2 },
+      ],
+    });
+    assert.match(planned.reply, /Geplanter Auftrag, noch nicht gestartet/);
+    assert.match(planned.reply, /Kalender bedienen/);
   });
 
   return failures;

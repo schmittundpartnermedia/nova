@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { assertOrganizationId } from "@/services/tenant";
+import { mailExcerpt } from "@/lib/mail/html";
 import { detectMailIntent } from "@/lib/mail/intent";
 import { summarizeInbox } from "@/services/mail/inbox";
 import { getMailThread, searchMail } from "@/services/mail/search";
@@ -46,7 +47,7 @@ export async function answerMail(input: {
     const top = hits[0];
     const thread = await getMailThread(input.organizationId, top.threadId);
     const count = thread?.messages.length ?? 1;
-    const reply = `${top.fromName || top.fromAddress} – ${top.subject}\n${top.normalizedText.slice(0, 360)}\n\nVerlauf: ${count} Nachricht${count === 1 ? "" : "en"}.`;
+    const reply = `${top.fromName || top.fromAddress} – ${top.subject}\n${mailExcerpt(top.normalizedText)}\n\nVerlauf: ${count} Nachricht${count === 1 ? "" : "en"}.`;
     return { reply, statusMessage: "Mail gefunden.", waitingApproval: false };
   }
   if (intent.kind === "draft") {

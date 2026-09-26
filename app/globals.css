@@ -3,9 +3,9 @@
 
 :root {
   --nova-bg: #000;
-  --nova-fg: #f4f7fb;
-  --nova-muted: rgba(210, 224, 245, 0.46);
-  --nova-line: rgba(140, 190, 255, 0.16);
+  --nova-fg: #fff;
+  --nova-muted: rgba(255, 255, 255, 0.46);
+  --nova-line: rgba(255, 255, 255, 0.16);
 }
 
 @theme inline {
@@ -33,7 +33,7 @@ body {
 }
 
 ::selection {
-  background: rgba(180, 196, 230, 0.28);
+  background: rgba(255, 255, 255, 0.28);
 }
 
 button,

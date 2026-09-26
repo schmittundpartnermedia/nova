@@ -22,6 +22,9 @@ export function runChatGPTUnitTests(): string[] {
   if (detectChatGPTImportIntent("Aendere die Startseite von rankPilot").kind !== "none") {
     failures.push("ChatGPT-Intent darf Coding nicht stehlen");
   }
+  if (detectChatGPTImportIntent("Was stand damals im ChatGPT-Verlauf zu Produkt Gamma?").kind !== "none") {
+    failures.push("Eine Frage an den vorhandenen Verlauf ist kein neuer Import");
+  }
 
   const zip = createChatGPTExportZip();
   const parsed = parseChatGPTExport({ zipBytes: zip });

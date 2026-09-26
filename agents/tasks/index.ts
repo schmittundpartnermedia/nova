@@ -16,6 +16,22 @@ export const taskAgent: NovaAgent = {
   },
   async run(input, context) {
     assertOrganizationId(context.organizationId);
+    if (input.list === true) {
+      const tickets = await prisma.task.findMany({
+        where: { organizationId: context.organizationId, status: "open", title: { startsWith: "Ticket:" } },
+        orderBy: { dueAt: "asc" },
+        take: 30,
+      });
+      return {
+        ok: true,
+        summary:
+          tickets.length > 0
+            ? `${tickets.length} ${tickets.length === 1 ? "offenes Ticket" : "offene Tickets"}: ${tickets.map((item) => item.title.replace(/^Ticket:\s*/i, "")).join(", ")}`
+            : "Keine offenen Tickets.",
+        data: { tickets: tickets.map((item) => ({ id: item.id, title: item.title, dueAt: item.dueAt })) },
+      };
+    }
+
     const dueAt = new Date();
     if (typeof input.dueAt === "string" && !Number.isNaN(Date.parse(input.dueAt))) {
       dueAt.setTime(Date.parse(String(input.dueAt)));

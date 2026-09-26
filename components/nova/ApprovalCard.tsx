@@ -28,7 +28,7 @@ export function ApprovalCard({
           disabled={busy}
           onClick={onApprove}
           className="nova-chip"
-          style={{ background: "rgba(227, 154, 78, 0.18)", color: "#f3d2aa" }}
+          style={{ background: "rgba(255, 255, 255, 0.14)", color: "#fff" }}
         >
           Freigeben
         </button>
@@ -38,7 +38,7 @@ export function ApprovalCard({
             disabled={busy}
             onClick={onAlwaysAllow}
             className="nova-chip"
-            style={{ background: "rgba(120, 180, 140, 0.16)", color: "#c8e6c9" }}
+            style={{ background: "rgba(255, 255, 255, 0.16)", color: "#fff" }}
           >
             Immer erlauben
           </button>

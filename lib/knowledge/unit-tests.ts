@@ -14,6 +14,9 @@ export function runKnowledgeUnitTests(): string[] {
   if (importIntent.kind !== "import") failures.push("Import-Intent nicht erkannt");
   const queryIntent = detectKnowledgeIntent("Was stand im Angebot von Firma X?");
   if (queryIntent.kind !== "query") failures.push("Query-Intent nicht erkannt");
+  if (detectKnowledgeIntent("Was ist der aktuelle Preis?").kind !== "query") {
+    failures.push("Aktueller Preis muss das gespeicherte Wissen fragen");
+  }
   if (detectKnowledgeIntent("Aendere die Startseite von rankPilot").kind !== "none") {
     failures.push("Knowledge darf Coding-Intent nicht stehlen");
   }

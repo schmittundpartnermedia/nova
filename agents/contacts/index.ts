@@ -42,6 +42,7 @@ export const contactAgent: NovaAgent = {
     const contacts = await prisma.contact.findMany({
       where: {
         organizationId: context.organizationId,
+        isMock: false,
         ...(kind === "list"
           ? {}
           : {

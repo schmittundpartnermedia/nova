@@ -91,6 +91,32 @@ export async function markWorkRunning(id: string, organizationId: string, worker
   });
 }
 
+/** Hält die Lease, solange der Handler auf Ein-/Ausgabe wartet. Stirbt der Prozess, läuft der Timer nicht weiter. */
+export function keepWorkLease(id: string, organizationId: string, workerId: string) {
+  const timer = setInterval(() => {
+    void prisma.workItem
+      .updateMany({
+        where: { id, organizationId, lockedBy: workerId, status: "running" },
+        data: { lockedUntil: new Date(Date.now() + LEASE_MS) },
+      })
+      .catch(() => undefined);
+  }, 20_000);
+  timer.unref();
+  return () => clearInterval(timer);
+}
+
+export async function loadEffectResult<T>(organizationId: string, idempotencyKey: string): Promise<T | null> {
+  const row = await prisma.workEffect.findFirst({
+    where: { organizationId, idempotencyKey, status: "committed" },
+  });
+  if (!row?.result) return null;
+  try {
+    return JSON.parse(row.result) as T;
+  } catch {
+    return null;
+  }
+}
+
 export async function completeWorkItem(id: string, organizationId: string, note?: string) {
   const current = await prisma.workItem.findFirst({ where: { id, organizationId } });
   await prisma.workItem.updateMany({
@@ -190,6 +216,15 @@ export async function recoverExpiredLeases(now = new Date()) {
           audit: auditAppend(item.audit, { event: "needs_verification" }),
         },
       });
+      if (item.jobId) {
+        await prisma.job.updateMany({
+          where: { id: item.jobId, organizationId: item.organizationId, status: { in: ["running", "planning"] } },
+          data: {
+            status: "paused",
+            pauseReason: "Externe Aktion nach Neustart nicht erneut ausgeführt.",
+          },
+        });
+      }
       continue;
     }
     const effect = await prisma.workEffect.findFirst({
@@ -208,6 +243,15 @@ export async function recoverExpiredLeases(now = new Date()) {
           audit: auditAppend(item.audit, { event: "needs_verification", effectId: effect.id }),
         },
       });
+      if (item.jobId) {
+        await prisma.job.updateMany({
+          where: { id: item.jobId, organizationId: item.organizationId, status: { in: ["running", "planning"] } },
+          data: {
+            status: "paused",
+            pauseReason: "Externe Aktion ist unbestätigt und wird nicht wiederholt.",
+          },
+        });
+      }
       continue;
     }
     const giveUp = item.attempts >= item.maxAttempts;

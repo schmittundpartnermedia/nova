@@ -604,6 +604,19 @@ export function NovaShell() {
       setApproval(null);
       setOrbState(decision === "approved" ? "DONE" : "IDLE");
       setStatus(data.message ?? IDLE_STATUS);
+      const statusResponse = await fetch("/api/nova/status", { cache: "no-store" });
+      const statusBody = await statusResponse.json();
+      const nextPending = statusBody.pendingApprovals?.[0];
+      if (nextPending) {
+        setApproval({
+          id: nextPending.id,
+          description: nextPending.description,
+          status: nextPending.status,
+          actionType: nextPending.actionType,
+        });
+        setOrbState("WAITING_FOR_APPROVAL");
+        setStatus("Freigabe erforderlich");
+      }
       if (standing) {
         const policies = await fetch("/api/approvals/policies");
         const body = await policies.json();
@@ -881,7 +894,7 @@ export function NovaShell() {
                       ? "Bitte anmelden, dann hier fortsetzen."
                       : resumable?.goal || "Ich kann am letzten Schritt weitermachen."}
                 </p>
-                <button type="button" disabled={busy} onClick={resumeComputer} className="nova-chip" style={{ background: "rgba(227, 154, 78, 0.18)", color: "#f3d2aa" }}>
+                <button type="button" disabled={busy} onClick={resumeComputer} className="nova-chip" style={{ background: "rgba(255, 255, 255, 0.14)", color: "#fff" }}>
                   {humanGate ? "Ich hab’s gelöst" : "Fortsetzen"}
                 </button>
               </div>

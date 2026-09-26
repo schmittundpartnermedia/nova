@@ -8,6 +8,7 @@ export type ComputerIntentKind =
   | "start_dev"
   | "open_local"
   | "open_app"
+  | "quit_app"
   | "ui_click"
   | "cursor_ask"
   | "delete_dangerous"
@@ -58,6 +59,13 @@ export function detectComputerIntent(userRequest: string): ComputerIntent {
 
   if (/\b(?:klick(?:e|en)?(?:\s+auf)?|drück(?:e|en)?(?:\s+auf)?|tippe(?:\s+(?:in|auf))?)\b/i.test(lower)) {
     return { kind: "ui_click", userCommissioned: true, statusMessage: "UI-Element wird bedient" };
+  }
+
+  if (
+    /\b(?:beende|beenden|schließe|schliesse|quit)\b/i.test(text) &&
+    /\b(finder|terminal|textedit|mail|kalender|safari|chrome|cursor|notizen|notes|systemeinstellungen)\b/i.test(lower)
+  ) {
+    return { kind: "quit_app", userCommissioned: true, statusMessage: "Freigabe erforderlich" };
   }
 
   if (/öffne\s+(?:finder|terminal|textedit|mail|kalender|safari|chrome|cursor|notizen|notes|systemeinstellungen)/i.test(lower)) {

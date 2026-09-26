@@ -18,30 +18,30 @@ export type NovaPortraitLightingPreset = {
 
 export const NOVA_PORTRAIT_LIGHTING: NovaPortraitLightingPreset = {
   id: "portrait",
-  clear: 0x03070c,
-  fog: 0x02060c,
+  clear: 0x000000,
+  fog: 0x000000,
   fogDensity: 0.06,
   exposure: 1.12,
   environmentIntensity: 0.22,
-  key: { color: 0xc8e7ff, intensity: 18, position: [-0.28, 2.15, 1.45] },
-  rim: { color: 0x3ec6ff, intensity: 3.4, position: [0.72, 1.82, -0.78] },
-  fill: { color: 0xe39a4e, intensity: 1.15, position: [0.42, 1.22, 0.62] },
-  ambient: { sky: 0x7eb4ff, ground: 0x0a1018, intensity: 0.72 },
-  eyeGlow: { color: 0x5ad2ff, intensity: 0.55, position: [0, 1.62, 0.22] },
+  key: { color: 0xffffff, intensity: 18, position: [-0.28, 2.15, 1.45] },
+  rim: { color: 0xc8c8c8, intensity: 3.4, position: [0.72, 1.82, -0.78] },
+  fill: { color: 0xffffff, intensity: 1.15, position: [0.42, 1.22, 0.62] },
+  ambient: { sky: 0xffffff, ground: 0x000000, intensity: 0.72 },
+  eyeGlow: { color: 0xffffff, intensity: 0.55, position: [0, 1.62, 0.22] },
 };
 
 export const NOVA_FLAT_LIGHTING: NovaPortraitLightingPreset = {
   id: "flat",
-  clear: 0x11161c,
-  fog: 0x11161c,
+  clear: 0x000000,
+  fog: 0x000000,
   fogDensity: 0,
   exposure: 1,
   environmentIntensity: 0.08,
   key: { color: 0xffffff, intensity: 8, position: [0, 2, 2] },
-  rim: { color: 0x8899aa, intensity: 1.2, position: [0, 1.6, -1] },
+  rim: { color: 0x888888, intensity: 1.2, position: [0, 1.6, -1] },
   fill: { color: 0xffffff, intensity: 2, position: [0.5, 1.4, 0.8] },
   ambient: { sky: 0xffffff, ground: 0x333333, intensity: 0.9 },
-  eyeGlow: { color: 0x5ad2ff, intensity: 0.2, position: [0, 1.62, 0.22] },
+  eyeGlow: { color: 0xffffff, intensity: 0.2, position: [0, 1.62, 0.22] },
 };
 
 export function lightingPreset(id: NovaLightingPresetId = "portrait"): NovaPortraitLightingPreset {

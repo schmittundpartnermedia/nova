@@ -14,9 +14,122 @@ export async function prepareMailDraft(input: {
 }) {
   assertOrganizationId(input.organizationId);
   bootstrapAgents();
-  const hits = await searchMail({ organizationId: input.organizationId, query: input.userRequest, limit: 3 });
-  const latest = hits[0];
-  const thread = latest
+  const explicitTo = input.userRequest.match(/\b(?:an|empfänger|empfaenger)\s+([A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,})/i)?.[1] ?? null;
+  const explicitFrom = input.userRequest.match(/\b(?:von|absender)\s+([A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,})/i)?.[1] ?? null;
+  const explicitSubject = input.userRequest.match(/\bBetreff\s*[:\-]?\s*([^\n.]+)/i)?.[1]?.trim() || null;
+  if (explicitTo) {
+    const account = explicitFrom
+      ? await prisma.mailAccount.findFirst({
+          where: {
+            organizationId: input.organizationId,
+            emailAddress: explicitFrom,
+            status: "connected",
+          },
+        })
+      : null;
+    if (explicitFrom && !account) {
+      return {
+        ok: false,
+        reply: `Das Absenderkonto ${explicitFrom} ist nicht verbunden. Es wurde nichts vorbereitet und nichts versendet.`,
+        communicationId: null as string | null,
+      };
+    }
+    const agent = getAgent("communication");
+    if (!agent) throw new Error("Communication Agent fehlt.");
+    const subject = explicitSubject || "NOVA Testmail";
+    const literalBody = `An: ${explicitTo}\n\nGuten Tag,\n\ndies ist eine NOVA-Testmail und kein echter Vorgang.\n\nFreundliche Grüße\nJoachim`;
+    const result = await agent.run(
+      {
+        mode: "reply",
+        brief: input.userRequest,
+        literalBody,
+        mailAccountId: account?.id,
+        to: explicitTo,
+        subject,
+      },
+      {
+        organizationId: input.organizationId,
+        jobId: input.jobId ?? "mail-draft",
+        userRequest: input.userRequest,
+        goal: "Mailentwurf",
+        projectId: input.projectId,
+      },
+    );
+    const communicationId = ((result.data.communicationIds as string[]) ?? [])[0];
+    if (!communicationId) {
+      return { ok: false, reply: "Ich konnte keinen Entwurf anlegen.", communicationId: null as string | null };
+    }
+    const draft = await prisma.communication.findFirst({
+      where: { id: communicationId, organizationId: input.organizationId },
+    });
+    if (!draft) return { ok: false, reply: result.summary, communicationId: null as string | null };
+    await prisma.communication.update({
+      where: { id: draft.id },
+      data: { deliveryStatus: "WAITING_FOR_APPROVAL", mailAccountId: account?.id ?? draft.mailAccountId, subject },
+    });
+    const sender = account?.emailAddress ?? "kein festes Absenderkonto";
+    const shown = `Neue Mail ist vorbereitet.\nAbsender: ${sender}\nEmpfänger: ${explicitTo}\nBetreff: ${subject}\n\n${draft.body.slice(0, 700)}\n\nSenden?`;
+    await auditMail({
+      organizationId: input.organizationId,
+      action: "DRAFT_CREATED",
+      status: "prepared",
+      detail: subject,
+      jobId: input.jobId,
+    });
+    const approval = await createApprovalRequest({
+      organizationId: input.organizationId,
+      jobId: input.jobId,
+      actionType: "mail.send",
+      description: shown,
+      payload: { communicationIds: [draft.id] },
+    });
+    await auditMail({
+      organizationId: input.organizationId,
+      action: "APPROVAL_REQUESTED",
+      status: "prepared",
+      detail: subject,
+      jobId: input.jobId,
+    });
+    return { ok: true, communicationId: draft.id, approvalId: approval.id, reply: shown };
+  }
+  const named = input.userRequest.match(/\b(?:an|von)\s+([A-ZÄÖÜ][\wäöüÄÖÜß.-]+)/);
+  const revisesDraft = /\bentwurf\b/i.test(input.userRequest) && /(?:änder|aender)/i.test(input.userRequest);
+  const previous = !named && revisesDraft
+    ? await prisma.communication.findFirst({
+        where: {
+          organizationId: input.organizationId,
+          channel: "email",
+          direction: "outbound",
+          mailThreadId: { not: null },
+        },
+        orderBy: { createdAt: "desc" },
+      })
+    : null;
+  const hits = named
+    ? await searchMail({ organizationId: input.organizationId, query: named[1], limit: 3 })
+    : [];
+  const fallback = hits[0]
+    ? hits
+    : await prisma.mailMessage.findMany({
+        where: {
+          organizationId: input.organizationId,
+          classification: { in: ["REPLY_REQUIRED", "ACTION_REQUIRED", "IMPORTANT"] },
+        },
+        orderBy: { receivedAt: "desc" },
+        take: 1,
+        include: { thread: true },
+      });
+  const continued = previous?.mailThreadId
+    ? await prisma.mailThread.findFirst({
+        where: { id: previous.mailThreadId, organizationId: input.organizationId },
+        include: { messages: { orderBy: { receivedAt: "desc" }, take: 8 } },
+      })
+    : null;
+  const continuedMessage = continued?.messages.find((item) => item.direction === "inbound") ?? continued?.messages[0];
+  const latest = (continuedMessage ?? hits[0] ?? fallback[0]) as (typeof hits)[number] | undefined;
+  const thread = continued
+    ? continued
+    : latest
     ? await prisma.mailThread.findFirst({
         where: { id: latest.threadId, organizationId: input.organizationId },
         include: { messages: { orderBy: { receivedAt: "asc" }, take: 8 } },

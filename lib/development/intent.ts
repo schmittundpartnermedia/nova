@@ -4,7 +4,7 @@ export type DevelopmentIntent =
   | { kind: "status"; statusMessage: string };
 
 const STATUS_RE =
-  /was baut cursor|woran (?:arbeitet|baut) cursor|woran cursor(?: gerade)?|wie weit ist|warum ist das noch nicht fertig|was ist fehlgeschlagen|was wurde ge(?:ä|ae)?ndert|status der entwicklung|entwicklungsauftr/i;
+  /was baut cursor|woran (?:arbeitet|baut) cursor|woran cursor(?: gerade)?|wie weit ist|warum ist das noch nicht fertig|was ist fehlgeschlagen|was wurde ge(?:ä|ae)?ndert|status der entwicklung|entwicklungsauftr|^(?:nova[,.\s]*)?(?:und |was ist mit )?(?:die |den )?geplant(?:e|en|er)?\s+(?:entwicklungs)?auftr/i;
 
 const COMMISSION_RE =
   /ich möchte, dass du|ich moechte, dass du|ich will, dass du|entwickle dir|neue fähigkeit|neue faehigkeit|künftig .{0,80}(kannst|können|sollst)|kuenftig .{0,80}(kannst|können|sollst)|ab sofort .{0,80}(kannst|können|sollst)/i;

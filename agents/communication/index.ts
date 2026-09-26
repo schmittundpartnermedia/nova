@@ -44,8 +44,11 @@ export const communicationAgent: NovaAgent = {
       const subject = String(input.subject ?? "Antwort");
       const to = typeof input.to === "string" ? input.to : undefined;
       const { provider, decision } = await resolveAIProvider(context.organizationId, "simple");
-      let body = `Guten Tag,\n\n${brief}\n\nFreundliche Grüße\nJoachim${NO_SEND_FOOTER}`;
-      if (provider.id !== "mock") {
+      const literal = typeof input.literalBody === "string" ? input.literalBody.trim() : "";
+      let body = literal
+        ? literal
+        : `Guten Tag,\n\n${brief}\n\nFreundliche Grüße\nJoachim`;
+      if (!literal && provider.id !== "mock") {
         const generated = await provider.generate({
           model: decision.model,
           temperature: 0.3,
@@ -55,6 +58,7 @@ export const communicationAgent: NovaAgent = {
         });
         body = generated.text.includes("keine E-Mail versendet") ? generated.text : `${generated.text.trim()}${NO_SEND_FOOTER}`;
       }
+      if (!body.includes("keine E-Mail versendet")) body = `${body.trim()}${NO_SEND_FOOTER}`;
       const contact = to
         ? await prisma.contact.findFirst({ where: { organizationId: context.organizationId, email: to.toLowerCase() } })
         : null;
@@ -179,7 +183,7 @@ Joachim${NO_SEND_FOOTER}`;
     return {
       ok: true,
       mock: !useRealDraft,
-      summary: `${drafts.length} Anschreiben als Entwurf vorbereitet. Kein Versand. Mail-Connector nicht verbunden.`,
+      summary: `${drafts.length} Anschreiben als Entwurf vorbereitet. Kein Versand.`,
       data: {
         communicationIds: drafts.map((d) => d.id),
         subjects: drafts.map((d) => d.subject),

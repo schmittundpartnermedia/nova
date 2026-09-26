@@ -1,6 +1,5 @@
 import { bootstrapAgents, getAgent, listAgents } from "@/agents/bootstrap";
 import { detectComputerIntent } from "@/agents/computer/intent";
-import { runComputerAgent } from "@/agents/computer";
 import { detectCodingIntent } from "@/agents/coding/intent";
 import { runCodingAgent } from "@/agents/coding";
 import { detectKnowledgeIntent } from "@/agents/knowledge/intent";
@@ -19,6 +18,10 @@ import { fileArtifact } from "@/services/artifacts";
 import { handleReviewUtterance } from "@/services/review/handle";
 import { detectMailIntent } from "@/lib/mail/intent";
 import { detectDevelopmentIntent } from "@/lib/development/intent";
+import { approvalSupersedesReview } from "@/lib/dialog/situation";
+import { classifyReviewUtterance } from "@/lib/review/intent";
+import { actOnSituation, decideTurn, loadOpenSituation } from "@/services/dialog/situation";
+import { detectProjectIntent } from "@/agents/projects/intent";
 import { commissionDevelopment } from "@/services/development/commission";
 import { explainDevelopment } from "@/services/development/status";
 import { createApprovalRequest, standingApprovalAllows, consumeStandingApproval } from "@/services/approvals";
@@ -97,6 +100,7 @@ export type MasterRunResult = {
   providerId: string;
   model: string;
   needsFile?: "chatgpt-export";
+  replyStored?: boolean;
 };
 
 async function emit(onEvent: ((event: MasterEvent) => void) | undefined, event: MasterEvent) {
@@ -195,6 +199,30 @@ function rememberConversation(input: {
   })().catch(() => undefined);
 }
 
+async function onceExternal<T>(input: {
+  organizationId: string;
+  workItemId?: string;
+  idempotencyKey: string;
+  effectType: string;
+  run: () => Promise<T>;
+}): Promise<{ value?: T; uncertain: boolean }> {
+  if (!input.workItemId) return { value: await input.run(), uncertain: false };
+  const { loadEffectResult, withExternalEffect } = await import("@/services/worker/queue");
+  const effect = await withExternalEffect({
+    organizationId: input.organizationId,
+    workItemId: input.workItemId,
+    idempotencyKey: input.idempotencyKey,
+    effectType: input.effectType,
+    run: input.run,
+  });
+  if (effect.decision === "needs_verification") return { uncertain: true };
+  if (effect.decision === "already_committed") {
+    const stored = await loadEffectResult<T>(input.organizationId, input.idempotencyKey);
+    return stored ? { value: stored, uncertain: false } : { uncertain: true };
+  }
+  return { value: effect.value, uncertain: false };
+}
+
 function novaReplySystem(input: {
   organizationName: string;
   mock: boolean;
@@ -285,14 +313,29 @@ export async function runMaster(input: {
   conversationId?: string;
   sourceMessageId?: string;
   onEvent?: (event: MasterEvent) => void;
+  ownedJobId?: string;
+  workItemId?: string;
+  signal?: AbortSignal;
 }): Promise<MasterRunResult> {
   bootstrapAgents();
+  if (input.ownedJobId) {
+    return runPlannerBody(input, detectDialogMove(input.userRequest));
+  }
   await emit(input.onEvent, { type: "status", orbState: "THINKING", statusMessage: "Ich denke nach …" });
 
-  const reviewHit = await handleReviewUtterance({
-    organizationId: input.organizationId,
-    userRequest: input.userRequest,
+  const situation = await loadOpenSituation(input.organizationId);
+  const reviewCommand = classifyReviewUtterance(input.userRequest);
+  const newerApproval = approvalSupersedesReview({
+    approvalAt: situation.approvalCreatedAt,
+    reviewAt: situation.reviewOpenedAt,
+    confirmsApproval: reviewCommand?.kind === "approve" || reviewCommand?.kind === "reject",
   });
+  const reviewHit = newerApproval
+    ? null
+    : await handleReviewUtterance({
+        organizationId: input.organizationId,
+        userRequest: input.userRequest,
+      });
   if (reviewHit) {
     await emit(input.onEvent, {
       type: "status",
@@ -300,6 +343,12 @@ export async function runMaster(input: {
       statusMessage: reviewHit.statusMessage,
     });
     if (reviewHit.reply) await emit(input.onEvent, { type: "delta", delta: reviewHit.reply });
+    rememberConversation({
+      organizationId: input.organizationId,
+      conversationId: input.conversationId,
+      userRequest: input.userRequest,
+      reply: reviewHit.reply,
+    });
     return {
       ...reviewHit,
       mock: false,
@@ -309,13 +358,62 @@ export async function runMaster(input: {
     };
   }
 
+  const situationDecision = decideTurn(input.userRequest, situation);
+  if (situationDecision.kind !== "none") {
+    const acted = await actOnSituation({
+      organizationId: input.organizationId,
+      userRequest: input.userRequest,
+      decision: situationDecision,
+      situation,
+    });
+    if (acted) {
+      await emit(input.onEvent, { type: "status", orbState: acted.orb, statusMessage: acted.statusMessage });
+      await emit(input.onEvent, { type: "delta", delta: acted.reply });
+      rememberConversation({
+        organizationId: input.organizationId,
+        conversationId: input.conversationId,
+        userRequest: input.userRequest,
+        reply: acted.reply,
+      });
+      return {
+        jobId: "",
+        status: "completed",
+        orbState: acted.orb,
+        statusMessage: acted.statusMessage,
+        reply: acted.reply,
+        approvalId: acted.approvalId,
+        mock: false,
+        providerMode: "fallback",
+        providerId: "nova-situation",
+        model: "nova-situation",
+      };
+    }
+  }
+
   const dialog = detectDialogMove(input.userRequest);
   const computerIntent = detectComputerIntent(input.userRequest);
   const knowledgeIntent = detectKnowledgeIntent(input.userRequest);
   const chatgptIntent = detectChatGPTImportIntent(input.userRequest);
   if (computerIntent.kind === "cancel" || knowledgeIntent.kind === "cancel") {
-    await requestKnowledgeCancel(input.organizationId);
-    return runComputerMasterPath(input, computerIntent.statusMessage || knowledgeIntent.statusMessage);
+    const acted = await actOnSituation({
+      organizationId: input.organizationId,
+      userRequest: input.userRequest,
+      decision: { kind: "cancel-active" },
+      situation,
+    });
+    const reply = acted?.reply ?? "Ich habe abgebrochen.";
+    await emit(input.onEvent, { type: "delta", delta: reply });
+    return {
+      jobId: "",
+      status: "cancelled",
+      orbState: "DONE",
+      statusMessage: "Abgebrochen.",
+      reply,
+      mock: false,
+      providerMode: "fallback",
+      providerId: "nova-situation",
+      model: "nova-situation",
+    };
   }
 
   const developmentIntent = detectDevelopmentIntent(input.userRequest);
@@ -323,6 +421,12 @@ export async function runMaster(input: {
     const explained = await explainDevelopment(input.organizationId, input.userRequest);
     await emit(input.onEvent, { type: "status", orbState: "DONE", statusMessage: explained.statusMessage });
     await emit(input.onEvent, { type: "delta", delta: explained.reply });
+    rememberConversation({
+      organizationId: input.organizationId,
+      conversationId: input.conversationId,
+      userRequest: input.userRequest,
+      reply: explained.reply,
+    });
     return {
       jobId: "",
       status: "completed",
@@ -342,6 +446,12 @@ export async function runMaster(input: {
       userRequest: input.userRequest,
     });
     await emit(input.onEvent, { type: "delta", delta: commissioned.reply });
+    rememberConversation({
+      organizationId: input.organizationId,
+      conversationId: input.conversationId,
+      userRequest: input.userRequest,
+      reply: commissioned.reply,
+    });
     return {
       jobId: commissioned.jobId,
       status: "running",
@@ -396,10 +506,117 @@ export async function runMaster(input: {
     return runMailMasterPath(input, mailIntent.statusMessage);
   }
 
+  if (dialog.kind !== "social" && detectCalendarIntent(input.userRequest)) {
+    return runLocalMasterPath(input, "Ich schaue in den Kalender.", "calendar", "calendar", {
+      userRequest: input.userRequest,
+    });
+  }
+  if (dialog.kind !== "social" && detectContactIntent(input.userRequest) && !needsLiveResearch(input.userRequest)) {
+    return runLocalMasterPath(input, "Ich schaue ins Adressbuch.", "contact", "contact", {
+      userRequest: input.userRequest,
+    });
+  }
+  const ticketIntent = detectTicketIntent(input.userRequest);
+  if (dialog.kind !== "social" && ticketIntent === "list") {
+    return runLocalMasterPath(input, "Ich schaue in die Tickets.", "task", "list-tasks", { list: true });
+  }
+  if (dialog.kind !== "social" && ticketIntent === "create") {
+    return runLocalMasterPath(input, "Ich lege das Ticket an.", "task", "create-task", {
+      title: guessTicketTitle(input.userRequest),
+      description: input.userRequest,
+      dueDays: 1,
+      ticket: true,
+    });
+  }
+  if (dialog.kind !== "social" && detectWatchIntent(input.userRequest)) {
+    return runLocalMasterPath(input, "Ich schaue, was ansteht.", "watch", "watch", {
+      userRequest: input.userRequest,
+    });
+  }
+  const projectIntent = detectProjectIntent(input.userRequest);
+  if (dialog.kind !== "social" && projectIntent.kind === "list") {
+    return runLocalMasterPath(input, "Ich schaue in die Projekte.", "project", "list", { list: true });
+  }
+  if (dialog.kind !== "social" && projectIntent.kind === "create") {
+    return runLocalMasterPath(input, "Ich lege das Projekt an.", "project", "create", {
+      create: true,
+      name: projectIntent.name,
+    });
+  }
+  if (dialog.kind !== "social" && projectIntent.kind === "status") {
+    return runLocalMasterPath(input, "Ich schaue den Projektstatus an.", "project", "load-context", {
+      name: projectIntent.name,
+    });
+  }
+
+  if (dialog.kind !== "social" && /\bmerk(?:e)?\s+dir\b/i.test(input.userRequest)) {
+    const spoken = extractSpokenMemory(input.userRequest);
+    const reply = spoken
+      ? `Gemerk: ${spoken.content}`
+      : "Das merke ich mir nicht. Sag mir den Satz, den ich behalten soll.";
+    if (spoken) {
+      await upsertDurableMemory({
+        organizationId: input.organizationId,
+        type: spoken.type,
+        title: spoken.title,
+        content: spoken.content,
+        sourceType: "conversation_message",
+        sourceReference: input.conversationId,
+      });
+    }
+    await emit(input.onEvent, { type: "delta", delta: reply });
+    rememberConversation({
+      organizationId: input.organizationId,
+      conversationId: input.conversationId,
+      userRequest: input.userRequest,
+      reply,
+    });
+    return {
+      jobId: "",
+      status: "completed",
+      orbState: "DONE",
+      statusMessage: spoken ? "Gemerkt." : "Nichts gemerkt.",
+      reply,
+      mock: false,
+      providerMode: "fallback",
+      providerId: "memory",
+      model: "nova-memory",
+    };
+  }
+
   if (dialog.kind !== "social" && computerIntent.kind !== "none") {
     return runComputerMasterPath(input, computerIntent.statusMessage);
   }
 
+  if (!input.ownedJobId && dialog.kind !== "social" && needsLiveResearch(input.userRequest)) {
+    const { startOwnedJob } = await import("@/services/jobs/owned");
+    return startOwnedJob({
+      organizationId: input.organizationId,
+      userRequest: input.userRequest,
+      conversationId: input.conversationId,
+      sourceMessageId: input.sourceMessageId,
+      kind: "planner.run",
+      goal: "Aktuelle Information prüfen",
+      onEvent: input.onEvent,
+      signal: input.signal,
+    });
+  }
+  return runPlannerBody(input, dialog);
+}
+
+async function runPlannerBody(
+  input: {
+    organizationId: string;
+    userRequest: string;
+    conversationId?: string;
+    sourceMessageId?: string;
+    onEvent?: (event: MasterEvent) => void;
+    ownedJobId?: string;
+    workItemId?: string;
+    signal?: AbortSignal;
+  },
+  dialog: DialogMove,
+): Promise<MasterRunResult> {
   const specialist = needsSpecialistWork(input.userRequest);
   const flagship = needsFlagshipModel(input.userRequest);
   const [{ provider, decision }, project, contextPack] = await Promise.all([
@@ -500,10 +717,10 @@ ${input.userRequest}`,
   if (detectWatchIntent(input.userRequest) && !requestedAgents.includes("watch")) {
     requestedAgents.push("watch");
   }
-  if (detectContactIntent(input.userRequest) && !requestedAgents.includes("contact")) {
+  if (detectContactIntent(input.userRequest) && !needsLiveResearch(input.userRequest) && !requestedAgents.includes("contact")) {
     requestedAgents.push("contact");
   }
-  if (detectTicketIntent(input.userRequest) && !requestedAgents.includes("task")) {
+  if (detectTicketIntent(input.userRequest) === "create" && !requestedAgents.includes("task")) {
     requestedAgents.push("task");
     if (!plan.taskDraft?.title) {
       plan.taskDraft = { title: guessTicketTitle(input.userRequest), description: input.userRequest, dueDays: 1 };
@@ -511,12 +728,50 @@ ${input.userRequest}`,
   }
   const allowMockCatalog = false;
 
-  const job = await createJob({
-    organizationId: input.organizationId,
-    userRequest: input.userRequest,
-    goal,
-    projectId: project?.id,
-  });
+  const existingJob = input.ownedJobId
+    ? await prisma.job.findFirst({
+        where: { id: input.ownedJobId, organizationId: input.organizationId },
+      })
+    : null;
+  if (input.ownedJobId && !existingJob) {
+    throw new Error("Der übernommene Auftrag fehlt.");
+  }
+  const job =
+    existingJob ??
+    (await createJob({
+      organizationId: input.organizationId,
+      userRequest: input.userRequest,
+      goal,
+      projectId: project?.id,
+    }));
+
+  const long =
+    requestedAgents.includes("research") ||
+    requestedAgents.includes("coding") ||
+    plan.searchRequired === true;
+  if (!input.ownedJobId && long) {
+    const { enqueueWorkItem } = await import("@/services/worker/queue");
+    const { waitForOwnedJob } = await import("@/services/jobs/owned");
+    await updateJobStatus(input.organizationId, job.id, "running", { startedAt: new Date() });
+    await enqueueWorkItem({
+      organizationId: input.organizationId,
+      jobId: job.id,
+      kind: "planner.run",
+      idempotencyKey: `planner.run:${job.id}`,
+      payload: {
+        userRequest: input.userRequest,
+        conversationId: input.conversationId ?? null,
+        sourceMessageId: input.sourceMessageId ?? null,
+      },
+    });
+    return waitForOwnedJob({
+      organizationId: input.organizationId,
+      jobId: job.id,
+      providerId: "planner.run",
+      signal: input.signal,
+      onEvent: input.onEvent,
+    });
+  }
 
   try {
   await updateJobStatus(input.organizationId, job.id, "planning", { startedAt: new Date() });
@@ -552,14 +807,37 @@ ${input.userRequest}`,
 
   if (shouldRun("coding")) {
     await emit(input.onEvent, { type: "status", orbState: "WORKING", statusMessage: "Cursor setzt den Auftrag um." });
-    const coding = await runCodingAgent({
+    const codingEffect = await onceExternal({
       organizationId: input.organizationId,
-      jobId: job.id,
-      userRequest: input.userRequest,
-      onStatus: (message) => {
-        void emit(input.onEvent, { type: "status", orbState: "WORKING", statusMessage: message });
-      },
+      workItemId: input.workItemId,
+      idempotencyKey: `coding:${job.id}`,
+      effectType: "cursor",
+      run: () =>
+        runCodingAgent({
+          organizationId: input.organizationId,
+          jobId: job.id,
+          userRequest: input.userRequest,
+          onStatus: (message) => {
+            void emit(input.onEvent, { type: "status", orbState: "WORKING", statusMessage: message });
+          },
+        }),
     });
+    if (codingEffect.uncertain || !codingEffect.value) {
+      const reply = "Der Cursor-Lauf ist nicht bestätigt. Ich starte ihn nicht noch einmal.";
+      await updateJobStatus(input.organizationId, job.id, "paused");
+      return {
+        jobId: job.id,
+        status: "paused",
+        orbState: "ERROR",
+        statusMessage: "Nicht bestätigt",
+        reply,
+        mock: false,
+        providerMode: mode,
+        providerId: provider.id,
+        model: decision.model,
+      };
+    }
+    const coding = codingEffect.value;
     if (coding.reply) {
       await emit(input.onEvent, { type: "delta", delta: coding.reply });
     }
@@ -622,17 +900,40 @@ ${input.userRequest}`,
   if (shouldRun("research") || plan.searchRequired) {
     const research = getAgent("research");
     if (research) {
-      const result = await runAgentStep({
-        agent: research,
-        action: "research",
-        payload: {
-          count: plan.count ?? 10,
-          projectId: project?.id,
-          query: input.userRequest,
-          allowMockCatalog,
-        },
-        context,
+      const researchEffect = await onceExternal({
+        organizationId: input.organizationId,
+        workItemId: input.workItemId,
+        idempotencyKey: `research:${job.id}`,
+        effectType: "research",
+        run: () =>
+          runAgentStep({
+            agent: research,
+            action: "research",
+            payload: {
+              count: plan.count ?? 10,
+              projectId: project?.id,
+              query: input.userRequest,
+              allowMockCatalog,
+            },
+            context,
+          }),
       });
+      if (researchEffect.uncertain || !researchEffect.value) {
+        const reply = "Die Recherche ist nicht bestätigt. Ich starte sie nicht noch einmal.";
+        await updateJobStatus(input.organizationId, job.id, "paused");
+        return {
+          jobId: job.id,
+          status: "paused",
+          orbState: "ERROR",
+          statusMessage: "Nicht bestätigt",
+          reply,
+          mock: false,
+          providerMode: mode,
+          providerId: provider.id,
+          model: decision.model,
+        };
+      }
+      const result = researchEffect.value;
       agentNotes.push(`Research Agent: ${result.result.summary}`);
       const ids = (result.result.data.contactIds as string[]) ?? [];
       contactIds.push(...ids);
@@ -735,7 +1036,7 @@ ${input.userRequest}`,
         organizationId: input.organizationId,
         type: "communication",
         title: `${communicationIds.length} Anschreiben vorbereitet`,
-        description: "Entwurf gespeichert. Es wurde keine E-Mail versendet. Mail-Connector nicht verbunden.",
+        description: "Entwurf gespeichert. Es wurde keine E-Mail versendet.",
         status: "prepared",
         jobId: job.id,
         projectId: project?.id,
@@ -756,7 +1057,7 @@ ${input.userRequest}`,
           description: plan.taskDraft?.description ?? input.userRequest,
           dueDays: plan.taskDraft?.dueDays ?? 1,
           dueAt: plan.taskDraft?.dueAt,
-          ticket: detectTicketIntent(input.userRequest),
+          ticket: detectTicketIntent(input.userRequest) === "create",
         },
         context,
       });
@@ -879,12 +1180,19 @@ ${input.userRequest}`,
       const { deliverApprovedDraft } = await import("@/services/mail/send");
       let sent = 0;
       for (const communicationId of communicationIds) {
-        const result = await deliverApprovedDraft({
+        const sendEffect = await onceExternal({
           organizationId: input.organizationId,
-          communicationId,
-          approved: true,
+          workItemId: input.workItemId,
+          idempotencyKey: `mail-send:${communicationId}`,
+          effectType: "mail.send",
+          run: () =>
+            deliverApprovedDraft({
+              organizationId: input.organizationId,
+              communicationId,
+              approved: true,
+            }),
         });
-        if (result.status === "VERIFIED") sent += 1;
+        if (sendEffect.value?.status === "VERIFIED") sent += 1;
       }
       await recordActivity({
         organizationId: input.organizationId,
@@ -943,20 +1251,31 @@ ${input.userRequest}`,
   let reviewWaiting = false;
   if (researchAnswer && !researchUnavailable) {
     try {
-      const filed = await fileArtifact({
+      const filedEffect = await onceExternal({
         organizationId: input.organizationId,
-        jobId: job.id,
-        projectId: project?.id,
-        type: "RESEARCH_REPORT",
-        title: goal.slice(0, 80),
-        description: input.userRequest.slice(0, 240),
-        body: `# ${goal}\n\n${researchAnswer}\n`,
-        source: "research",
-        openReview: communicationIds.length === 0,
-        metadata: { userRequest: input.userRequest },
+        workItemId: input.workItemId,
+        idempotencyKey: `research-file:${job.id}`,
+        effectType: "research-file",
+        run: () =>
+          fileArtifact({
+            organizationId: input.organizationId,
+            jobId: job.id,
+            projectId: project?.id,
+            type: "RESEARCH_REPORT",
+            title: goal.slice(0, 80),
+            description: input.userRequest.slice(0, 240),
+            body: `# ${goal}\n\n${researchAnswer}\n`,
+            source: "research",
+            openReview: communicationIds.length === 0,
+            metadata: { userRequest: input.userRequest },
+          }),
       });
-      filingNote = filed.message;
-      reviewWaiting = Boolean(filed.reviewSessionId);
+      if (filedEffect.uncertain || !filedEffect.value) {
+        filingNote = "Die Ablage ist nicht bestätigt. Ich lege sie nicht noch einmal an.";
+      } else {
+        filingNote = filedEffect.value.message;
+        reviewWaiting = Boolean(filedEffect.value.reviewSessionId);
+      }
       if (filingNote) agentNotes.push(filingNote);
     } catch (error) {
       filingNote = error instanceof Error ? error.message : "Ablage fehlgeschlagen.";
@@ -1098,6 +1417,87 @@ Formuliere die Nutzerantwort. Wenn ein Entwurf erzeugt wurde, zeige ihn.${
   }
 }
 
+
+async function runLocalMasterPath(
+  input: {
+    organizationId: string;
+    userRequest: string;
+    conversationId?: string;
+    sourceMessageId?: string;
+    onEvent?: (event: MasterEvent) => void;
+  },
+  statusMessage: string,
+  agentId: string,
+  action: string,
+  payload: Record<string, unknown>,
+): Promise<MasterRunResult> {
+  const project = await getDefaultProject(input.organizationId);
+  const job = await createJob({
+    organizationId: input.organizationId,
+    userRequest: input.userRequest,
+    goal: statusMessage || input.userRequest,
+    projectId: project?.id,
+  });
+  await updateJobStatus(input.organizationId, job.id, "running", { startedAt: new Date() });
+  await emit(input.onEvent, { type: "status", orbState: "WORKING", statusMessage });
+  const agent = getAgent(agentId);
+  if (!agent) {
+    const reply = "Dafür fehlt der interne Weg.";
+    await emit(input.onEvent, { type: "delta", delta: reply });
+    await updateJobStatus(input.organizationId, job.id, "failed", { completedAt: new Date() });
+    return {
+      jobId: job.id,
+      status: "failed",
+      orbState: "ERROR",
+      statusMessage: "Weg fehlt.",
+      reply,
+      mock: false,
+      providerMode: "fallback",
+      providerId: agentId,
+      model: "nova-local",
+    };
+  }
+  const context: AgentRunContext = {
+    organizationId: input.organizationId,
+    jobId: job.id,
+    userRequest: input.userRequest,
+    goal: statusMessage || input.userRequest,
+    projectId: project?.id,
+  };
+  const result = await runAgentStep({ agent, action, payload, context });
+  const reply = result.result.summary;
+  await emit(input.onEvent, { type: "delta", delta: reply });
+  await recordActivity({
+    organizationId: input.organizationId,
+    type: agentId === "calendar" ? "calendar" : agentId === "task" ? "task" : agentId === "contact" ? "communication" : "task",
+    title: reply.slice(0, 140),
+    description: reply,
+    status: "prepared",
+    jobId: job.id,
+    projectId: project?.id,
+  });
+  await updateJobStatus(input.organizationId, job.id, result.result.ok ? "completed" : "failed", {
+    completedAt: new Date(),
+  });
+  rememberConversation({
+    organizationId: input.organizationId,
+    conversationId: input.conversationId,
+    userRequest: input.userRequest,
+    reply,
+  });
+  return {
+    jobId: job.id,
+    status: result.result.ok ? "completed" : "failed",
+    orbState: result.result.ok ? "DONE" : "ERROR",
+    statusMessage,
+    reply,
+    mock: false,
+    providerMode: "fallback",
+    providerId: agentId,
+    model: "nova-local",
+  };
+}
+
 async function runMailMasterPath(
   input: {
     organizationId: string;
@@ -1126,6 +1526,12 @@ async function runMailMasterPath(
     },
   });
   await emit(input.onEvent, { type: "delta", delta: result.reply });
+  rememberConversation({
+    organizationId: input.organizationId,
+    conversationId: input.conversationId,
+    userRequest: input.userRequest,
+    reply: result.reply,
+  });
   return {
     jobId: "",
     status: result.waitingApproval ? "waiting_for_approval" : "completed",
@@ -1159,6 +1565,12 @@ async function runKnowledgeQueryPath(
   if (result.reply) {
     await emit(input.onEvent, { type: "delta", delta: result.reply });
   }
+  rememberConversation({
+    organizationId: input.organizationId,
+    conversationId: input.conversationId,
+    userRequest: input.userRequest,
+    reply: result.reply,
+  });
   return {
     jobId: "",
     status: "completed",
@@ -1179,45 +1591,23 @@ async function runKnowledgeMasterPath(
     conversationId?: string;
     sourceMessageId?: string;
     onEvent?: (event: MasterEvent) => void;
+    signal?: AbortSignal;
   },
   statusMessage: string,
 ): Promise<MasterRunResult> {
+  const { startOwnedJob } = await import("@/services/jobs/owned");
   const project = await getDefaultProject(input.organizationId);
-  const job = await createJob({
+  return startOwnedJob({
     organizationId: input.organizationId,
     userRequest: input.userRequest,
+    conversationId: input.conversationId,
+    sourceMessageId: input.sourceMessageId,
+    kind: "knowledge.run",
     goal: statusMessage || input.userRequest,
     projectId: project?.id,
+    onEvent: input.onEvent,
+    signal: input.signal,
   });
-  await updateJobStatus(input.organizationId, job.id, "running", { startedAt: new Date() });
-  await emit(input.onEvent, { type: "status", orbState: "WORKING", statusMessage });
-
-  const result = await runKnowledgeAgent({
-    organizationId: input.organizationId,
-    jobId: job.id,
-    userRequest: input.userRequest,
-    projectId: project?.id,
-    onStatus: (message) => {
-      void emit(input.onEvent, { type: "status", orbState: "WORKING", statusMessage: message });
-    },
-  });
-  if (result.reply) {
-    await emit(input.onEvent, { type: "delta", delta: result.reply });
-  }
-  const jobStatus = result.cancelled ? "cancelled" : result.ok ? "completed" : "failed";
-  await updateJobStatus(input.organizationId, job.id, jobStatus, { completedAt: new Date() });
-  return {
-    jobId: job.id,
-    status: jobStatus,
-    orbState: result.ok ? "DONE" : "ERROR",
-    statusMessage: result.statusMessage,
-    reply: result.reply,
-    mock: false,
-    providerMode: "fallback",
-    providerId: "knowledge",
-    model: "nova-knowledge",
-    needsFile: result.needsFile,
-  };
 }
 
 async function runComputerMasterPath(
@@ -1227,64 +1617,23 @@ async function runComputerMasterPath(
     conversationId?: string;
     sourceMessageId?: string;
     onEvent?: (event: MasterEvent) => void;
+    signal?: AbortSignal;
   },
   statusMessage: string,
 ): Promise<MasterRunResult> {
+  const { startOwnedJob } = await import("@/services/jobs/owned");
   const project = await getDefaultProject(input.organizationId);
-  const job = await createJob({
+  return startOwnedJob({
     organizationId: input.organizationId,
     userRequest: input.userRequest,
+    conversationId: input.conversationId,
+    sourceMessageId: input.sourceMessageId,
+    kind: "computer.run",
     goal: statusMessage || input.userRequest,
     projectId: project?.id,
+    onEvent: input.onEvent,
+    signal: input.signal,
   });
-  await updateJobStatus(input.organizationId, job.id, "running", { startedAt: new Date() });
-  await emit(input.onEvent, { type: "status", orbState: "WORKING", statusMessage });
-
-  const result = await runComputerAgent({
-    organizationId: input.organizationId,
-    jobId: job.id,
-    userRequest: input.userRequest,
-    onStatus: (message) => {
-      void emit(input.onEvent, { type: "status", orbState: "WORKING", statusMessage: message });
-    },
-  });
-
-  if (result.reply) {
-    await emit(input.onEvent, { type: "delta", delta: result.reply });
-  }
-
-  const waitingHuman = result.status === "WAITING_FOR_HUMAN";
-  const orbState: OrbState =
-    result.status === "WAITING_FOR_APPROVAL" || waitingHuman
-      ? "WAITING_FOR_APPROVAL"
-      : result.status === "FAILED" || result.status === "INTERRUPTED"
-        ? "ERROR"
-        : "DONE";
-
-  const jobStatus =
-    result.status === "WAITING_FOR_APPROVAL" || waitingHuman
-      ? "waiting_for_approval"
-      : result.status === "CANCELLED_BY_USER" || result.status === "CANCELLED"
-        ? "cancelled"
-        : result.status === "FAILED" || result.status === "INTERRUPTED"
-          ? "failed"
-          : "completed";
-
-  await updateJobStatus(input.organizationId, job.id, jobStatus, { completedAt: new Date() });
-
-  return {
-    jobId: job.id,
-    status: jobStatus,
-    orbState,
-    statusMessage: result.statusMessage,
-    reply: result.reply,
-    approvalId: result.approvalId,
-    humanRequired: result.humanRequired ?? null,
-    mock: false,
-    providerMode: "fallback",
-    providerId: "computer",
-    model: "nova-desktop",
-  };
 }
 
 async function runCodingMasterPath(
@@ -1294,62 +1643,23 @@ async function runCodingMasterPath(
     conversationId?: string;
     sourceMessageId?: string;
     onEvent?: (event: MasterEvent) => void;
+    signal?: AbortSignal;
   },
   statusMessage: string,
 ): Promise<MasterRunResult> {
+  const { startOwnedJob } = await import("@/services/jobs/owned");
   const project = await getDefaultProject(input.organizationId);
-  const job = await createJob({
+  return startOwnedJob({
     organizationId: input.organizationId,
     userRequest: input.userRequest,
+    conversationId: input.conversationId,
+    sourceMessageId: input.sourceMessageId,
+    kind: "coding.run",
     goal: statusMessage || input.userRequest,
     projectId: project?.id,
+    onEvent: input.onEvent,
+    signal: input.signal,
   });
-  await updateJobStatus(input.organizationId, job.id, "running", { startedAt: new Date() });
-  await emit(input.onEvent, { type: "status", orbState: "WORKING", statusMessage });
-
-  const result = await runCodingAgent({
-    organizationId: input.organizationId,
-    jobId: job.id,
-    userRequest: input.userRequest,
-    onStatus: (message) => {
-      void emit(input.onEvent, { type: "status", orbState: "WORKING", statusMessage: message });
-    },
-  });
-
-  if (result.reply) {
-    await emit(input.onEvent, { type: "delta", delta: result.reply });
-  }
-
-  const orbState: OrbState =
-    result.status === "WAITING_FOR_APPROVAL"
-      ? "WAITING_FOR_APPROVAL"
-      : result.status === "FAILED"
-        ? "ERROR"
-        : "DONE";
-
-  const jobStatus =
-    result.status === "WAITING_FOR_APPROVAL"
-      ? "waiting_for_approval"
-      : result.status === "CANCELLED_BY_USER"
-        ? "cancelled"
-        : result.status === "FAILED" || result.status === "UNVERIFIED"
-          ? "failed"
-          : "completed";
-
-  await updateJobStatus(input.organizationId, job.id, jobStatus, { completedAt: new Date() });
-
-  return {
-    jobId: job.id,
-    status: jobStatus,
-    orbState,
-    statusMessage: result.statusMessage,
-    reply: result.reply,
-    approvalId: result.approvalId,
-    mock: false,
-    providerMode: "fallback",
-    providerId: "coding",
-    model: "cursor-agent",
-  };
 }
 
 export async function runQualityCheck(context: AgentRunContext, communicationIds: string[]): Promise<AgentRunResult> {
