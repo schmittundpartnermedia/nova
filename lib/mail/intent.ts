@@ -21,7 +21,16 @@ export function detectMailIntent(userRequest: string): MailIntent {
   if (/\bwas ist neu\b/i.test(text) && /\bmail/i.test(text)) {
     return { kind: "inbox", statusMessage: "Ich schaue ins Postfach." };
   }
-  if (/\b(?:antwort(?:e|en)?|entwurf|mailentwurf|e-?mail-?entwurf)\b/i.test(text) && /\b(?:mail|schreib|dass)\b/i.test(text)) {
+  if (/\b(?:änder\w*|aender\w*|korrigier\w*|ergänz\w*|erganz\w*|überarbeit\w*|ueberarbeit\w*)\b/i.test(text) && /\bentwurf\b/i.test(text)) {
+    return { kind: "draft", statusMessage: "Ich ändere den offenen Entwurf." };
+  }
+  if (/\b(?:entwurf|mailentwurf|e-?mail-?entwurf)\b/i.test(text) && !/\b(?:such(?:e|en)?|finde|zeig(?:e)?|liste)\b/i.test(text)) {
+    return { kind: "draft", statusMessage: "Ich bereite einen Entwurf vor." };
+  }
+  if (/\b(?:antwort(?:e|en)?)\b/i.test(text) && /\b(?:mail|schreib|dass)\b/i.test(text)) {
+    return { kind: "draft", statusMessage: "Ich bereite einen Entwurf vor." };
+  }
+  if (/\b(?:schreib(?:e|en)?|verfass(?:e|en)?)\b/i.test(text) && /\b(?:e-?mail|mail)\b/i.test(text)) {
     return { kind: "draft", statusMessage: "Ich bereite einen Entwurf vor." };
   }
   const from = text.match(/\b(?:von|hat)\s+([A-ZÄÖÜ][\wäöüÄÖÜß.-]+(?:\s+[A-ZÄÖÜ][\wäöüÄÖÜß.-]+)?)/);

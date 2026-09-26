@@ -1,6 +1,7 @@
 import { getAgent } from "@/agents/registry";
 import { bootstrapAgents } from "@/agents/bootstrap";
 import { prisma } from "@/lib/prisma";
+import { nextDraftBody } from "@/lib/mail/revise";
 import { assertOrganizationId } from "@/services/tenant";
 import { searchMail } from "@/services/mail/search";
 import { auditMail } from "@/services/mail/audit";
@@ -14,6 +15,49 @@ export async function prepareMailDraft(input: {
 }) {
   assertOrganizationId(input.organizationId);
   bootstrapAgents();
+  const revises =
+    /\b(?:änder\w*|aender\w*|korrigier\w*|ergänz\w*|erganz\w*|überarbeit\w*|ueberarbeit\w*)\b/i.test(input.userRequest) &&
+    /\bentwurf\b/i.test(input.userRequest);
+  if (revises) {
+    const open = await prisma.communication.findFirst({
+      where: {
+        organizationId: input.organizationId,
+        channel: "email",
+        direction: "outbound",
+        sentAt: null,
+        status: { notIn: ["sent", "executed"] },
+      },
+      orderBy: { updatedAt: "desc" },
+    });
+    if (!open) {
+      return {
+        ok: false,
+        reply: "Es liegt kein offener Entwurf vor. Nenne Empfänger und Text, dann lege ich einen an. Eine andere Mail nehme ich dafür nicht.",
+        communicationId: null as string | null,
+      };
+    }
+    const next = nextDraftBody(open.body, input.userRequest);
+    if (!next.changed) {
+      return {
+        ok: true,
+        communicationId: open.id,
+        reply: `Das ist weiterhin dieser Entwurf, Empfänger und Betreff bleiben.\nBetreff: ${open.subject}\n\n${open.body.slice(0, 700)}\n\nWas soll ich daran ändern?`,
+      };
+    }
+    const draft = await prisma.communication.update({
+      where: { id: open.id },
+      data: { body: next.body, deliveryStatus: "WAITING_FOR_APPROVAL" },
+    });
+    const shown = `Ich habe denselben Entwurf geändert.\nBetreff: ${draft.subject}\n\n${draft.body.slice(0, 700)}\n\nSenden?`;
+    const approval = await createApprovalRequest({
+      organizationId: input.organizationId,
+      jobId: input.jobId,
+      actionType: "mail.send",
+      description: shown,
+      payload: { communicationIds: [draft.id] },
+    });
+    return { ok: true, communicationId: draft.id, approvalId: approval.id, reply: shown };
+  }
   const explicitTo = input.userRequest.match(/\b(?:an|empfänger|empfaenger)\s+([A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,})/i)?.[1] ?? null;
   const explicitFrom = input.userRequest.match(/\b(?:von|absender)\s+([A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,})/i)?.[1] ?? null;
   const explicitSubject = input.userRequest.match(/\bBetreff\s*[:\-]?\s*([^\n.]+)/i)?.[1]?.trim() || null;
@@ -93,18 +137,6 @@ export async function prepareMailDraft(input: {
     return { ok: true, communicationId: draft.id, approvalId: approval.id, reply: shown };
   }
   const named = input.userRequest.match(/\b(?:an|von)\s+([A-ZÄÖÜ][\wäöüÄÖÜß.-]+)/);
-  const revisesDraft = /\bentwurf\b/i.test(input.userRequest) && /(?:änder|aender)/i.test(input.userRequest);
-  const previous = !named && revisesDraft
-    ? await prisma.communication.findFirst({
-        where: {
-          organizationId: input.organizationId,
-          channel: "email",
-          direction: "outbound",
-          mailThreadId: { not: null },
-        },
-        orderBy: { createdAt: "desc" },
-      })
-    : null;
   const hits = named
     ? await searchMail({ organizationId: input.organizationId, query: named[1], limit: 3 })
     : [];
@@ -119,17 +151,8 @@ export async function prepareMailDraft(input: {
         take: 1,
         include: { thread: true },
       });
-  const continued = previous?.mailThreadId
-    ? await prisma.mailThread.findFirst({
-        where: { id: previous.mailThreadId, organizationId: input.organizationId },
-        include: { messages: { orderBy: { receivedAt: "desc" }, take: 8 } },
-      })
-    : null;
-  const continuedMessage = continued?.messages.find((item) => item.direction === "inbound") ?? continued?.messages[0];
-  const latest = (continuedMessage ?? hits[0] ?? fallback[0]) as (typeof hits)[number] | undefined;
-  const thread = continued
-    ? continued
-    : latest
+  const latest = (hits[0] ?? fallback[0]) as (typeof hits)[number] | undefined;
+  const thread = latest
     ? await prisma.mailThread.findFirst({
         where: { id: latest.threadId, organizationId: input.organizationId },
         include: { messages: { orderBy: { receivedAt: "asc" }, take: 8 } },

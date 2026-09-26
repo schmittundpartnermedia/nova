@@ -20,6 +20,6 @@ export type StoredConversationMessage = {
   metadata: Record<string, unknown> | null;
 };
 
-export const CONTEXT_WINDOW_SIZE = 8;
+export const CONTEXT_WINDOW_SIZE = 24;
 /** Turns, die das Modell als Faden sieht. Die HUD bleibt beim kürzeren Fenster. */
 export const DIALOG_HISTORY_SIZE = 16;

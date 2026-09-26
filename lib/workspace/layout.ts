@@ -20,6 +20,7 @@ export function directoryForArtifact(input: {
     case "RESEARCH_REPORT":
     case "BRIEFING":
     case "ANALYSIS":
+      return safeRelative("NOVA", "Work", org, "Recherche");
     case "DOCUMENT":
       return project ? safeRelative("Projekte", org, project) : safeRelative("Unternehmen", org, "Recherche");
     case "LEAD_LIST":

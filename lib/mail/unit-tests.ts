@@ -109,6 +109,7 @@ export function runMailUnitTests(): string[] {
       detectMailIntent("Schreib einen Mailentwurf von info@rankpilot.de an joachimschmitt2012@googlemail.com. Betreff: NOVA Testmail.").kind,
       "draft",
     );
+    assert.equal(detectMailIntent("Ändere den Entwurf.").kind, "draft");
     assert.equal(detectMailIntent("Ja, senden.").kind, "send-confirm");
     assert.equal(detectMailIntent("Wie spät ist es?").kind, "none");
   });

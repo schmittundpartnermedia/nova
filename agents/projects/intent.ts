@@ -9,7 +9,7 @@ export function detectProjectIntent(userRequest: string): ProjectIntent {
   if (!/\bprojekte?\b/i.test(text)) return { kind: "none" };
   const create = text.match(/\b(?:leg(?:e)?|erstell(?:e)?|anleg(?:e)?|neues)\b(?:\s+\w+){0,4}\s+projekt\s+(.+)/i);
   if (create?.[1]) {
-    const name = create[1].replace(/\s+an$/i, "").replace(/[.!?]+$/g, "").trim();
+    const name = create[1].replace(/[.!?]+$/g, "").replace(/\s+an$/i, "").trim();
     if (name) return { kind: "create", name };
   }
   if (/\b(?:liste|zeig|welche|übersicht|uebersicht|habe ich|gibt es|meine|wie viele|anzahl)\b/i.test(text)) {

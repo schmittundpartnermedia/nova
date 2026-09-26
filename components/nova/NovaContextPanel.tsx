@@ -11,6 +11,15 @@ export type NovaJobSummary = {
   userRequest: string;
 };
 
+export type NovaWorld = {
+  projects: Array<{ id: string; name: string; status: string }>;
+  contacts: Array<{ id: string; name: string; role: string | null }>;
+  companies: Array<{ id: string; name: string; industry: string | null }>;
+  tasks: Array<{ id: string; title: string; status: string; dueAt: string | null }>;
+  knowledge: Array<{ id: string; title: string; source: string }>;
+  research: Array<{ id: string; title: string; status: string }>;
+};
+
 export type NovaStandingPolicy = {
   id: string;
   name: string;
@@ -51,6 +60,7 @@ export function NovaContextPanel({
   job,
   approvalDescription,
   items,
+  world,
   standingPolicies = [],
   standingBusy = false,
   onGrantStanding,
@@ -64,6 +74,7 @@ export function NovaContextPanel({
   job: NovaJobSummary | null;
   approvalDescription: string | null;
   items: ArchiveItem[];
+  world?: NovaWorld | null;
   standingPolicies?: NovaStandingPolicy[];
   standingBusy?: boolean;
   onGrantStanding?: (actionType: "mail.send.batch" | "macos.ui.click") => void;
@@ -156,18 +167,26 @@ export function NovaContextPanel({
       {section === "chat" || section === "projects" ? (
         <div className="nova-card nova-panel">
           <h3>Aktive Projekte</h3>
-          {job ? <NovaProjectCard name={job.goal || job.userRequest} status={jobStatusLabel(job.status)} warm={job.status.includes("approval")} /> : null}
-          {projects.slice(0, 4).map((project) => (
-            <NovaProjectCard key={project.name} name={project.name} status={project.status} />
+          {(world?.projects ?? []).slice(0, 8).map((project) => (
+            <NovaProjectCard key={project.id} name={project.name} status={project.status} />
           ))}
-          {!job && projects.length === 0 ? <p className="nova-empty">Noch keine Projekte im Archiv.</p> : null}
+          {!world ? projects.slice(0, 4).map((project) => (
+            <NovaProjectCard key={project.name} name={project.name} status={project.status} />
+          )) : null}
+          {(world ? world.projects.length === 0 : projects.length === 0) ? <p className="nova-empty">Noch keine Projekte.</p> : null}
         </div>
       ) : null}
 
       {section === "chat" || section === "tasks" ? (
         <div className="nova-card nova-panel">
           <h3>Nächste Aufgabe</h3>
-          {tasks[0] ? (
+          {world ? (
+            world.tasks[0] ? (
+              <NovaTaskCard title={world.tasks[0].title} meta={world.tasks[0].status} />
+            ) : (
+              <p className="nova-empty">Keine offene Aufgabe.</p>
+            )
+          ) : tasks[0] ? (
             <NovaTaskCard
               title={tasks[0].task?.title ?? tasks[0].title}
               meta={formatStamp(tasks[0].timestamp)}
@@ -188,40 +207,72 @@ export function NovaContextPanel({
       {section === "companies" ? (
         <div className="nova-card nova-panel">
           <h3>Unternehmen</h3>
-          {companies.length === 0 ? <p className="nova-empty">Keine Unternehmen im Archiv.</p> : null}
-          {companies.slice(0, 8).map((company) => (
-            <NovaProjectCard key={company.name} name={company.name} status={company.status} />
-          ))}
+          {world ? (
+            world.companies.length === 0 ? <p className="nova-empty">Keine Unternehmen.</p> : world.companies.slice(0, 8).map((company) => (
+              <NovaProjectCard key={company.id} name={company.name} status={company.industry ?? "Unternehmen"} />
+            ))
+          ) : (
+            <>
+              {companies.length === 0 ? <p className="nova-empty">Keine Unternehmen im Archiv.</p> : null}
+              {companies.slice(0, 8).map((company) => (
+                <NovaProjectCard key={company.name} name={company.name} status={company.status} />
+              ))}
+            </>
+          )}
         </div>
       ) : null}
 
       {section === "contacts" ? (
         <div className="nova-card nova-panel">
           <h3>Kontakte</h3>
-          {contacts.length === 0 ? <p className="nova-empty">Keine Kontakte im Archiv.</p> : null}
-          {contacts.slice(0, 8).map((contact) => (
-            <NovaProjectCard key={contact.name} name={contact.name} status={contact.status} />
-          ))}
+          {world ? (
+            world.contacts.length === 0 ? <p className="nova-empty">Keine Kontakte.</p> : world.contacts.slice(0, 8).map((contact) => (
+              <NovaProjectCard key={contact.id} name={contact.name} status={contact.role ?? "Kontakt"} />
+            ))
+          ) : (
+            <>
+              {contacts.length === 0 ? <p className="nova-empty">Keine Kontakte im Archiv.</p> : null}
+              {contacts.slice(0, 8).map((contact) => (
+                <NovaProjectCard key={contact.name} name={contact.name} status={contact.status} />
+              ))}
+            </>
+          )}
         </div>
       ) : null}
 
       {section === "research" ? (
         <div className="nova-card nova-panel">
           <h3>Recherche</h3>
-          {research.length === 0 ? <p className="nova-empty">Keine Recherche im Archiv.</p> : null}
-          {research.slice(0, 8).map((item) => (
-            <NovaTaskCard key={item.id} title={item.title} meta={item.status} />
-          ))}
+          {world ? (
+            world.research.length === 0 ? <p className="nova-empty">Keine Recherche.</p> : world.research.slice(0, 8).map((item) => (
+              <NovaTaskCard key={item.id} title={item.title} meta={item.status} />
+            ))
+          ) : (
+            <>
+              {research.length === 0 ? <p className="nova-empty">Keine Recherche im Archiv.</p> : null}
+              {research.slice(0, 8).map((item) => (
+                <NovaTaskCard key={item.id} title={item.title} meta={item.status} />
+              ))}
+            </>
+          )}
         </div>
       ) : null}
 
       {section === "knowledge" ? (
         <div className="nova-card nova-panel">
           <h3>Wissen</h3>
-          {knowledge.length === 0 ? <p className="nova-empty">Noch keine Wissenseinträge im Archiv.</p> : null}
-          {knowledge.slice(0, 8).map((item) => (
-            <NovaTaskCard key={item.id} title={item.title} meta={item.status} />
-          ))}
+          {world ? (
+            world.knowledge.length === 0 ? <p className="nova-empty">Noch keine Wissenseinträge.</p> : world.knowledge.slice(0, 8).map((item) => (
+              <NovaTaskCard key={item.id} title={item.title} meta={item.source || "Wissen"} />
+            ))
+          ) : (
+            <>
+              {knowledge.length === 0 ? <p className="nova-empty">Noch keine Wissenseinträge im Archiv.</p> : null}
+              {knowledge.slice(0, 8).map((item) => (
+                <NovaTaskCard key={item.id} title={item.title} meta={item.status} />
+              ))}
+            </>
+          )}
           {onUpload ? (
             <button type="button" className="nova-chip" style={{ marginTop: 12 }} onClick={onUpload}>
               Dateien hochladen
@@ -230,12 +281,16 @@ export function NovaContextPanel({
         </div>
       ) : null}
 
-      {section === "tasks" && tasks.length > 1 ? (
+      {section === "tasks" && (world ? world.tasks.length > 1 : tasks.length > 1) ? (
         <div className="nova-card nova-panel">
           <h3>Weitere Aufgaben</h3>
-          {tasks.slice(1, 6).map((item) => (
-            <NovaTaskCard key={item.id} title={item.task?.title ?? item.title} meta={item.status} />
-          ))}
+          {world
+            ? world.tasks.slice(1, 8).map((item) => (
+                <NovaTaskCard key={item.id} title={item.title} meta={item.status} />
+              ))
+            : tasks.slice(1, 6).map((item) => (
+                <NovaTaskCard key={item.id} title={item.task?.title ?? item.title} meta={item.status} />
+              ))}
         </div>
       ) : null}
     </aside>

@@ -34,7 +34,7 @@ export function runWorkspaceUnitTests(): string[] {
   check("layout creates only the needed directory", () => {
     assert.equal(
       directoryForArtifact({ type: "RESEARCH_REPORT", organizationSlug: "joachim", projectSlug: "Website" }),
-      "Projekte/joachim/website",
+      "NOVA/Work/joachim/Recherche",
     );
     assert.equal(directoryForArtifact({ type: "LEAD_LIST", organizationSlug: "elevum" }), "Leads/elevum");
     assert.equal(directoryForArtifact({ type: "VIDEO_CLIP", organizationSlug: "elevum" }), "Medien/Video/elevum");

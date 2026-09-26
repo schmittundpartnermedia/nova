@@ -134,6 +134,20 @@ export function formatSourceLocation(name: string, location: SourceLocation): st
   return parts.join(", ");
 }
 
+export function focusKnowledgeHits<T extends { sourceId?: string | null; sourceName?: string | null; extractedAt?: Date }>(query: string, hits: T[]): T[] {
+  if (hits.length <= 1) return hits;
+  const named = query.match(/[\w.-]+\.(?:txt|pdf|docx|md|csv|xlsx)/i)?.[0]?.toLowerCase();
+  if (named) {
+    const matched = hits.filter((hit) => (hit.sourceName ?? "").toLowerCase().includes(named));
+    if (matched.length) return matched;
+  }
+  if (/\b(hochgeladen\w*|diese[rs]? (?:notiz|datei|dokument)|in der (?:notiz|datei)|aus der (?:notiz|datei))\b/i.test(query)) {
+    const newest = [...hits].sort((a, b) => (b.extractedAt?.getTime() ?? 0) - (a.extractedAt?.getTime() ?? 0))[0];
+    if (newest?.sourceId) return hits.filter((hit) => hit.sourceId === newest.sourceId);
+  }
+  return hits;
+}
+
 export function formatKnowledgeAnswer(input: {
   query: string;
   hits: RankedKnowledgeHit[];
@@ -143,7 +157,8 @@ export function formatKnowledgeAnswer(input: {
     return "Dazu habe ich in den Unterlagen nichts gefunden.";
   }
   const lines: string[] = [];
-  const byType = (type: KnowledgeItemType | string) => input.hits.filter((hit) => hit.type === type);
+  const focused = focusKnowledgeHits(input.query, input.hits);
+  const byType = (type: KnowledgeItemType | string) => focused.filter((hit) => hit.type === type);
   if (/preis|wie hoch/i.test(input.query) && byType("PRICE").length) {
     const prices = [...byType("PRICE")].sort((a, b) => a.extractedAt.getTime() - b.extractedAt.getTime());
     if (prices.length >= 2 && /alt|aktuell|später|geändert/i.test(input.query)) {
@@ -171,12 +186,12 @@ export function formatKnowledgeAnswer(input: {
     for (const hit of byType("METRIC").slice(0, 4)) {
       lines.push(`${hit.content} Quelle: ${formatSourceLocation(hit.sourceName ?? "Dokument", hit.location)}.`);
     }
-  } else if (/gespräch|woher|quelle|damals/i.test(input.query) && input.hits.length) {
-    for (const hit of input.hits.slice(0, 4)) {
+  } else if (/gespräch|woher|quelle|damals/i.test(input.query) && focused.length) {
+    for (const hit of focused.slice(0, 4)) {
       lines.push(`${hit.content} Quelle: ${formatSourceLocation(hit.sourceName ?? "Dokument", hit.location)}.`);
     }
   } else {
-    for (const hit of input.hits.slice(0, 4)) {
+    for (const hit of focused.slice(0, 4)) {
       lines.push(`${hit.content} Quelle: ${formatSourceLocation(hit.sourceName ?? "Dokument", hit.location)}.`);
     }
   }

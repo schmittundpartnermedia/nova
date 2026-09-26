@@ -3,22 +3,29 @@ import { assertOrganizationId } from "@/services/tenant";
 
 const ATTENTION = new Set(["IMPORTANT", "ACTION_REQUIRED", "REPLY_REQUIRED"]);
 
+function mailLine(item: { fromName: string | null; fromAddress: string; subject: string; receivedAt: Date | null }) {
+  const who = item.fromName || item.fromAddress;
+  const when = item.receivedAt ? item.receivedAt.toISOString().slice(0, 16).replace("T", " ") : "ohne Zeit";
+  return `• ${when} ${who} – ${item.subject}`;
+}
+
 export async function summarizeInbox(organizationId: string, since = new Date(Date.now() - 24 * 60 * 60 * 1000)) {
   assertOrganizationId(organizationId);
-  const messages = await prisma.mailMessage.findMany({
-    where: { organizationId, direction: "inbound", receivedAt: { gte: since } },
+  const newest = await prisma.mailMessage.findMany({
+    where: { organizationId, direction: "inbound" },
     orderBy: { receivedAt: "desc" },
-    take: 40,
+    take: 5,
   });
-  const attention = messages.filter((item) => ATTENTION.has(item.classification) && item.priority !== "low");
-  const lines = attention.slice(0, 2).map((item) => {
-    const who = item.fromName || item.fromAddress;
-    return `• ${who} – ${item.subject}`;
-  });
-  if (!messages.length) {
-    return "Seit gestern sind keine neuen Mails im lokalen Postfach.";
+  if (!newest.length) return "Im lokalen Postfach liegen keine eingegangenen Mails.";
+  const fresh = newest.filter((item) => item.receivedAt && item.receivedAt >= since);
+  const attention = fresh.filter((item) => ATTENTION.has(item.classification) && item.priority !== "low");
+  const lines = (fresh.length ? fresh : newest).slice(0, 5).map(mailLine);
+  if (!fresh.length) {
+    return `Seit gestern ist nichts Neues eingegangen. Die neuesten Mails sind:\n\n${lines.join("\n")}`;
   }
-  const head = `Seit gestern sind ${messages.length} neue Mails eingegangen.`;
-  if (!lines.length) return `${head} Keine davon braucht gerade deine Aufmerksamkeit.`;
-  return `${head} ${attention.length === 1 ? "Eine braucht" : `${Math.min(attention.length, 2)} brauchen`} deine Aufmerksamkeit:\n\n${lines.join("\n")}`;
+  const head = `Die neuesten Mails, ${fresh.length} seit gestern:`;
+  const note = attention.length
+    ? `\n\n${attention.length === 1 ? "Eine braucht" : `${attention.length} brauchen`} Aufmerksamkeit.`
+    : "";
+  return `${head}\n\n${lines.join("\n")}${note}`;
 }

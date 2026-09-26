@@ -146,7 +146,8 @@ async function main() {
   const foreign = await searchMail({ organizationId: orgB.id, query: "Hetzner" });
   assert(foreign.length === 0, "Tenant leak in der Suche");
   const summary = await summarizeInbox(orgA.id);
-  assert(/Hetzner/.test(summary) && !/Newsletter/.test(summary), summary);
+  assert(/Hetzner/.test(summary) && /neueste/i.test(summary), summary);
+  assert(!/Newsletter braucht/.test(summary), summary);
 
   const message = await prisma.mailMessage.findFirst({ where: { organizationId: orgA.id, fromAddress: "anna@hetzner.com" } });
   assert(message?.classification === "REPLY_REQUIRED" || message?.classification === "IMPORTANT", message?.classification ?? "keine Klasse");
@@ -215,7 +216,7 @@ async function main() {
   const watch = await scanWatch(orgA.id);
   assert(Array.isArray(watch.newImportantMail), "Watch ohne Mail");
   const answer = await answerMail({ organizationId: orgB.id, userRequest: "Gibt es neue wichtige Mails?" });
-  assert(/nicht verbunden|keine neuen Mails/i.test(answer.reply), answer.reply);
+  assert(/nicht verbunden|kein Mailkonto verbunden|keine neuen Mails/i.test(answer.reply), answer.reply);
   assert((await isRealConnectorEnabled(orgB.id, "mail")) === false, "Org B ohne Konto ist nicht real verbunden");
 
   console.log(JSON.stringify({ imported: synced.imported, capabilities: await getMailCapabilityMap(orgA.id), verified: verified.status }, null, 2));

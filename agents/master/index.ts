@@ -6,6 +6,7 @@ import { detectKnowledgeIntent } from "@/agents/knowledge/intent";
 import { detectChatGPTImportIntent } from "@/lib/chatgpt/intent";
 import { runKnowledgeAgent } from "@/agents/knowledge";
 import { detectDialogMove, dialogInstruction, type DialogMove } from "@/lib/dialog/intent";
+import { classifyConversationMove } from "@/lib/dialog/followup";
 import { detectUserTone, toneInstruction } from "@/lib/dialog/tone";
 import { refreshConversationContinuity } from "@/services/conversation/continuity";
 import { needsLiveResearch } from "@/lib/research/intent";
@@ -21,6 +22,7 @@ import { detectDevelopmentIntent } from "@/lib/development/intent";
 import { approvalSupersedesReview } from "@/lib/dialog/situation";
 import { classifyReviewUtterance } from "@/lib/review/intent";
 import { actOnSituation, decideTurn, loadOpenSituation } from "@/services/dialog/situation";
+import { loadDialogFocus, popDialogFocus, recordDialogFocus } from "@/services/dialog/focus";
 import { detectProjectIntent } from "@/agents/projects/intent";
 import { commissionDevelopment } from "@/services/development/commission";
 import { explainDevelopment } from "@/services/development/status";
@@ -175,10 +177,18 @@ function rememberConversation(input: {
   conversationId?: string;
   userRequest: string;
   reply: string;
+  domain?: string;
 }) {
   const conversationId = input.conversationId;
   if (!conversationId || !input.reply.trim()) return;
   void (async () => {
+    if (input.domain) {
+      await recordDialogFocus({
+        conversationId,
+        domain: input.domain,
+        reply: input.reply,
+      });
+    }
     await refreshConversationContinuity({
       organizationId: input.organizationId,
       conversationId,
@@ -307,6 +317,79 @@ Formuliere die Nutzerantwort direkt. Keine Agenten, kein Plan, kein Prozessberic
   };
 }
 
+function utteranceOpensWork(text: string): boolean {
+  if (detectMailIntent(text).kind !== "none") return true;
+  if (detectCalendarIntent(text)) return true;
+  if (detectContactIntent(text)) return true;
+  if (detectTicketIntent(text)) return true;
+  if (detectProjectIntent(text).kind !== "none") return true;
+  if (detectKnowledgeIntent(text).kind !== "none" && detectKnowledgeIntent(text).kind !== "cancel") return true;
+  if (detectChatGPTImportIntent(text).kind !== "none") return true;
+  if (detectDevelopmentIntent(text).kind !== "none") return true;
+  if (detectCodingIntent(text).kind !== "none") return true;
+  const computer = detectComputerIntent(text);
+  if (computer.kind !== "none" && computer.kind !== "cancel") return true;
+  if (detectWatchIntent(text)) return true;
+  if (needsLiveResearch(text)) return true;
+  return false;
+}
+
+async function answerBoundToFrame(
+  input: {
+    organizationId: string;
+    userRequest: string;
+    conversationId?: string;
+    onEvent?: (event: MasterEvent) => void;
+  },
+  frame: { domain: string; reply: string },
+  kind: "return" | "continue",
+): Promise<MasterRunResult> {
+  const instruction =
+    kind === "return"
+      ? "Der Benutzer kehrt zu diesem früheren Vorgang zurück. Nimm genau diesen Vorgang wieder auf. Den dazwischenliegenden Vorgang nicht vermischen."
+      : "Der Benutzer bezieht sich auf genau diese letzte Antwort. Beantworte die Rückfrage daraus. Ältere Chats, andere Mails und andere Listen nicht hineinziehen.";
+  const { provider, decision } = await resolveAIProvider(input.organizationId, "simple");
+  const unavailable = decision.requestedProviderId === "openai" && (decision.fallback || provider.id !== "openai") && provider.id !== "mock";
+  let reply = "";
+  if (!unavailable && provider.id !== "mock") {
+    reply = await collectStream({
+      provider,
+      generateInput: {
+        model: decision.model,
+        temperature: 0.2,
+        system: `Du bist NOVA. ${instruction} Deutsch, knapp, sachlich. Erfinde nichts, was in der genannten Antwort nicht steht.`,
+        prompt: `Bisherige Antwort:\n${frame.reply}\n\nBenutzer jetzt:\n${input.userRequest}`,
+      },
+      onDelta: (delta) => {
+        void emit(input.onEvent, { type: "delta", delta });
+      },
+    });
+  }
+  if (!reply.trim()) {
+    reply = kind === "return" ? `Zurück zu diesem Vorgang:\n\n${frame.reply}` : frame.reply;
+    await emit(input.onEvent, { type: "delta", delta: reply });
+  }
+  await emit(input.onEvent, { type: "status", orbState: "DONE", statusMessage: "Im selben Vorgang." });
+  rememberConversation({
+    organizationId: input.organizationId,
+    conversationId: input.conversationId,
+    userRequest: input.userRequest,
+    reply,
+    domain: frame.domain,
+  });
+  return {
+    jobId: "",
+    status: "completed",
+    orbState: "DONE",
+    statusMessage: "Im selben Vorgang.",
+    reply,
+    mock: provider.id === "mock",
+    providerMode: provider.id === "openai" ? "openai" : provider.id === "mock" ? "mock" : "fallback",
+    providerId: provider.id,
+    model: decision.model,
+  };
+}
+
 export async function runMaster(input: {
   organizationId: string;
   userRequest: string;
@@ -388,6 +471,16 @@ export async function runMaster(input: {
         model: "nova-situation",
       };
     }
+  }
+
+  const conversationMove = classifyConversationMove(input.userRequest);
+  if (input.conversationId && conversationMove === "return") {
+    const frame = await popDialogFocus(input.conversationId);
+    if (frame) return answerBoundToFrame(input, frame, "return");
+  }
+  if (input.conversationId && conversationMove === "continue" && !utteranceOpensWork(input.userRequest)) {
+    const focus = await loadDialogFocus(input.conversationId);
+    if (focus.current) return answerBoundToFrame(input, focus.current, "continue");
   }
 
   const dialog = detectDialogMove(input.userRequest);
@@ -1484,6 +1577,7 @@ async function runLocalMasterPath(
     conversationId: input.conversationId,
     userRequest: input.userRequest,
     reply,
+    domain: agentId === "contact" ? "contacts" : agentId === "project" ? "projects" : agentId === "calendar" ? "calendar" : agentId === "task" || agentId === "watch" ? "tasks" : agentId,
   });
   return {
     jobId: job.id,
@@ -1531,6 +1625,7 @@ async function runMailMasterPath(
     conversationId: input.conversationId,
     userRequest: input.userRequest,
     reply: result.reply,
+    domain: "mail",
   });
   return {
     jobId: "",
@@ -1565,21 +1660,22 @@ async function runKnowledgeQueryPath(
   if (result.reply) {
     await emit(input.onEvent, { type: "delta", delta: result.reply });
   }
-  rememberConversation({
-    organizationId: input.organizationId,
-    conversationId: input.conversationId,
-    userRequest: input.userRequest,
-    reply: result.reply,
-  });
-  return {
-    jobId: "",
-    status: "completed",
-    orbState: "DONE",
-    statusMessage: result.statusMessage,
-    reply: result.reply,
-    mock: false,
-    providerMode: "fallback",
-    providerId: "knowledge",
+    rememberConversation({
+      organizationId: input.organizationId,
+      conversationId: input.conversationId,
+      userRequest: input.userRequest,
+      reply: result.reply,
+      domain: "knowledge",
+    });
+    return {
+      jobId: "",
+      status: "completed",
+      orbState: "DONE",
+      statusMessage: result.statusMessage,
+      reply: result.reply,
+      mock: false,
+      providerMode: "fallback",
+      providerId: "knowledge",
     model: "nova-knowledge",
   };
 }

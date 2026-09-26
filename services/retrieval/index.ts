@@ -322,9 +322,9 @@ export async function loadRelevantBusinessContext(input: {
       title: item.title,
       startsAt: item.startsAt,
     })),
-    recentMessages: [...recentMessages].reverse().map((item) => ({
+    recentMessages: [...recentMessages].reverse().map((item, index, all) => ({
       role: item.role,
-      content: item.content.slice(0, 400),
+      content: item.content.slice(0, index >= all.length - 2 ? 2000 : 400),
     })),
     retrievedMessages: retrievedMessages.map((item) => ({
       role: item.role,
@@ -350,6 +350,12 @@ function formatContextPack(pack: BusinessContextPack): string {
     pack.meetings.length === 0 &&
     !pack.knowledge;
   const lines: string[] = [`Organization: ${pack.organizationName}`];
+  if (pack.recentMessages.length > 0) {
+    lines.push("", "Letzter Gesprächsstand, das ist der Bezug für Rückfragen:");
+    for (const message of pack.recentMessages) {
+      lines.push(`- ${message.role}: ${message.content}`);
+    }
+  }
   if (pack.continuity) {
     lines.push("", pack.continuity);
   }
@@ -390,13 +396,6 @@ function formatContextPack(pack: BusinessContextPack): string {
 
   if (pack.knowledge) {
     lines.push("", pack.knowledge);
-  }
-
-  if (pack.recentMessages.length > 0) {
-    lines.push("", "Aktuelle Conversation (Ausschnitt, nicht die komplette Historie):");
-    for (const message of pack.recentMessages) {
-      lines.push(`- ${message.role}: ${message.content}`);
-    }
   }
 
   if (pack.retrievedMessages.length > 0) {

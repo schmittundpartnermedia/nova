@@ -5,6 +5,9 @@ import { needsFlagshipModel, needsSpecialistWork } from "@/agents/master/intent"
 import { needsLiveResearch } from "@/lib/research/intent";
 import { detectKnowledgeIntent } from "@/agents/knowledge/intent";
 import { approvalSupersedesReview, classifySituationTurn } from "@/lib/dialog/situation";
+import { classifyConversationMove } from "@/lib/dialog/followup";
+import { detectProjectIntent } from "@/agents/projects/intent";
+import { nextDraftBody } from "@/lib/mail/revise";
 import { detectCodingIntent } from "@/agents/coding/intent";
 import { detectMailIntent } from "@/lib/mail/intent";
 
@@ -121,6 +124,34 @@ export function runDialogUnitTests(): string[] {
       approvalSupersedesReview({ approvalAt: reviewAt, reviewAt: approvalAt, confirmsApproval: true }),
       false,
     );
+  });
+
+  check("follow-ups stay on the open turn and fresh work does not", () => {
+    assert.equal(classifyConversationMove("warum nicht?"), "continue");
+    assert.equal(classifyConversationMove("welche davon?"), "continue");
+    assert.equal(classifyConversationMove("mach das"), "continue");
+    assert.equal(classifyConversationMove("die andere"), "continue");
+    assert.equal(classifyConversationMove("und dann?"), "continue");
+    assert.equal(classifyConversationMove("wo waren wir?"), "return");
+    assert.equal(classifyConversationMove("zurück zu den Kontakten von eben"), "return");
+    assert.equal(classifyConversationMove("Lies die neuesten Mails."), "fresh");
+    assert.equal(classifyConversationMove("Hallo"), "fresh");
+    assert.equal(classifyConversationMove("Was steht an?"), "fresh");
+  });
+
+  check("project name drops the trailing verb particle", () => {
+    const intent = detectProjectIntent("Lege ein Projekt NOVA-Auditprobe an.");
+    assert.equal(intent.kind, "create");
+    if (intent.kind === "create") assert.equal(intent.name, "NOVA-Auditprobe");
+  });
+
+  check("draft revision keeps the same text unless a change is stated", () => {
+    const current = "An: audit@example.com\n\nGuten Tag,\n\nDies ist ein Testentwurf.\n\nFreundliche Grüße";
+    assert.equal(nextDraftBody(current, "Ändere den Entwurf.").changed, false);
+    const changed = nextDraftBody(current, "Ändere den Entwurf, schreib dass ich nächste Woche schaue.");
+    assert.equal(changed.changed, true);
+    assert.match(changed.body, /nächste Woche/);
+    assert.match(changed.body, /audit@example.com/);
   });
 
   check("addressing nova is not a coding project", () => {

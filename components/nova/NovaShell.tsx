@@ -8,7 +8,7 @@ import { NovaCommunicationLayer, type CommunicationLine } from "@/components/nov
 import { NovaStatus } from "@/components/nova/NovaStatus";
 import { NovaVoiceWave } from "@/components/nova/NovaVoiceWave";
 import { NovaSidebar, type NovaSection } from "@/components/nova/NovaSidebar";
-import { NovaContextPanel, type NovaJobSummary, type NovaStandingPolicy } from "@/components/nova/NovaContextPanel";
+import { NovaContextPanel, type NovaJobSummary, type NovaStandingPolicy, type NovaWorld } from "@/components/nova/NovaContextPanel";
 import { ApprovalCard } from "@/components/nova/ApprovalCard";
 import { NovaUpload, type NovaUploadHandle } from "@/components/nova/NovaUpload";
 import { ArchivePanel, type ArchiveItem } from "@/components/archive/ArchivePanel";
@@ -110,6 +110,7 @@ export function NovaShell() {
   const [userName, setUserName] = useState("Joachim");
   const [online, setOnline] = useState(true);
   const [job, setJob] = useState<NovaJobSummary | null>(null);
+  const [world, setWorld] = useState<NovaWorld | null>(null);
   const [standingPolicies, setStandingPolicies] = useState<NovaStandingPolicy[]>([]);
   const [standingBusy, setStandingBusy] = useState(false);
   const [resumable, setResumable] = useState<ResumableComputer | null>(null);
@@ -498,6 +499,7 @@ export function NovaShell() {
       pendingApprovals?: Approval[];
       standingPolicies?: NovaStandingPolicy[];
       latestJob?: { id?: string; goal?: string; status?: string; userRequest?: string };
+      world?: NovaWorld;
       resumableComputerJob?: ResumableComputer | null;
       watchAlert?: WatchAlert | null;
     }, options?: { speakWatch?: boolean }) => {
@@ -519,6 +521,7 @@ export function NovaShell() {
       if (Array.isArray(data.standingPolicies)) {
         setStandingPolicies(data.standingPolicies);
       }
+      if (data.world) setWorld(data.world);
       if (data.latestJob) {
         setJob({
           id: String(data.latestJob.id),
@@ -948,6 +951,7 @@ export function NovaShell() {
           job={job}
           approvalDescription={approval?.description ?? null}
           items={activities}
+          world={world}
           standingPolicies={standingPolicies}
           standingBusy={standingBusy}
           onGrantStanding={(actionType) => void grantStanding(actionType)}

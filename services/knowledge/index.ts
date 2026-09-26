@@ -28,6 +28,7 @@ import { getEmbeddingProvider } from "@/providers/embedding";
 import { upsertChunks } from "@/services/retrieval/embeddings";
 import { retrieveV2 } from "@/services/retrieval/hybrid";
 import {
+  focusKnowledgeHits,
   formatImportSummary,
   formatKnowledgeAnswer,
   hybridScore,
@@ -993,7 +994,7 @@ export async function buildKnowledgeContext(input: KnowledgeSearchInput): Promis
   contradictions: Array<{ topic: string; values: string[] }>;
   answer: string;
 }> {
-  const hits = await searchKnowledge(input);
+  const hits = focusKnowledgeHits(input.query, await searchKnowledge(input));
   const retrieved = await retrieveV2({
     organizationId: input.organizationId,
     query: input.query,
@@ -1015,7 +1016,7 @@ export async function buildKnowledgeContext(input: KnowledgeSearchInput): Promis
         }
       })(),
     }))
-    .filter((row) => hits.some((hit) => hit.normalizedKey === row.topic) || /preis|price|später|geändert|alt/i.test(input.query));
+    .filter((row) => hits.some((hit) => row.values.some((value) => value && (hit.normalizedValue === value || hit.content.includes(value)))));
   const lines = hits.slice(0, 8).map((hit) => {
     const loc = [hit.sourceName, hit.location.page ? `S.${hit.location.page}` : "", hit.location.cell ?? ""]
       .filter(Boolean)
