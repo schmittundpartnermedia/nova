@@ -22,6 +22,7 @@ export function runDevelopmentUnitTests(): string[] {
     assert.equal(detectDevelopmentIntent("Was baut Cursor gerade?").kind, "status");
     assert.equal(detectDevelopmentIntent("Woran arbeitet Cursor gerade?").kind, "status");
     assert.equal(detectDevelopmentIntent("Wie ist der Stand deiner Entwicklungsaufträge?").kind, "status");
+    assert.equal(detectDevelopmentIntent("Wie ist der aktuelle Stand meines Entwicklungsauftrags?").kind, "status");
     assert.equal(
       detectDevelopmentIntent(
         "NOVA, ich möchte, dass du mir künftig sagen kannst, woran Cursor gerade für dich arbeitet und wie der aktuelle Stand deiner Entwicklungsaufträge ist.",
@@ -96,7 +97,7 @@ export function runDevelopmentUnitTests(): string[] {
     });
     assert.match(formatted.reply, /Woran Cursor gerade für mich arbeitet/);
     assert.match(formatted.reply, /RUNNING: Bitte baue die Statusantwort/);
-    assert.match(formatted.reply, /Stand der Entwicklungsaufträge/);
+    assert.match(formatted.reply, /Aktueller Entwicklungsauftrag/);
     assert.match(formatted.reply, /developing: Bitte baue die Statusantwort/);
     assert.match(formatted.statusMessage, /Entwicklung: RUNNING/);
   });

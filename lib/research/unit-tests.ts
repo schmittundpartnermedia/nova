@@ -17,6 +17,7 @@ export function runResearchUnitTests(): string[] {
   };
 
   check("live research detection", () => {
+    assert.equal(needsLiveResearch("Wie ist der aktuelle Stand meines Entwicklungsauftrags?"), false);
     assert.equal(needsLiveResearch("Was kostet Anbieter X aktuell?"), true);
     assert.equal(needsLiveResearch("Finde aktuelle Unternehmen, die als Sponsor passen."), true);
     assert.equal(needsLiveResearch("Wer ist derzeit Bundeskanzler?"), true);

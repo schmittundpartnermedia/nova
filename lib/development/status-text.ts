@@ -13,7 +13,7 @@ export type CursorWorkView = {
 };
 
 export function summarizeCursorGoal(prompt: string): string {
-  const match = prompt.match(/Ursprünglicher Wunsch:\s*(.+?)(?:\n\n|\nZiel:|$)/s);
+  const match = prompt.match(/Ursprünglicher Wunsch:\s*(.+)/);
   if (match?.[1]) {
     return cleanGoal(match[1]);
   }
@@ -44,13 +44,14 @@ export function formatDevelopmentStatusReply(input: {
   }
 
   if (input.orders.length > 0) {
-    lines.push("Stand der Entwicklungsaufträge:");
-    for (const order of input.orders) {
-      lines.push(
-        `- ${order.status}: ${cleanGoal(order.goal)} (Iteration ${order.iteration} von ${order.maxIterations})`,
-      );
-      if (order.resultSummary) lines.push(`  ${order.resultSummary}`);
-    }
+    const [latest, ...older] = input.orders;
+    lines.push("Aktueller Entwicklungsauftrag:");
+    lines.push(
+      `- ${latest.status}: ${cleanGoal(latest.goal)} (Iteration ${latest.iteration} von ${latest.maxIterations})`,
+    );
+    if (latest.resultSummary) lines.push(`  ${latest.resultSummary}`);
+    const olderOpen = older.filter((order) => order.status !== "completed").length;
+    if (olderOpen > 0) lines.push(`Weitere offene Aufträge: ${olderOpen}.`);
   }
 
   const askingFailure = /fehlgeschlagen|nicht fertig/i.test(input.userRequest);

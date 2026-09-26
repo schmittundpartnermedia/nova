@@ -2,6 +2,7 @@ import type { KnowledgeKind, ResearchIntent, ResearchIntentKind } from "@/lib/re
 import type { SearchFreshness } from "@/types/connectors";
 import { detectKnowledgeIntent } from "@/agents/knowledge/intent";
 import { isPureSocial } from "@/lib/dialog/intent";
+import { detectDevelopmentIntent } from "@/lib/development/intent";
 
 const CURRENT_RE =
   /\b(aktuell(?:e|en|er|es)?|heute|gestern|neueste(?:n|r|s)?|jetzt|derzeit|inzwischen|preis(?:e)?|version|news|nachricht(?:en)?|wer ist derzeit|gibt es inzwischen|stand\s+\d|this week|today|latest|current|currently)\b/i;
@@ -55,6 +56,7 @@ export function needsLiveResearch(userRequest: string): boolean {
   const text = userRequest.trim();
   if (!text) return false;
   if (isPureSocial(text)) return false;
+  if (detectDevelopmentIntent(text).kind !== "none") return false;
   if (detectKnowledgeIntent(text).kind !== "none") return false;
   if (CURRENT_RE.test(text) || REALTIME_RE.test(text) || COMPANY_RE.test(text) || DEEP_RE.test(text)) return true;
   return /\b(web|internet|quelle|quellen|recherch)\b/i.test(text);
