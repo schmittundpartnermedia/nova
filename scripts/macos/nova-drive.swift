@@ -60,13 +60,40 @@ func textField(_ win: AXUIElement) -> AXUIElement {
 
 
 func ensureConversationOpen(_ win: AXUIElement) {
-  let hasJoachim = visibleLines(win).contains(where: { $0 == "JOACHIM" })
-  if hasJoachim { return }
-  if let btn = find(win, where: {
-    str($0, kAXRoleAttribute as String) == "AXButton" && str($0, kAXTitleAttribute as String).contains("Gespräch")
-  }) {
-    _ = AXUIElementPerformAction(btn, kAXPressAction as CFString)
-    usleep(400_000)
+  if visibleLines(win).contains(where: { $0 == "JOACHIM" }) { return }
+  for attempt in 0..<10 {
+    if visibleLines(win).contains(where: { $0 == "JOACHIM" }) { return }
+    if let btn = find(win, where: {
+      str($0, kAXRoleAttribute as String) == "AXButton" &&
+        (str($0, kAXTitleAttribute as String) == "Aktuelles Gespräch öffnen" ||
+         str($0, kAXDescriptionAttribute as String) == "Aktuelles Gespräch öffnen")
+    }) {
+      _ = AXUIElementPerformAction(btn, kAXPressAction as CFString)
+      usleep(700_000)
+      continue
+    }
+    // Gespräch bereits offen oder Button noch nicht im AX-Baum
+    usleep(350_000)
+    _ = attempt
+  }
+}
+
+func clickButtonCenter(_ el: AXUIElement) {
+  var p: CFTypeRef?
+  var s: CFTypeRef?
+  AXUIElementCopyAttributeValue(el, kAXPositionAttribute as CFString, &p)
+  AXUIElementCopyAttributeValue(el, kAXSizeAttribute as CFString, &s)
+  var pt = CGPoint.zero
+  var sz = CGSize.zero
+  if let p { AXValueGetValue(p as! AXValue, .cgPoint, &pt) }
+  if let s { AXValueGetValue(s as! AXValue, .cgSize, &sz) }
+  let click = CGPoint(x: pt.x + sz.width / 2, y: pt.y + sz.height / 2)
+  let src = CGEventSource(stateID: .hidSystemState)
+  if let down = CGEvent(mouseEventSource: src, mouseType: .leftMouseDown, mouseCursorPosition: click, mouseButton: .left),
+     let up = CGEvent(mouseEventSource: src, mouseType: .leftMouseUp, mouseCursorPosition: click, mouseButton: .left) {
+    down.post(tap: .cghidEventTap)
+    usleep(40_000)
+    up.post(tap: .cghidEventTap)
   }
 }
 
@@ -150,19 +177,29 @@ if !setOk {
 }
 print("SENT \(message)")
 _ = AXUIElementPerformAction(sendButton(win), kAXPressAction as CFString)
+usleep(400_000)
+ensureConversationOpen(win)
 
 let deadline = Date().addingTimeInterval(timeout)
 var last: [String] = []
 while Date() < deadline {
   usleep(400_000)
+  if !visibleLines(win).contains(where: { $0 == "JOACHIM" }) {
+    ensureConversationOpen(win)
+  }
   last = visibleLines(win)
   let busy = last.contains(where: {
-    $0.localizedCaseInsensitiveContains("denke") ||
-      $0.localizedCaseInsensitiveContains("arbeitet") ||
-      $0.localizedCaseInsensitiveContains("NOVA spricht") ||
-      $0.localizedCaseInsensitiveContains("schaue") ||
-      $0.localizedCaseInsensitiveContains("Postfach") && $0.localizedCaseInsensitiveContains("Ich ") ||
-      $0 == "…" || $0 == "..."
+    let s = $0.trimmingCharacters(in: .whitespacesAndNewlines)
+    let low = s.lowercased()
+    if s == "…" || s == "..." { return true }
+    if low == "denken" || low == "planen" || low == "umsetzen" { return false }
+    return low.contains("ich denke") ||
+      low.contains("nova denkt") ||
+      low.contains("nova arbeitet") ||
+      low.contains("arbeitet noch") ||
+      low.contains("nova spricht") ||
+      low.contains("ich schaue") ||
+      (low.contains("postfach") && low.contains("ich "))
   })
   let hasUser = last.contains(where: { $0 == message || $0.contains(message) })
   let needles = expect.split(separator: "|").map { String($0) }.filter { !$0.isEmpty }
