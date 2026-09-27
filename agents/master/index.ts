@@ -330,6 +330,8 @@ function utteranceOpensWork(text: string): boolean {
   const computer = detectComputerIntent(text);
   if (computer.kind !== "none" && computer.kind !== "cancel") return true;
   if (detectWatchIntent(text)) return true;
+  if (/\bdauerfreigabe\b/i.test(text)) return true;
+  if (/\barchiv\b/i.test(text) && /\b(such|find|zeig|öffne|oeffne|durchsuch)\w*\b/i.test(text)) return true;
   if (needsLiveResearch(text)) return true;
   return false;
 }
@@ -677,6 +679,72 @@ export async function runMaster(input: {
       providerMode: "fallback",
       providerId: "memory",
       model: "nova-memory",
+    };
+  }
+
+  if (dialog.kind !== "social" && /\bdauerfreigabe\b/i.test(input.userRequest)) {
+    const reply =
+      "Dauerfreigabe schaltest du in der Freigabe-Karte mit „Immer erlauben“. Dann darf NOVA denselben Aktionstyp ohne erneute Nachfrage ausführen. Unter Freigaben kannst du bestehende Dauerfreigaben wieder entfernen. Ich aktiviere das nicht von allein.";
+    await emit(input.onEvent, { type: "delta", delta: reply });
+    rememberConversation({
+      organizationId: input.organizationId,
+      conversationId: input.conversationId,
+      userRequest: input.userRequest,
+      reply,
+    });
+    return {
+      jobId: "",
+      status: "completed",
+      orbState: "DONE",
+      statusMessage: "Dauerfreigabe erklärt.",
+      reply,
+      mock: false,
+      providerMode: "fallback",
+      providerId: "approvals",
+      model: "nova-approvals",
+    };
+  }
+
+  if (
+    dialog.kind !== "social" &&
+    /\barchiv\b/i.test(input.userRequest) &&
+    /\b(such|find|zeig|öffne|durchsuch)\w*\b/i.test(input.userRequest)
+  ) {
+    const { listArchive } = await import("@/services/archive");
+    const query = input.userRequest
+      .replace(/\b(?:such(?:e)?|find(?:e)?|zeig(?:e)?|öffne|oeffne|durchsuch(?:e)?)\b/gi, " ")
+      .replace(/\b(?:im|in(?:s)?|mein(?:em)?|das|dem|archiv|nach|bitte)\b/gi, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+    const { activities, conversationMessages } = await listArchive({
+      organizationId: input.organizationId,
+      query: query || input.userRequest,
+      type: "all",
+    });
+    const hits = [
+      ...conversationMessages.slice(0, 6).map((item) => `- Gespräch: ${item.content.slice(0, 140)}`),
+      ...activities.slice(0, 6).map((item) => `- ${item.type}: ${item.title}`),
+    ].slice(0, 8);
+    const reply = hits.length
+      ? `Im Archiv zu „${query || "deiner Suche"}“:\n${hits.join("\n")}`
+      : `Im Archiv finde ich nichts zu „${query || "deiner Suche"}“.`;
+    await emit(input.onEvent, { type: "delta", delta: reply });
+    rememberConversation({
+      organizationId: input.organizationId,
+      conversationId: input.conversationId,
+      userRequest: input.userRequest,
+      reply,
+    });
+    return {
+      jobId: "",
+      status: "completed",
+      orbState: "DONE",
+      statusMessage: "Archiv geprüft.",
+      reply,
+      mock: false,
+      providerMode: "fallback",
+      providerId: "archive",
+      model: "nova-archive",
     };
   }
 
