@@ -4,6 +4,7 @@ export type SituationSnapshot = {
   reviewOpenedAt: Date | null;
   activeReview: boolean;
   resumableComputer: boolean;
+  resumablePausedJob: boolean;
   lastActivityType: string | null;
 };
 
@@ -35,7 +36,8 @@ const STOP =
   /^(?:nova[,.\s]*)?(?:stopp?|stop|abbrechen|hör auf|hoer auf|lass es|vergiss es)[.!]?$/i;
 const STATUS =
   /^(?:nova[,.\s]*)?(?:wie ist der stand|was ist der (?:aktuelle |heutige )?stand|wie ist der aktuelle stand|was ist dein(?: aktueller)? status|wie ist dein(?: aktueller)? status|wie weit bist du|woran arbeitest du|was läuft(?: gerade)?|was laeuft(?: gerade)?|status)[.!?]*$/i;
-const RESUME = /^(?:nova[,.\s]*)?(?:mach weiter|setz(?:e)? fort)[.!]?$/i;
+const RESUME =
+  /^(?:nova[,.\s]*)?(?:mach weiter|setz(?:e)? fort|auftrag fortsetzen|unterbrochenen auftrag fortsetzen|setze den unterbrochenen auftrag fort)[.!]?$/i;
 const REVISE = /^(?:nova[,.\s]*)?(?:änder\w*|aender\w*|bitte änder\w*|bitte aender\w*)\b/i;
 
 function spoken(text: string): string {
@@ -51,7 +53,11 @@ export function classifySituationTurn(text: string, situation: SituationSnapshot
     return { kind: "confirm-pending" };
   }
   if (situation.pendingApproval && NO.test(value)) return { kind: "reject-pending" };
-  if (RESUME.test(value) && situation.resumableComputer && !situation.activeReview) {
+  if (
+    RESUME.test(value) &&
+    (situation.resumableComputer || situation.resumablePausedJob) &&
+    !situation.activeReview
+  ) {
     return { kind: "resume-computer" };
   }
   if (/^(?:nova[,.\s]*)?(?:änder\w*|aender\w*|bitte änder\w*|bitte aender\w*).*\b(?:entwurf|e-?mail)\b/i.test(value)) {

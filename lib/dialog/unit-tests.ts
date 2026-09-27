@@ -95,6 +95,7 @@ export function runDialogUnitTests(): string[] {
       reviewOpenedAt: null,
       activeReview: false,
       resumableComputer: false,
+      resumablePausedJob: false,
       lastActivityType: null,
     };
     assert.equal(classifySituationTurn("Ja", idle).kind, "none");

@@ -18,7 +18,7 @@ export type OpenSituation = SituationSnapshot & {
 const HEARTBEAT = path.join(process.cwd(), ".nova", "worker.heartbeat");
 
 export async function loadOpenSituation(organizationId: string): Promise<OpenSituation> {
-  const [approval, review, activity, computer] = await Promise.all([
+  const [approval, review, activity, computer, pausedJob] = await Promise.all([
     prisma.approvalRequest.findFirst({
       where: { organizationId, status: "pending" },
       orderBy: { createdAt: "desc" },
@@ -36,6 +36,15 @@ export async function loadOpenSituation(organizationId: string): Promise<OpenSit
       },
       orderBy: { startedAt: "desc" },
     }),
+    prisma.job.findFirst({
+      where: {
+        organizationId,
+        status: "paused",
+        NOT: { pauseReason: { contains: "nicht bestätigt" } },
+      },
+      orderBy: { createdAt: "desc" },
+      select: { id: true },
+    }),
   ]);
   let hardBlocked = false;
   if (approval?.payload) {
@@ -52,6 +61,7 @@ export async function loadOpenSituation(organizationId: string): Promise<OpenSit
     reviewOpenedAt: review?.openedAt ?? review?.createdAt ?? null,
     activeReview: Boolean(review),
     resumableComputer: Boolean(computer),
+    resumablePausedJob: Boolean(pausedJob),
     lastActivityType: activity?.type ?? null,
   };
 }
@@ -240,6 +250,39 @@ export async function actOnSituation(input: {
       return {
         reply: resumed.reply,
         statusMessage: resumed.statusMessage,
+        orb: resumed.orbState === "WAITING_FOR_APPROVAL" ? "WAITING_FOR_APPROVAL" : resumed.orbState === "ERROR" ? "ERROR" : "DONE",
+      };
+    }
+    const paused = await prisma.job.findFirst({
+      where: {
+        organizationId: input.organizationId,
+        status: "paused",
+        NOT: { pauseReason: { contains: "nicht bestätigt" } },
+      },
+      orderBy: { createdAt: "desc" },
+      include: { workItems: { orderBy: { createdAt: "desc" }, take: 1 } },
+    });
+    if (paused) {
+      const rawKind = paused.workItems[0]?.kind ?? "planner.run";
+      const kind = (
+        rawKind === "computer.run" || rawKind === "coding.run" || rawKind === "knowledge.run" || rawKind === "planner.run"
+          ? rawKind
+          : "planner.run"
+      ) as "computer.run" | "coding.run" | "knowledge.run" | "planner.run";
+      const { continueOwnedJob } = await import("@/services/jobs/owned");
+      const resumed = await continueOwnedJob({
+        organizationId: input.organizationId,
+        jobId: paused.id,
+        kind,
+        idempotencyKey: `${kind}:${paused.id}:resume:${Date.now()}`,
+        payload: {
+          userRequest: paused.userRequest,
+          resume: true,
+        },
+      });
+      return {
+        reply: resumed.reply || `Ich setze den Auftrag „${paused.goal}“ fort.`,
+        statusMessage: resumed.statusMessage || "Auftrag fortgesetzt.",
         orb: resumed.orbState === "WAITING_FOR_APPROVAL" ? "WAITING_FOR_APPROVAL" : resumed.orbState === "ERROR" ? "ERROR" : "DONE",
       };
     }
