@@ -9,7 +9,12 @@ export function detectContactIntent(text: string): "create" | "search" | "list" 
     if (/\b(derzeit|aktuell|heute|jetzt|gerade|kanzler|präsident|praesident|minister)\b/i.test(value)) return false;
     return "search";
   }
-  if (/\b(welche kontakte|kontaktliste|alle kontakte)\b/i.test(value)) return "list";
+  if (/\b(welche kontakte|kontaktliste|alle kontakte|meine kontakte|zeig(?:e)?(?:\s+mir)?(?:\s+meine)?\s+kontakte|kontakte\s+(?:anzeigen|auflisten|zeigen))\b/i.test(value)) {
+    return "list";
+  }
+  if (/\bkontakte?\b/i.test(value) && /\b(zeig|liste|welche|meine|alle|übersicht|uebersicht)\b/i.test(value)) {
+    return "list";
+  }
   return false;
 }
 

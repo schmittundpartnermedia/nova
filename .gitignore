@@ -55,3 +55,6 @@ macos/launcher/Resources/AppIcon.iconset/*.png
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# local AX driver binary
+scripts/macos/nova-drive

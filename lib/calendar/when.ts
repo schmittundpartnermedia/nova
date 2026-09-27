@@ -71,11 +71,13 @@ export function guessTitle(text: string): string {
   const cleaned = text
     .replace(/^(?:nova[,.\s]*)?(?:bitte\s+)?(?:leg(?:e)?|trag(?:e)?|erstell(?:e)?|setz(?:e)?|mach(?:e)?|sag(?:e)?)\b/i, " ")
     .replace(/\b(nova[,.]?\s*)?(trag(?:e)?\s+ein|leg(?:e)?\s+an|erstell(?:e)?|termin|kalender|meeting)\b/gi, " ")
-    .replace(/\b(einen|eine|ein|an|für|fuer|den|die|das)\b/gi, " ")
+    .replace(/\b(einen|eine|ein|für|fuer|den|die|das)\b/gi, " ")
     .replace(/\b(am|um|morgen|übermorgen|heute|montag|dienstag|mittwoch|donnerstag|freitag|samstag|sonntag)\b/gi, " ")
     .replace(/\b\d{1,2}[:.]\d{2}(?:\s*uhr)?\b/gi, " ")
     .replace(/\b\d{1,2}\s*uhr\b/gi, " ")
     .replace(/\b\d{1,2}\.\d{1,2}\.\d{2,4}\b/g, " ")
+    .replace(/\s+an[.!?]*$/i, " ")
+    .replace(/[.!?]+$/g, " ")
     .replace(/\s+/g, " ")
     .trim();
   return cleaned.slice(0, 120) || "Termin";
