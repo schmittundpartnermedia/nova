@@ -18,15 +18,42 @@ export function detectContactIntent(text: string): "create" | "search" | "list" 
   return false;
 }
 
-export function guessPersonName(text: string): { firstName: string; lastName: string } {
-  const named = text.match(
-    /kontakt(?:\s+(?:anlegen|speichern|für|von))?\s+([A-ZÄÖÜ][a-zäöüß]+)(?:\s+([A-ZÄÖÜ][a-zäöüß]+))?/i,
+function cleanNamePart(value: string): string {
+  return value
+    .replace(/^[\s:–—,-]+/, "")
+    .replace(/^(?:an|für|fuer|namens|mit)\s*:?\s+/i, "")
+    .replace(/[,.!?;:]+$/g, "")
+    .trim();
+}
+
+export function guessPersonName(text: string): { firstName: string; lastName: string; email?: string } {
+  const emailMatch = text.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i);
+  const email = emailMatch?.[0];
+  const withoutEmail = email ? text.replace(email, " ") : text;
+
+  const afterKontakt = withoutEmail.match(
+    /kontakt(?:\s+(?:anlegen|speichern|für|fuer|von|an))?\s*:?\s+(.+)/i,
   );
-  if (named?.[1]) {
-    return { firstName: named[1], lastName: named[2] ?? "" };
+  if (afterKontakt?.[1]) {
+    const names = cleanNamePart(afterKontakt[1])
+      .split(/[\s,]+/)
+      .map(cleanNamePart)
+      .filter((part) => part && !/^(anlegen|speichern|neuen?|kontakt)$/i.test(part));
+    if (names[0]) {
+      return { firstName: names[0], lastName: names.slice(1).join(" "), email };
+    }
   }
-  const wer = text.match(/wer ist\s+([A-ZÄÖÜ][a-zäöüß]+)(?:\s+([A-ZÄÖÜ][a-zäöüß]+))?/i);
-  if (wer?.[1]) return { firstName: wer[1], lastName: wer[2] ?? "" };
-  const parts = text.replace(/speicher(?:e)?|leg(?:e)?|kontakt|an|anlegen|neuen?/gi, "").trim().split(/\s+/);
-  return { firstName: parts[0] || "Unbekannt", lastName: parts.slice(1).join(" ") };
+
+  const wer = withoutEmail.match(/wer ist\s+([A-ZÄÖÜ][\p{L}'-]+)(?:\s+([A-ZÄÖÜ][\p{L}'-]+))?/u);
+  if (wer?.[1]) return { firstName: wer[1], lastName: wer[2] ?? "", email };
+
+  const parts = withoutEmail
+    .replace(/\b(?:speicher(?:e)?|leg(?:e)?|kontakt|anlegen|neuen?)\b/gi, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .split(/\s+/)
+    .map(cleanNamePart)
+    .filter(Boolean);
+
+  return { firstName: parts[0] || "Unbekannt", lastName: parts.slice(1).join(" "), email };
 }

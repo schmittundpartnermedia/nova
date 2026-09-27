@@ -1,6 +1,12 @@
 export function nextDraftBody(current: string, request: string): { body: string; changed: boolean } {
   const quoted = request.match(/[„"«]([^“"»]{2,})[“"»]/);
   if (quoted?.[1]?.trim()) return { body: quoted[1].trim(), changed: true };
+  const literal = request.match(
+    /\b(?:genau )?(?:diesen|folgenden|diesen einen)\s+satz\s*:\s*(.+)$/i,
+  );
+  if (literal?.[1]?.trim()) {
+    return { body: literal[1].replace(/[.!?]+$/g, "").trim() + ".", changed: true };
+  }
   const tail = request
     .replace(/^[\s\S]*?\bentwurf\b/i, "")
     .replace(/^[\s,:.-]*(?:bitte|mal|noch|so|zu|auf|dass|daß|schreib(?:e)?|text)*/i, "")

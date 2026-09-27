@@ -16,8 +16,9 @@ export async function prepareMailDraft(input: {
   assertOrganizationId(input.organizationId);
   bootstrapAgents();
   const revises =
-    /\b(?:änder\w*|aender\w*|korrigier\w*|ergänz\w*|erganz\w*|überarbeit\w*|ueberarbeit\w*)\b/i.test(input.userRequest) &&
-    /\bentwurf\b/i.test(input.userRequest);
+    /(?:^|[^\p{L}])(?:änder\w*|aender\w*|korrigier\w*|ergänz\w*|erganz\w*|überarbeit\w*|ueberarbeit\w*)\b/iu.test(
+      ` ${input.userRequest}`,
+    ) && /\bentwurf\b/i.test(input.userRequest);
   if (revises) {
     const open = await prisma.communication.findFirst({
       where: {

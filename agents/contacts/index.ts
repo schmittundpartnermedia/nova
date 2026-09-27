@@ -27,13 +27,16 @@ export const contactAgent: NovaAgent = {
           organizationId: context.organizationId,
           firstName: name.firstName,
           lastName: name.lastName,
+          email: name.email || null,
           notes: request.slice(0, 400),
           isMock: false,
         },
       });
+      const who = `${contact.firstName} ${contact.lastName}`.trim();
+      const mail = contact.email ? ` (${contact.email})` : "";
       return {
         ok: true,
-        summary: `Kontakt gespeichert: ${contact.firstName} ${contact.lastName}`.trim(),
+        summary: `Kontakt gespeichert: ${who}${mail}`.trim(),
         data: { executed: true, action: "create", contactId: contact.id },
       };
     }

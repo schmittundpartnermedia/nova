@@ -23,6 +23,7 @@ export function runDevelopmentUnitTests(): string[] {
     assert.equal(detectDevelopmentIntent("Woran arbeitet Cursor gerade?").kind, "status");
     assert.equal(detectDevelopmentIntent("Wie ist der Stand deiner Entwicklungsaufträge?").kind, "status");
     assert.equal(detectDevelopmentIntent("Wie ist der aktuelle Stand meines Entwicklungsauftrags?").kind, "status");
+    assert.equal(detectDevelopmentIntent("Wie ist der Entwicklungsstand?").kind, "status");
     assert.equal(detectDevelopmentIntent("Und die geplanten Aufträge?").kind, "status");
     assert.equal(detectDevelopmentIntent("Für Hetzner ist ein Auftrag geplant.").kind, "none");
     assert.equal(

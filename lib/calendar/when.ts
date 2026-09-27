@@ -76,9 +76,12 @@ export function guessTitle(text: string): string {
     .replace(/\b\d{1,2}[:.]\d{2}(?:\s*uhr)?\b/gi, " ")
     .replace(/\b\d{1,2}\s*uhr\b/gi, " ")
     .replace(/\b\d{1,2}\.\d{1,2}\.\d{2,4}\b/g, " ")
-    .replace(/\s+an[.!?]*$/i, " ")
-    .replace(/[.!?]+$/g, " ")
     .replace(/\s+/g, " ")
+    .trim()
+    .replace(/^(?:an|für|fuer|namens|mit)\s*:?\s+/i, "")
+    .replace(/\s+an[.!?]*$/i, "")
+    .replace(/[.!?]+$/g, "")
+    .replace(/^[\s:–—-]+/, "")
     .trim();
   return cleaned.slice(0, 120) || "Termin";
 }

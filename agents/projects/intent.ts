@@ -4,12 +4,22 @@ export type ProjectIntent =
   | { kind: "create"; name: string }
   | { kind: "status"; name?: string };
 
+function cleanProjectName(raw: string): string {
+  return raw
+    .replace(/^[\s:–—-]+/, "")
+    .replace(/^(?:an|für|fuer|namens|mit)\s*:?\s+/i, "")
+    .replace(/[.!?]+$/g, "")
+    .replace(/\s+an[.!?]*$/i, "")
+    .trim();
+}
+
 export function detectProjectIntent(userRequest: string): ProjectIntent {
   const text = userRequest.trim();
   if (!/\bprojekte?\b/i.test(text)) return { kind: "none" };
-  const create = text.match(/\b(?:leg(?:e)?|erstell(?:e)?|anleg(?:e)?|neues)\b(?:\s+\w+){0,4}\s+projekt\s+(.+)/i);
+  const create = text.match(/\b(?:leg(?:e)?|erstell(?:e)?|anleg(?:e)?|neues)\b(?:\s+\w+){0,4}\s+projekt(?:\s+an)?\s*[:\s]\s*(.+)/i)
+    ?? text.match(/\b(?:leg(?:e)?|erstell(?:e)?|anleg(?:e)?|neues)\b(?:\s+\w+){0,4}\s+projekt\s+(.+)/i);
   if (create?.[1]) {
-    const name = create[1].replace(/[.!?]+$/g, "").replace(/\s+an$/i, "").trim();
+    const name = cleanProjectName(create[1]);
     if (name) return { kind: "create", name };
   }
   if (/\b(?:liste|zeig|welche|übersicht|uebersicht|habe ich|gibt es|meine|wie viele|anzahl)\b/i.test(text)) {

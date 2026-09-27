@@ -30,11 +30,11 @@ const YES =
 const YES_SEND =
   /^(?:nova[,.\s]*)?(?:ja[,.]?\s+)?(?:senden|schick(?:e)? (?:sie|die mail|es)|mail raus)[.!]?$/i;
 const NO =
-  /^(?:nova[,.\s]*)?(?:nein|nein danke|ablehnen|nicht senden|das will ich nicht)[.!]?$/i;
+  /^(?:nova[,.\s]*)?(?:nein|nein danke|ablehnen|nicht senden|nicht jetzt|das will ich nicht)[.!]?$/i;
 const STOP =
   /^(?:nova[,.\s]*)?(?:stopp?|stop|abbrechen|hör auf|hoer auf|lass es|vergiss es)[.!]?$/i;
 const STATUS =
-  /^(?:nova[,.\s]*)?(?:wie ist der stand|was ist der (?:aktuelle |heutige )?stand|wie ist der aktuelle stand|wie weit bist du|woran arbeitest du|was läuft(?: gerade)?|was laeuft(?: gerade)?|status)[.!?]*$/i;
+  /^(?:nova[,.\s]*)?(?:wie ist der stand|was ist der (?:aktuelle |heutige )?stand|wie ist der aktuelle stand|was ist dein(?: aktueller)? status|wie ist dein(?: aktueller)? status|wie weit bist du|woran arbeitest du|was läuft(?: gerade)?|was laeuft(?: gerade)?|status)[.!?]*$/i;
 const RESUME = /^(?:nova[,.\s]*)?(?:mach weiter|setz(?:e)? fort)[.!]?$/i;
 const REVISE = /^(?:nova[,.\s]*)?(?:änder\w*|aender\w*|bitte änder\w*|bitte aender\w*)\b/i;
 

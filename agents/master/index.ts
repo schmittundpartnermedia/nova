@@ -408,11 +408,14 @@ export async function runMaster(input: {
 
   const situation = await loadOpenSituation(input.organizationId);
   const reviewCommand = classifyReviewUtterance(input.userRequest);
-  const newerApproval = approvalSupersedesReview({
-    approvalAt: situation.approvalCreatedAt,
-    reviewAt: situation.reviewOpenedAt,
-    confirmsApproval: reviewCommand?.kind === "approve" || reviewCommand?.kind === "reject",
-  });
+  const newerApproval =
+    approvalSupersedesReview({
+      approvalAt: situation.approvalCreatedAt,
+      reviewAt: situation.reviewOpenedAt,
+      confirmsApproval: reviewCommand?.kind === "approve" || reviewCommand?.kind === "reject",
+    }) ||
+    (Boolean(situation.pendingApprovalId) &&
+      /^(?:nova[,.\s]*)?nicht jetzt[.!]?$/i.test(input.userRequest.trim()));
   const reviewHit = newerApproval
     ? null
     : await handleReviewUtterance({

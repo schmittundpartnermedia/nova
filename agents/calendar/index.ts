@@ -42,7 +42,10 @@ export const calendarAgent: NovaAgent = {
         startsAt?: Date | string;
       }>;
       const titled = events.filter((item) => item.id && item.title);
-      const matched = titled.filter((item) => lower.includes(String(item.title).toLowerCase()));
+      const matched = titled.filter((item) => {
+        const title = String(item.title).toLowerCase().replace(/^(?:an|für|fuer)\s*:?\s+/, "").trim();
+        return Boolean(title) && (lower.includes(title) || title.includes(lower.replace(/^.*?termin\s+/i, "").replace(/\s+ab\s*$/i, "").trim()));
+      });
       const target = matched.length === 1 ? matched[0] : titled.length === 1 ? titled[0] : null;
       if (!target?.id) {
         const lines = titled.slice(0, 8).map((item) => {

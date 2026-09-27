@@ -111,6 +111,11 @@ export function runDialogUnitTests(): string[] {
       "reject-pending",
     );
     assert.equal(
+      classifySituationTurn("Nicht jetzt.", { ...idle, pendingApproval: { actionType: "mail.send", hardBlocked: false } }).kind,
+      "reject-pending",
+    );
+    assert.equal(classifySituationTurn("Was ist dein aktueller Status?", idle).kind, "status");
+    assert.equal(
       classifySituationTurn("Ändere den Entwurf, schreib dass ich nächste Woche schaue.", { ...idle, activeReview: true }).kind,
       "revise-mail",
     );
