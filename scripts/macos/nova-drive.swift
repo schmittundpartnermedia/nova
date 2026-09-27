@@ -1,6 +1,9 @@
 import ApplicationServices
 import AppKit
 import Foundation
+import CoreGraphics
+
+let maxDepth = 48
 
 func attr(_ el: AXUIElement, _ name: String) -> AnyObject? {
   var value: CFTypeRef?
@@ -8,23 +11,68 @@ func attr(_ el: AXUIElement, _ name: String) -> AnyObject? {
   return value
 }
 func str(_ el: AXUIElement, _ name: String) -> String { attr(el, name) as? String ?? "" }
-func kids(_ el: AXUIElement) -> [AXUIElement] { attr(el, kAXChildrenAttribute as String) as? [AXUIElement] ?? [] }
-func find(_ el: AXUIElement, where pred: (AXUIElement) -> Bool) -> AXUIElement? {
-  if pred(el) { return el }
-  for child in kids(el) { if let hit = find(child, where: pred) { return hit } }
+func kids(_ el: AXUIElement) -> [AXUIElement] {
+  attr(el, kAXChildrenAttribute as String) as? [AXUIElement] ?? []
+}
+
+func find(_ root: AXUIElement, where pred: (AXUIElement) -> Bool) -> AXUIElement? {
+  var queue: [(AXUIElement, Int)] = [(root, 0)]
+  var index = 0
+  while index < queue.count {
+    let (el, depth) = queue[index]
+    index += 1
+    if pred(el) { return el }
+    if depth >= maxDepth { continue }
+    for child in kids(el) {
+      queue.append((child, depth + 1))
+    }
+    if queue.count > 8000 { break }
+  }
   return nil
 }
-func findAll(_ el: AXUIElement, where pred: (AXUIElement) -> Bool) -> [AXUIElement] {
+
+func findAll(_ root: AXUIElement, where pred: (AXUIElement) -> Bool) -> [AXUIElement] {
   var out: [AXUIElement] = []
-  if pred(el) { out.append(el) }
-  for child in kids(el) { out.append(contentsOf: findAll(child, where: pred)) }
+  var queue: [(AXUIElement, Int)] = [(root, 0)]
+  var index = 0
+  while index < queue.count {
+    let (el, depth) = queue[index]
+    index += 1
+    if pred(el) { out.append(el) }
+    if depth >= maxDepth { continue }
+    for child in kids(el) {
+      queue.append((child, depth + 1))
+    }
+    if queue.count > 12000 { break }
+  }
   return out
 }
 
 func visibleLines(_ win: AXUIElement) -> [String] {
   findAll(win, where: { str($0, kAXRoleAttribute as String) == "AXStaticText" })
+    .prefix(400)
     .map { str($0, kAXValueAttribute as String).trimmingCharacters(in: .whitespacesAndNewlines) }
     .filter { !$0.isEmpty }
+}
+
+func cgFocusNovaWindow() {
+  let opts = CGWindowListOption(arrayLiteral: .optionOnScreenOnly, .excludeDesktopElements)
+  guard let info = CGWindowListCopyWindowInfo(opts, kCGNullWindowID) as? [[String: Any]] else { return }
+  for w in info {
+    let owner = w[kCGWindowOwnerName as String] as? String ?? ""
+    guard owner == "NOVA", let b = w[kCGWindowBounds as String] as? [String: CGFloat] else { continue }
+    let target = CGRect(x: b["X"]!, y: b["Y"]!, width: b["Width"]!, height: b["Height"]!)
+    let screenH = NSScreen.screens.map { $0.frame.maxY }.max() ?? 1080
+    let click = CGPoint(x: target.midX, y: screenH - target.midY)
+    let src = CGEventSource(stateID: .hidSystemState)
+    if let down = CGEvent(mouseEventSource: src, mouseType: .leftMouseDown, mouseCursorPosition: click, mouseButton: .left),
+       let up = CGEvent(mouseEventSource: src, mouseType: .leftMouseUp, mouseCursorPosition: click, mouseButton: .left) {
+      down.post(tap: .cghidEventTap)
+      usleep(30_000)
+      up.post(tap: .cghidEventTap)
+    }
+    break
+  }
 }
 
 func openNova() -> (pid_t, AXUIElement, AXUIElement) {
@@ -34,13 +82,28 @@ func openNova() -> (pid_t, AXUIElement, AXUIElement) {
     exit(2)
   }
   let pid = app.processIdentifier
-  app.activate(options: [])
+  app.activate(options: [.activateAllWindows])
+  usleep(200_000)
+  cgFocusNovaWindow()
   usleep(250_000)
   let axApp = AXUIElementCreateApplication(pid)
   _ = AXUIElementSetAttributeValue(axApp, "AXManualAccessibility" as CFString, kCFBooleanTrue)
   _ = AXUIElementSetAttributeValue(axApp, "AXEnhancedUserInterface" as CFString, kCFBooleanTrue)
-  usleep(350_000)
-  guard let windows = attr(axApp, kAXWindowsAttribute as String) as? [AXUIElement], let win = windows.first else {
+  usleep(500_000)
+  var win: AXUIElement?
+  for _ in 0..<20 {
+    if let windows = attr(axApp, kAXWindowsAttribute as String) as? [AXUIElement] {
+      win = windows.first(where: { str($0, kAXRoleAttribute as String) == "AXWindow" }) ?? windows.first
+      if let win, str(win, kAXRoleAttribute as String) == "AXWindow" { break }
+    }
+    if let childWin = find(axApp, where: { str($0, kAXRoleAttribute as String) == "AXWindow" }) {
+      win = childWin
+      break
+    }
+    usleep(300_000)
+    cgFocusNovaWindow()
+  }
+  guard let win else {
     fputs("Kein NOVA-Fenster\n", stderr)
     exit(3)
   }
@@ -58,11 +121,14 @@ func textField(_ win: AXUIElement) -> AXUIElement {
   exit(4)
 }
 
+func conversationOpen(_ win: AXUIElement) -> Bool {
+  visibleLines(win).contains(where: { $0 == "JOACHIM" })
+}
 
 func ensureConversationOpen(_ win: AXUIElement) {
-  if visibleLines(win).contains(where: { $0 == "JOACHIM" }) { return }
-  for attempt in 0..<10 {
-    if visibleLines(win).contains(where: { $0 == "JOACHIM" }) { return }
+  if conversationOpen(win) { return }
+  for _ in 0..<8 {
+    if conversationOpen(win) { return }
     if let btn = find(win, where: {
       str($0, kAXRoleAttribute as String) == "AXButton" &&
         (str($0, kAXTitleAttribute as String) == "Aktuelles Gespräch öffnen" ||
@@ -72,28 +138,7 @@ func ensureConversationOpen(_ win: AXUIElement) {
       usleep(700_000)
       continue
     }
-    // Gespräch bereits offen oder Button noch nicht im AX-Baum
-    usleep(350_000)
-    _ = attempt
-  }
-}
-
-func clickButtonCenter(_ el: AXUIElement) {
-  var p: CFTypeRef?
-  var s: CFTypeRef?
-  AXUIElementCopyAttributeValue(el, kAXPositionAttribute as CFString, &p)
-  AXUIElementCopyAttributeValue(el, kAXSizeAttribute as CFString, &s)
-  var pt = CGPoint.zero
-  var sz = CGSize.zero
-  if let p { AXValueGetValue(p as! AXValue, .cgPoint, &pt) }
-  if let s { AXValueGetValue(s as! AXValue, .cgSize, &sz) }
-  let click = CGPoint(x: pt.x + sz.width / 2, y: pt.y + sz.height / 2)
-  let src = CGEventSource(stateID: .hidSystemState)
-  if let down = CGEvent(mouseEventSource: src, mouseType: .leftMouseDown, mouseCursorPosition: click, mouseButton: .left),
-     let up = CGEvent(mouseEventSource: src, mouseType: .leftMouseUp, mouseCursorPosition: click, mouseButton: .left) {
-    down.post(tap: .cghidEventTap)
-    usleep(40_000)
-    up.post(tap: .cghidEventTap)
+    usleep(300_000)
   }
 }
 
@@ -184,7 +229,7 @@ let deadline = Date().addingTimeInterval(timeout)
 var last: [String] = []
 while Date() < deadline {
   usleep(400_000)
-  if !visibleLines(win).contains(where: { $0 == "JOACHIM" }) {
+  if !conversationOpen(win) {
     ensureConversationOpen(win)
   }
   last = visibleLines(win)

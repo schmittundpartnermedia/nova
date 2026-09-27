@@ -79,13 +79,20 @@ final class NovaWebWindowController: NSWindowController, WKNavigationDelegate, W
         window.isReleasedWhenClosed = false
         window.setFrameAutosaveName("NOVAMain")
         window.center()
+        window.setAccessibilityElement(true)
+        window.setAccessibilityRole(.window)
+        window.setAccessibilityTitle("NOVA")
         super.init(window: window)
         let config = WKWebViewConfiguration()
         webView = WKWebView(frame: window.contentView?.bounds ?? .zero, configuration: config)
         webView.autoresizingMask = [.width, .height]
         webView.navigationDelegate = self
         webView.uiDelegate = self
+        webView.setAccessibilityElement(true)
+        webView.setAccessibilityRole(.group)
+        webView.setAccessibilityLabel("NOVA")
         window.contentView = webView
+        window.makeFirstResponder(webView)
     }
 
     required init?(coder: NSCoder) {
