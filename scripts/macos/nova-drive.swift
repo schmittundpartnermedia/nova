@@ -181,6 +181,97 @@ if command == "section" {
   exit(0)
 }
 
+func clickButton(_ win: AXUIElement, titles: [String]) -> String? {
+  for title in titles {
+    if let btn = find(win, where: {
+      str($0, kAXRoleAttribute as String) == "AXButton" &&
+        (str($0, kAXTitleAttribute as String) == title ||
+          str($0, kAXDescriptionAttribute as String) == title ||
+          str($0, "AXIdentifier") == title)
+    }) {
+      if AXUIElementPerformAction(btn, kAXPressAction as CFString) == .success {
+        return title
+      }
+    }
+  }
+  return nil
+}
+
+func keystrokeCombo(key: CGKeyCode, flags: CGEventFlags) {
+  let src = CGEventSource(stateID: .hidSystemState)
+  if let down = CGEvent(keyboardEventSource: src, virtualKey: key, keyDown: true),
+     let up = CGEvent(keyboardEventSource: src, virtualKey: key, keyDown: false) {
+    down.flags = flags
+    up.flags = flags
+    down.post(tap: .cghidEventTap)
+    usleep(20_000)
+    up.post(tap: .cghidEventTap)
+  }
+}
+
+func typeText(_ text: String) {
+  let src = CGEventSource(stateID: .hidSystemState)
+  for ch in text.utf16 {
+    var chars = [UniChar(ch)]
+    if let down = CGEvent(keyboardEventSource: src, virtualKey: 0, keyDown: true),
+       let up = CGEvent(keyboardEventSource: src, virtualKey: 0, keyDown: false) {
+      down.keyboardSetUnicodeString(stringLength: 1, unicodeString: &chars)
+      up.keyboardSetUnicodeString(stringLength: 1, unicodeString: &chars)
+      down.post(tap: .cghidEventTap)
+      usleep(4_000)
+      up.post(tap: .cghidEventTap)
+    }
+  }
+}
+
+func selectOpenPanelFile(_ win: AXUIElement, path: String) -> Bool {
+  guard find(win, where: { str($0, kAXRoleAttribute as String) == "AXSheet" }) != nil else {
+    print("PANEL no-sheet")
+    return false
+  }
+  let nsPath = (path as NSString)
+  let directory = nsPath.deletingLastPathComponent
+  let fileName = nsPath.lastPathComponent
+
+  keystrokeCombo(key: 5, flags: [.maskCommand, .maskShift]) // Cmd+Shift+G
+  usleep(700_000)
+  let sheets = findAll(win, where: { str($0, kAXRoleAttribute as String) == "AXSheet" })
+  let goSheet = sheets.count >= 2 ? sheets[1] : sheets.first
+  guard let field = goSheet.flatMap({ sheet in
+    find(sheet, where: { str($0, kAXRoleAttribute as String) == "AXTextField" })
+  }) else {
+    print("PANEL no-go-field")
+    return false
+  }
+  _ = AXUIElementSetAttributeValue(field, kAXFocusedAttribute as CFString, kCFBooleanTrue)
+  _ = AXUIElementSetAttributeValue(field, kAXValueAttribute as CFString, directory as CFString)
+  usleep(120_000)
+  keystrokeCombo(key: 36, flags: [])
+  usleep(800_000)
+
+  guard let sheet = find(win, where: { str($0, kAXRoleAttribute as String) == "AXSheet" }) else {
+    print("PANEL lost-sheet")
+    return false
+  }
+  typeText(fileName)
+  usleep(400_000)
+  if let btn = find(sheet, where: {
+    str($0, kAXRoleAttribute as String) == "AXButton" && str($0, kAXTitleAttribute as String) == "Hochladen"
+  }) {
+    let err = AXUIElementPerformAction(btn, kAXPressAction as CFString)
+    if err == .success {
+      usleep(500_000)
+      print("PANEL ok:Hochladen")
+      return find(win, where: { str($0, kAXRoleAttribute as String) == "AXSheet" }) == nil
+    }
+  }
+  keystrokeCombo(key: 36, flags: [])
+  usleep(500_000)
+  let closed = find(win, where: { str($0, kAXRoleAttribute as String) == "AXSheet" }) == nil
+  print(closed ? "PANEL ok:return" : "PANEL fail")
+  return closed
+}
+
 if command == "voice-toggle" {
   let labelOn = "NOVA Stimme an"
   let labelOff = "NOVA Stimme aus"
@@ -198,6 +289,104 @@ if command == "voice-toggle" {
   print("before=\(before)")
   print("after=\(after)")
   exit(0)
+}
+
+if command == "click" {
+  let titles = rest.isEmpty ? ["Senden"] : rest
+  guard let hit = clickButton(win, titles: titles) else {
+    fputs("Button nicht gefunden: \(titles.joined(separator: "|"))\n", stderr)
+    exit(10)
+  }
+  usleep(400_000)
+  print("CLICKED \(hit)")
+  for line in visibleLines(win) { print(line) }
+  exit(0)
+}
+
+if command == "approve" {
+  let decision = (rest.first ?? "Freigeben").lowercased()
+  let titles: [String]
+  if decision.contains("nicht") || decision == "reject" || decision == "deny" {
+    titles = ["Nicht jetzt"]
+  } else if decision.contains("immer") || decision == "always" {
+    titles = ["Immer erlauben"]
+  } else {
+    titles = ["Freigeben"]
+  }
+  guard let hit = clickButton(win, titles: titles) else {
+    fputs("Freigabe-Button nicht gefunden: \(titles.joined(separator: "|"))\n", stderr)
+    exit(11)
+  }
+  usleep(500_000)
+  print("APPROVED \(hit)")
+  for line in visibleLines(win) { print(line) }
+  exit(0)
+}
+
+if command == "upload" {
+  let path = rest.first ?? ""
+  guard !path.isEmpty else {
+    fputs("upload braucht einen Dateipfad\n", stderr)
+    exit(12)
+  }
+  ensureConversationOpen(win)
+  _ = clickSection(win, title: "Hochladen") || clickButton(win, titles: ["Hochladen"]) != nil
+  usleep(600_000)
+  guard clickButton(win, titles: ["Dateien wählen", "Datei wählen", "Choose Files"]) != nil else {
+    // Card may already be open from prior prompt
+    fputs("Dateien wählen nicht gefunden\n", stderr)
+    for line in visibleLines(win) { print(line) }
+    exit(13)
+  }
+  usleep(700_000)
+  guard selectOpenPanelFile(win, path: path) else {
+    fputs("Open-Panel Auswahl fehlgeschlagen\n", stderr)
+    exit(14)
+  }
+  let deadline = Date().addingTimeInterval(90)
+  var last: [String] = []
+  while Date() < deadline {
+    usleep(500_000)
+    last = visibleLines(win)
+    if last.contains(where: {
+      $0.localizedCaseInsensitiveContains("Import") ||
+        $0.localizedCaseInsensitiveContains("fertig") ||
+        $0.localizedCaseInsensitiveContains("übernommen") ||
+        $0.localizedCaseInsensitiveContains("100%") ||
+        $0.localizedCaseInsensitiveContains("abgeschlossen")
+    }) {
+      print("OK")
+      print("---VISIBLE---")
+      for line in last { print(line) }
+      print("---END---")
+      exit(0)
+    }
+  }
+  print("TIMEOUT")
+  print("---VISIBLE---")
+  for line in last { print(line) }
+  print("---END---")
+  exit(6)
+}
+
+if command == "wait-speaking" {
+  let timeout = Double(rest.first ?? "20") ?? 20
+  let deadline = Date().addingTimeInterval(timeout)
+  while Date() < deadline {
+    usleep(250_000)
+    let lines = visibleLines(win)
+    if lines.contains(where: { $0.localizedCaseInsensitiveContains("NOVA spricht") }) {
+      print("SPEAKING")
+      for line in lines {
+        if line.localizedCaseInsensitiveContains("NOVA spricht") || line.localizedCaseInsensitiveContains("Stimme") {
+          print(line)
+        }
+      }
+      exit(0)
+    }
+  }
+  print("NOT_SPEAKING")
+  exit(15)
 }
 
 let message = command == "send" ? (rest.first ?? "Hallo") : command
@@ -225,6 +414,7 @@ _ = AXUIElementPerformAction(sendButton(win), kAXPressAction as CFString)
 usleep(400_000)
 ensureConversationOpen(win)
 
+let baseline = Set(visibleLines(win))
 let deadline = Date().addingTimeInterval(timeout)
 var last: [String] = []
 while Date() < deadline {
@@ -248,8 +438,9 @@ while Date() < deadline {
   })
   let hasUser = last.contains(where: { $0 == message || $0.contains(message) })
   let needles = expect.split(separator: "|").map { String($0) }.filter { !$0.isEmpty }
+  let freshLines = last.filter { !baseline.contains($0) }
   let hasExpect = needles.isEmpty
-    ? last.contains(where: {
+    ? freshLines.contains(where: {
       $0 != message &&
         $0.count > 4 &&
         !$0.localizedCaseInsensitiveContains("Bereit für deine Anfrage") &&
@@ -265,7 +456,10 @@ while Date() < deadline {
         $0 != "open" &&
         $0 != "Erledigt."
     })
-    : last.contains(where: { line in needles.contains(where: { line.localizedCaseInsensitiveContains($0) }) })
+    : freshLines.contains(where: { line in
+      guard line != message else { return false }
+      return needles.contains(where: { line.localizedCaseInsensitiveContains($0) })
+    })
   if hasUser && hasExpect && !busy {
     print("OK")
     print("---VISIBLE---")

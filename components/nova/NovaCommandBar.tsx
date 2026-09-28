@@ -171,6 +171,9 @@ export function NovaCommandBar({
                   : "Spracheingabe vorbereitet"
             }
           >
+            <span className="sr-only">
+              {sessionActive ? "Voice Session beenden" : voiceSupported ? "Voice Session starten" : "Spracheingabe vorbereitet"}
+            </span>
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
               <path
                 d="M12 3a3.5 3.5 0 0 0-3.5 3.5v5a3.5 3.5 0 1 0 7 0v-5A3.5 3.5 0 0 0 12 3Z"

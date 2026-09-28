@@ -568,6 +568,10 @@ export async function runMaster(input: {
     return runCodingMasterPath(input, codingIntent.statusMessage);
   }
 
+  if (dialog.kind !== "social" && computerIntent.kind !== "none") {
+    return runComputerMasterPath(input, computerIntent.statusMessage);
+  }
+
   if (chatgptIntent.kind === "prompt") {
     await emit(input.onEvent, { type: "status", orbState: "DONE", statusMessage: chatgptIntent.statusMessage });
     if (chatgptIntent.statusMessage) {
@@ -606,6 +610,16 @@ export async function runMaster(input: {
 
   if (dialog.kind !== "social" && detectCalendarIntent(input.userRequest)) {
     return runLocalMasterPath(input, "Ich schaue in den Kalender.", "calendar", "calendar", {
+      userRequest: input.userRequest,
+    });
+  }
+  if (dialog.kind !== "social" && /\b(dokument(?:e|en)?|unterlagen)\b/i.test(input.userRequest) && !needsLiveResearch(input.userRequest)) {
+    return runLocalMasterPath(input, "Ich schaue in die Dokumente.", "document", "document", {
+      userRequest: input.userRequest,
+    });
+  }
+  if (dialog.kind !== "social" && /\b(meetings?|besprechung(?:en)?)\b/i.test(input.userRequest) && !detectCalendarIntent(input.userRequest)) {
+    return runLocalMasterPath(input, "Ich schaue auf die Meetings.", "meeting", "meeting", {
       userRequest: input.userRequest,
     });
   }

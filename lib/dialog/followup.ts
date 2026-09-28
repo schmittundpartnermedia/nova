@@ -7,7 +7,7 @@ const ANAPHORA_RE =
   /\b(davon|darüber|darueber|damit|dazu|die andere|das andere|den anderen|welche davon|eben|diesen|diese|dieses|jenen|jene)\b/i;
 const OPENING_RE = /^(warum|wieso|weshalb|und|aber|welche|mach das|die andere|und dann)\b/i;
 const FRESH_RE =
-  /\b(mails?|e-mails?|postfach|projekte?|kontakte?|tickets?|aufgaben?|termine?|kalender|recherch|dateien?|upload|entwickl|cursor|archiv|dauerfreigabe|watch|was steht an|wie ist der stand|wie weit bist du|was hast du gerade)\b/i;
+  /\b(mails?|e-mails?|postfach|projekte?|kontakte?|tickets?|aufgaben?|termine?|kalender|meetings?|besprechungen?|dokument(?:e|en)?|unterlagen|wissen|recherch|dateien?|upload|entwickl|cursor|archiv|dauerfreigabe|watch|was steht an|wie ist der stand|wie weit bist du|was hast du gerade|zeig(?:e)?\s+meine|chatgpt|öffne|textedit|finder|terminal|coding)\b/i;
 
 export function classifyConversationMove(text: string): ConversationMove {
   const value = text.replace(/\s+/g, " ").trim();

@@ -68,7 +68,10 @@ export function detectComputerIntent(userRequest: string): ComputerIntent {
     return { kind: "quit_app", userCommissioned: true, statusMessage: "Freigabe erforderlich" };
   }
 
-  if (/öffne\s+(?:finder|terminal|textedit|mail|kalender|safari|chrome|cursor|notizen|notes|systemeinstellungen)/i.test(lower)) {
+  if (
+    /\böffne\b/i.test(lower) &&
+    /\b(finder|terminal|textedit|mail|kalender|safari|chrome|cursor|notizen|notes|systemeinstellungen|rechner|calculator)\b/i.test(lower)
+  ) {
     return { kind: "open_app", userCommissioned: true, statusMessage: "App wird geöffnet" };
   }
 

@@ -322,6 +322,7 @@ async function ingestBuffer(input: {
     orderBy: { versionNumber: "desc" },
   });
   if (existing && existing.status === "INDEXED") {
+    const existingItems = await prisma.knowledgeItem.count({ where: { sourceId: existing.id } });
     await prisma.knowledgeSource.create({
       data: {
         organizationId: input.organizationId,
@@ -344,7 +345,12 @@ async function ingestBuffer(input: {
         importedAt: new Date(),
       },
     });
-    return { sourceId: existing.id, items: 0, duplicate: true, relevant: false };
+    return {
+      sourceId: existing.id,
+      items: existingItems,
+      duplicate: true,
+      relevant: existingItems > 0,
+    };
   }
 
   const sourceType = (input.sourceType ?? detectSourceType(input.originalPath ?? input.name, input.mimeType)) as KnowledgeSourceType;

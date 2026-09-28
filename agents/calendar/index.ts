@@ -33,6 +33,20 @@ export const calendarAgent: NovaAgent = {
     const calendar = connectors.calendar;
     const lower = request.toLowerCase();
 
+    if (
+      /\b(apple|google|outlook|icloud)\b.{0,40}\bkalender\b/i.test(lower) ||
+      /\bkalender\b.{0,40}\b(apple|google|outlook|icloud)\b/i.test(lower) ||
+      /\b(verbind|koppel|sync|synchron)\b.{0,40}\b(apple|google|outlook|icloud).{0,20}kalender\b/i.test(lower) ||
+      /\bexterne[rnms]?\s+kalender\b/i.test(lower)
+    ) {
+      return {
+        ok: true,
+        summary:
+          "Es gibt keinen verbundenen Apple-, Google- oder Outlook-Kalender. Termine laufen nur im lokalen NOVA-Kalender.",
+        data: { executed: false, action: "external_unavailable", provider: calendar.id },
+      };
+    }
+
     if (/\b(absag|lösch|stornier)\b/i.test(lower) || /\bsag(?:e|t|en)?\b.{0,80}\bab\b/i.test(lower)) {
       const from = new Date();
       const to = new Date(from.getTime() + 120 * 24 * 60 * 60 * 1000);
@@ -69,8 +83,8 @@ export const calendarAgent: NovaAgent = {
     }
 
     if (
-      /\b(list|übersicht|was steht|welche termine|zeige termine)\b/i.test(lower) ||
-      (/\btermine\b/i.test(lower) && !/\banleg|erstell|trag/i.test(lower))
+      /\b(list|übersicht|was steht|welche termine|zeige termine|stehen an)\b/i.test(lower) ||
+      (/\btermine?\b/i.test(lower) && !/\banleg|erstell|trag/i.test(lower))
     ) {
       const from = new Date();
       const to = new Date(from.getTime() + 14 * 24 * 60 * 60 * 1000);
