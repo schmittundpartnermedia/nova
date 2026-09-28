@@ -308,7 +308,7 @@ Formuliere die Nutzerantwort direkt. Keine Agenten, kein Plan, kein Prozessberic
     jobId: "",
     status: "completed",
     orbState: "DONE",
-    statusMessage: "Erledigt.",
+    statusMessage: "Antwort bereit.",
     reply,
     mock: input.provider.id === "mock",
     providerMode: input.mode,
@@ -486,35 +486,56 @@ export async function runMaster(input: {
       organizationId: input.organizationId,
       conversationId: input.conversationId,
     });
-    if (openWork && !utteranceOpensWork(input.userRequest)) {
-      const continued = await continueActiveWork({
-        organizationId: input.organizationId,
-        conversationId: input.conversationId,
-        userRequest: input.userRequest,
-      });
-      if (continued?.handled) {
-        await emit(input.onEvent, { type: "status", orbState: continued.orbState, statusMessage: continued.statusMessage });
-        await emit(input.onEvent, { type: "delta", delta: continued.reply });
-        rememberConversation({
+    if (openWork) {
+      const opensNew = utteranceOpensWork(input.userRequest);
+      const sameDomainHint =
+        (openWork.domain === "mail" && detectMailIntent(input.userRequest).kind !== "none") ||
+        (openWork.domain === "calendar" && detectCalendarIntent(input.userRequest)) ||
+        (openWork.domain === "ticket" && detectTicketIntent(input.userRequest) !== false) ||
+        (openWork.domain === "project" && detectProjectIntent(input.userRequest).kind !== "none") ||
+        (openWork.domain === "contact" && detectContactIntent(input.userRequest)) ||
+        (openWork.domain === "computer" && detectComputerIntent(input.userRequest).kind !== "none") ||
+        (openWork.domain === "coding" && detectCodingIntent(input.userRequest).kind !== "none");
+      const mustContinue =
+        openWork.status === "clarifying" ||
+        openWork.status === "waiting_approval" ||
+        openWork.status === "ready" ||
+        openWork.status === "executing" ||
+        openWork.status === "verifying" ||
+        !opensNew ||
+        sameDomainHint;
+      // Neuer klarer Auftrag in anderer Domain darf den alten ersetzen (createActiveWork cancelt).
+      const replaceWithOther = opensNew && !sameDomainHint && openWork.status === "clarifying";
+      if (mustContinue && !replaceWithOther) {
+        const continued = await continueActiveWork({
           organizationId: input.organizationId,
           conversationId: input.conversationId,
           userRequest: input.userRequest,
-          reply: continued.reply,
-          domain: continued.work?.domain,
         });
-        return {
-          jobId: "",
-          status: continued.orbState === "ERROR" ? "failed" : continued.orbState === "WAITING_FOR_APPROVAL" ? "waiting_for_approval" : "completed",
-          orbState: continued.orbState,
-          statusMessage: continued.statusMessage,
-          reply: continued.reply,
-          approvalId: continued.approvalId,
-          actionType: continued.actionType,
-          mock: false,
-          providerMode: "fallback",
-          providerId: "active-work",
-          model: "nova-active-work",
-        };
+        if (continued?.handled) {
+          await emit(input.onEvent, { type: "status", orbState: continued.orbState, statusMessage: continued.statusMessage });
+          await emit(input.onEvent, { type: "delta", delta: continued.reply });
+          rememberConversation({
+            organizationId: input.organizationId,
+            conversationId: input.conversationId,
+            userRequest: input.userRequest,
+            reply: continued.reply,
+            domain: continued.work?.domain,
+          });
+          return {
+            jobId: "",
+            status: continued.orbState === "ERROR" ? "failed" : continued.orbState === "WAITING_FOR_APPROVAL" ? "waiting_for_approval" : "completed",
+            orbState: continued.orbState,
+            statusMessage: continued.statusMessage,
+            reply: continued.reply,
+            approvalId: continued.approvalId,
+            actionType: continued.actionType,
+            mock: false,
+            providerMode: "fallback",
+            providerId: "active-work",
+            model: "nova-active-work",
+          };
+        }
       }
     }
   }
@@ -613,6 +634,37 @@ export async function runMaster(input: {
     return runCodingMasterPath(input, codingIntent.statusMessage);
   }
 
+  if (dialog.kind !== "social" && computerIntent.kind === "generic") {
+    const { startActiveWorkFromIntent } = await import("@/services/work/continue");
+    const started = await startActiveWorkFromIntent({
+      organizationId: input.organizationId,
+      conversationId: input.conversationId,
+      domain: "computer",
+      goal: input.userRequest.slice(0, 120),
+      brief: input.userRequest,
+      slots: { goal: input.userRequest },
+    });
+    await emit(input.onEvent, { type: "status", orbState: started.orbState, statusMessage: started.statusMessage });
+    await emit(input.onEvent, { type: "delta", delta: started.reply });
+    rememberConversation({
+      organizationId: input.organizationId,
+      conversationId: input.conversationId,
+      userRequest: input.userRequest,
+      reply: started.reply,
+      domain: "computer",
+    });
+    return {
+      jobId: "",
+      status: "completed",
+      orbState: started.orbState,
+      statusMessage: started.statusMessage,
+      reply: started.reply,
+      mock: false,
+      providerMode: "fallback",
+      providerId: "active-work",
+      model: "nova-active-work",
+    };
+  }
   if (dialog.kind !== "social" && computerIntent.kind !== "none") {
     return runComputerMasterPath(input, computerIntent.statusMessage);
   }
@@ -763,6 +815,43 @@ export async function runMaster(input: {
     });
   }
   if (dialog.kind !== "social" && detectContactIntent(input.userRequest) && !needsLiveResearch(input.userRequest)) {
+    const wantsCreate = /\b(anleg|erstell|neu(?:en|er)?\s+kontakt|speicher)\w*/i.test(input.userRequest);
+    if (wantsCreate) {
+      const { startActiveWorkFromIntent } = await import("@/services/work/continue");
+      const nameMatch = input.userRequest.match(/\b(?:kontakt|namens?)\s+([A-ZÄÖÜ][\wäöüÄÖÜß.-]+(?:\s+[A-ZÄÖÜ][\wäöüÄÖÜß.-]+)?)/i);
+      const emailMatch = input.userRequest.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i);
+      const slots: Record<string, string> = {};
+      if (nameMatch?.[1]) slots.name = nameMatch[1];
+      if (emailMatch?.[0]) slots.email = emailMatch[0];
+      const started = await startActiveWorkFromIntent({
+        organizationId: input.organizationId,
+        conversationId: input.conversationId,
+        domain: "contact",
+        goal: slots.name || "Kontakt anlegen",
+        brief: input.userRequest,
+        slots,
+      });
+      await emit(input.onEvent, { type: "status", orbState: started.orbState, statusMessage: started.statusMessage });
+      await emit(input.onEvent, { type: "delta", delta: started.reply });
+      rememberConversation({
+        organizationId: input.organizationId,
+        conversationId: input.conversationId,
+        userRequest: input.userRequest,
+        reply: started.reply,
+        domain: "contact",
+      });
+      return {
+        jobId: "",
+        status: started.orbState === "ERROR" ? "failed" : "completed",
+        orbState: started.orbState,
+        statusMessage: started.statusMessage,
+        reply: started.reply,
+        mock: false,
+        providerMode: "fallback",
+        providerId: "active-work",
+        model: "nova-active-work",
+      };
+    }
     return runLocalMasterPath(input, "Ich schaue ins Adressbuch.", "contact", "contact", {
       userRequest: input.userRequest,
     });

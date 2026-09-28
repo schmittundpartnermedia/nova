@@ -222,6 +222,29 @@ async function executeReadyWork(input: {
     });
   }
 
+  if (input.work.domain === "computer" || input.work.domain === "coding") {
+    const goal = input.work.slots.goal || input.work.slots.task || input.work.goal;
+    await setActiveWorkStatus({
+      organizationId: input.organizationId,
+      workId: input.work.id,
+      status: "clarifying",
+      lastQuestion:
+        input.work.domain === "coding"
+          ? "Welchen konkreten Coding-Schritt und welchen Projektpfad soll ich nehmen?"
+          : "Welchen konkreten Mac-Schritt soll ich ausführen? (App öffnen, Datei suchen, klicken, Screenshot, …)",
+    });
+    return {
+      handled: true,
+      reply:
+        input.work.domain === "coding"
+          ? `Ich habe den Coding-Auftrag „${goal}“ gemerkt. Nenne bitte den Projektpfad und den genauen Umbau.`
+          : `Ich habe den Mac-Auftrag „${goal}“ gemerkt. Sag mir den nächsten konkreten Schritt (z. B. „öffne TextEdit“ oder „Screenshot“).`,
+      statusMessage: "Nächster Schritt fehlt.",
+      orbState: "DONE",
+      work: input.work,
+    };
+  }
+
   await setActiveWorkStatus({
     organizationId: input.organizationId,
     workId: input.work.id,
