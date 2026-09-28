@@ -262,7 +262,8 @@ function mergePendingRequest(original: string, fromEmail: string): string {
       `von ${fromEmail}`,
     );
   }
-  return `${original.trim()} von ${fromEmail}`;
+  // Absender vorne, sonst landet er im Inhalts-Hint.
+  return `von ${fromEmail}. ${original.trim()}`;
 }
 
 async function reviseOpenDraft(input: {
