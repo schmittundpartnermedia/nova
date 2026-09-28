@@ -654,18 +654,8 @@ case "capture":
 case "request.screen":
     reexecDisclaimedIfNeeded()
     writeJSON(["ok": requestScreenRecordingAccess(), "permission": "screen_recording"])
-case "ax.inspect":
-    if !axTrusted() {
-        writeJSON(["ok": false, "permission": "accessibility", "error": "PERMISSION_REQUIRED"])
-    } else {
-        writeJSON(["ok": true, "data": systemWideInspect(maxDepth: command.maxDepth ?? 3, appName: command.app)])
-    }
-case "ax.press", "ax.focus", "ax.setValue", "ax.select", "ax.expand", "ax.collapse", "ax.scroll":
-    if !axTrusted() {
-        writeJSON(["ok": false, "permission": "accessibility", "error": "PERMISSION_REQUIRED"])
-    } else {
-        writeJSON(performAction(command.identifier ?? "", action: command.cmd, value: command.value, appName: command.app))
-    }
+case "ax.inspect", "ax.press", "ax.focus", "ax.setValue", "ax.select", "ax.expand", "ax.collapse", "ax.scroll":
+    writeJSON(["ok": false, "error": "removed", "message": "AX-/Klick-Steuerung ist entfernt."])
 case "app.launch":
     writeJSON(launchApp(command.app ?? ""))
 case "app.focus":
@@ -676,16 +666,8 @@ case "automation.mail":
     writeJSON(mailAutomationState())
 case "applescript.run":
     writeJSON(runAppleScript(command.script ?? command.value ?? ""))
-case "input.click":
-    writeJSON(inputClick(x: command.x ?? 0, y: command.y ?? 0, button: command.button ?? "left"))
-case "input.move":
-    writeJSON(inputMove(x: command.x ?? 0, y: command.y ?? 0))
-case "input.scroll":
-    writeJSON(inputScroll(x: command.x, y: command.y, deltaX: command.deltaX ?? 0, deltaY: command.deltaY ?? 0))
-case "input.key":
-    writeJSON(inputKey(key: command.key, keyCode: command.keyCode, modifiers: command.modifiers ?? []))
-case "input.type":
-    writeJSON(inputTypeText(command.text ?? command.value ?? ""))
+case "input.click", "input.move", "input.scroll", "input.key", "input.type":
+    writeJSON(["ok": false, "error": "removed", "message": "Eingabe-/Klick-Steuerung ist entfernt."])
 case "clipboard.get":
     writeJSON(clipboardGet())
 case "clipboard.set":

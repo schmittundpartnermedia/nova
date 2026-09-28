@@ -3,10 +3,11 @@ import type {
   AnalyzeImageInput,
   GenerateInput,
   GenerateOutput,
+  HeadTurnInput,
+  HeadTurnOutput,
   HealthCheckResult,
   ReasonInput,
   ReasonOutput,
-  ScreenPerception,
   StreamChunk,
   StructuredInput,
   ToolCallInput,
@@ -192,6 +193,77 @@ export class MockAIProvider implements AIProvider {
 
   async toolCall(_input: ToolCallInput): Promise<ToolCallOutput> {
     return { text: "MockAIProvider führt keine echten Tool-Calls aus." };
+  }
+
+  async headTurn(input: HeadTurnInput): Promise<HeadTurnOutput> {
+    const lastUser = [...input.input]
+      .reverse()
+      .find((item) => "role" in item && item.role === "user" && "content" in item);
+    const userText =
+      lastUser && "content" in lastUser ? String(lastUser.content) : input.instructions;
+    const lower = userText.toLowerCase();
+    const hasToolOutput = input.input.some(
+      (item) => "type" in item && item.type === "function_call_output",
+    );
+
+    if (hasToolOutput) {
+      return {
+        responseId: `mock-resp-${Date.now()}`,
+        text: "Alles klar, ich habe es mir gemerkt.",
+        toolCalls: [],
+        model: "mock-master",
+        provider: this.id,
+      };
+    }
+
+    if (/merk\s*dir|merke\s*dir|vergiss\s*nicht/.test(lower)) {
+      const datei = /kunde|kunden/.test(lower)
+        ? "kunden"
+        : /projekt/.test(lower)
+          ? "projekte"
+          : "firma";
+      return {
+        responseId: `mock-resp-${Date.now()}`,
+        text: "",
+        toolCalls: [
+          {
+            callId: `mock-call-${Date.now()}`,
+            name: "gedaechtnis_schreiben",
+            arguments: {
+              datei,
+              inhalt: userText.replace(/^.*merk\s*dir[:\s]*/i, "").trim() || userText,
+              modus: "ergaenzen",
+            },
+          },
+        ],
+        model: "mock-master",
+        provider: this.id,
+      };
+    }
+
+    if (/was\s+(suchen|wissen)|was\s+für\s+sponsor|was\s+suchen\s+wir|passend/.test(lower)) {
+      return {
+        responseId: `mock-resp-${Date.now()}`,
+        text: "",
+        toolCalls: [
+          {
+            callId: `mock-call-${Date.now()}`,
+            name: "gedaechtnis_lesen",
+            arguments: { datei: "firma" },
+          },
+        ],
+        model: "mock-master",
+        provider: this.id,
+      };
+    }
+
+    return {
+      responseId: `mock-resp-${Date.now()}`,
+      text: "Ich bin Nova. Sag mir, was ich mir merken soll, oder frag nach dem Gedächtnis.",
+      toolCalls: [],
+      model: "mock-master",
+      provider: this.id,
+    };
   }
 
   async *stream(input: GenerateInput): AsyncIterable<StreamChunk> {

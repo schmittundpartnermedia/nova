@@ -1,6 +1,6 @@
 import type { NovaFacialFrame } from "@/types/avatar";
 import type { FacialAnimationProvider, FacialProviderHealth } from "@/types/facial";
-import { visemeToBlendshapes } from "@/features/avatar/viseme-map";
+import { visemeToBlendshapes } from "@/lib/voice/viseme-blendshapes";
 import {
   classifyVisemeFromBands,
   clamp01,

@@ -1,4 +1,11 @@
-import type { PlannedStep } from "@/agents/computer/planner";
+/** Rest der Computer-Plan-Serialisierung (ohne Computer-Agent). */
+
+export type PlannedStep = {
+  id?: string;
+  tool?: string;
+  action?: string;
+  [key: string]: unknown;
+};
 
 export type ComputerPlan = {
   steps: PlannedStep[];
@@ -33,4 +40,12 @@ export function remainingSteps(plan: ComputerPlan): PlannedStep[] {
   return plan.steps.slice(plan.cursor);
 }
 
-export const RESUMABLE_COMPUTER_STATUSES = ["INTERRUPTED", "FAILED", "WAITING_FOR_HUMAN"] as const;
+export const RESUMABLE_COMPUTER_STATUSES = [
+  "INTERRUPTED",
+  "FAILED",
+  "WAITING_FOR_HUMAN",
+  "WAITING_FOR_APPROVAL",
+  "EXECUTING",
+  "PLANNED",
+  "PREPARED",
+] as const;

@@ -1,24 +1,14 @@
 export type NovaSection =
   | "chat"
   | "projects"
-  | "companies"
-  | "contacts"
-  | "tasks"
-  | "research"
   | "knowledge"
   | "archive"
-  | "approvals"
   | "mail";
 
 const ITEMS: Array<{ id: NovaSection; label: string; icon: string }> = [
   { id: "chat", label: "Chat", icon: "M4 6h16v10H7l-3 3V6Z" },
   { id: "projects", label: "Projekte", icon: "M4 7h6l2 2h8v10H4V7Z" },
-  { id: "companies", label: "Unternehmen", icon: "M4 20V8l6-4 6 4v12M10 20v-6h4v6" },
-  { id: "contacts", label: "Kontakte", icon: "M12 12a4 4 0 1 0-4-4 4 4 0 0 0 4 4Zm8 8a8 8 0 0 0-16 0" },
-  { id: "tasks", label: "Aufgaben", icon: "M5 7h14M5 12h14M5 17h9" },
-  { id: "research", label: "Recherche", icon: "M11 18a7 7 0 1 1 7-7 7 7 0 0 1-7 7Zm5.5-1.5L21 21" },
   { id: "knowledge", label: "Wissen", icon: "M5 5h14v14H5zM8 8h8M8 12h8M8 16h5" },
-  { id: "approvals", label: "Freigaben", icon: "M7 11V8a5 5 0 0 1 10 0v3M6 11h12v10H6V11Z" },
   { id: "mail", label: "Mail", icon: "M3 6h18v12H3V6Zm0 0 9 7 9-7" },
   { id: "archive", label: "Archiv", icon: "M4 7h16v3H4V7Zm2 3v9h12v-9" },
 ];

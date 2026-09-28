@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { NovaBackground } from "@/components/nova/NovaBackground";
-import { NovaAvatar } from "@/components/nova/NovaAvatar";
+import { Orb } from "@/components/nova/Orb";
 import { NovaCommandBar } from "@/components/nova/NovaCommandBar";
 import { NovaCommunicationLayer, type CommunicationLine } from "@/components/nova/NovaCommunicationLayer";
 import { NovaStatus } from "@/components/nova/NovaStatus";
@@ -12,7 +12,6 @@ import { NovaContextPanel, type NovaJobSummary, type NovaStandingPolicy, type No
 import { ApprovalCard } from "@/components/nova/ApprovalCard";
 import { NovaUpload, type NovaUploadHandle } from "@/components/nova/NovaUpload";
 import { ArchivePanel, type ArchiveItem } from "@/components/archive/ArchivePanel";
-import { performanceForState } from "@/components/nova/avatar-performance";
 import { useVoiceSession } from "@/features/voice/useVoiceSession";
 import { useNovaVoice } from "@/features/voice/useNovaVoice";
 import type { VoiceTurn } from "@/features/voice/session-types";
@@ -207,7 +206,6 @@ export function NovaShell() {
     speaking: speechPlaying,
     unavailableHint,
     clearHint,
-    performance: speechPerformance,
     beginTurn,
     ingest,
     flush,
@@ -821,15 +819,6 @@ export function NovaShell() {
     else if (sessionSnap.state === "PROCESSING") uiState = "THINKING";
     else if (sessionSnap.capturing || sessionSnap.state === "STARTING") uiState = "LISTENING";
   }
-  const basePerformance = useMemo(() => performanceForState(uiState), [uiState]);
-  const performance = speechPlaying
-    ? {
-        ...basePerformance,
-        ...speechPerformance,
-        isSpeaking: true,
-      }
-    : { ...basePerformance, isSpeaking: false, viseme: "REST" as const, speechIntensity: 0 };
-
   const shownStatus =
     sessionSnap.state === "ERROR"
       ? sessionSnap.error ?? "Voice Session fehlgeschlagen."
@@ -888,7 +877,7 @@ export function NovaShell() {
               />
             </div>
             <div className="nova-hero-stage">
-              <NovaAvatar state={uiState} performance={performance} />
+              <Orb state={uiState} />
               <p className="nova-hero-copy right">
                 Dein
                 <br />

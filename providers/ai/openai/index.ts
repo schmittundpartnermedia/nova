@@ -4,6 +4,8 @@ import type {
   AnalyzeImageInput,
   GenerateInput,
   GenerateOutput,
+  HeadTurnInput,
+  HeadTurnOutput,
   HealthCheckResult,
   ReasonInput,
   ReasonOutput,
@@ -197,36 +199,106 @@ export class OpenAIProvider implements AIProvider {
   }
 
   async toolCall(input: ToolCallInput): Promise<ToolCallOutput> {
-    const params = completionParams({ model: input.model, temperature: 0.1 });
+    const turn = await this.headTurn({
+      instructions: "Du wählst passende Werkzeuge oder antwortest kurz.",
+      input: [{ role: "user", content: input.prompt }],
+      tools: input.tools.map((tool) => ({
+        name: tool.name,
+        description: tool.description,
+        parameters: {
+          type: "object",
+          properties: {},
+          required: [],
+          additionalProperties: false,
+        },
+      })),
+      model: input.model,
+    });
+    const first = turn.toolCalls[0];
+    if (first) {
+      return { tool: first.name, arguments: first.arguments, text: turn.text || undefined };
+    }
+    return { text: turn.text || undefined };
+  }
+
+  async headTurn(input: HeadTurnInput): Promise<HeadTurnOutput> {
+    const model = resolveModel(input);
     try {
-      const completion = await this.getClient().chat.completions.create({
-        ...params,
-        messages: [{ role: "user", content: input.prompt }],
-        tools: input.tools.map((tool) => ({
-          type: "function" as const,
-          function: {
-            name: tool.name,
-            description: tool.description,
-            parameters: {
-              type: "object",
-              properties: {},
-              additionalProperties: true,
-            },
-          },
-        })),
+      const tools = input.tools.map((tool) => ({
+        type: "function" as const,
+        name: tool.name,
+        description: tool.description,
+        parameters: tool.parameters,
+        strict: true as const,
+      }));
+
+      const response = await this.getClient().responses.create({
+        model,
+        instructions: input.instructions,
+        input: input.input.map((item) => {
+          if ("type" in item && item.type === "function_call_output") {
+            return {
+              type: "function_call_output" as const,
+              call_id: item.call_id,
+              output: item.output,
+            };
+          }
+          const message = item as { role: "user" | "assistant"; content: string };
+          return {
+            role: message.role,
+            content: message.content,
+          };
+        }),
+        tools,
+        ...(input.previousResponseId ? { previous_response_id: input.previousResponseId } : {}),
       });
-      const message = completion.choices[0]?.message;
-      const call = message?.tool_calls?.[0];
-      if (call && call.type === "function") {
-        let args: Record<string, unknown> = {};
-        try {
-          args = JSON.parse(call.function.arguments || "{}") as Record<string, unknown>;
-        } catch {
-          args = {};
-        }
-        return { tool: call.function.name, arguments: args, text: message?.content ?? undefined };
-      }
-      return { text: message?.content ?? undefined };
+
+      const toolCalls = (response.output ?? [])
+        .filter((item) => item.type === "function_call")
+        .map((item) => {
+          const call = item as {
+            call_id?: string;
+            name?: string;
+            arguments?: string;
+          };
+          let args: Record<string, unknown> = {};
+          try {
+            args = JSON.parse(call.arguments || "{}") as Record<string, unknown>;
+          } catch {
+            args = {};
+          }
+          return {
+            callId: String(call.call_id ?? ""),
+            name: String(call.name ?? ""),
+            arguments: args,
+          };
+        })
+        .filter((call) => call.callId && call.name);
+
+      const text =
+        typeof response.output_text === "string"
+          ? response.output_text.trim()
+          : (response.output ?? [])
+              .filter((item) => item.type === "message")
+              .map((item) => {
+                const message = item as {
+                  content?: Array<{ type?: string; text?: string }>;
+                };
+                return (message.content ?? [])
+                  .filter((part) => part.type === "output_text" || part.type === "text")
+                  .map((part) => part.text ?? "")
+                  .join("");
+              })
+              .join("")
+              .trim();
+
+      return {
+        responseId: response.id,
+        text,
+        toolCalls,
+        model: response.model ?? model,
+        provider: this.id,
+      };
     } catch (error) {
       throw new Error(publicErrorMessage(error));
     }

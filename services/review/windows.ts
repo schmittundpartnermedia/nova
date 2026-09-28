@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { runDesktopAction } from "@/agents/computer/client";
+import { runDesktopAction } from "@/services/desktop-service/client";
 import type { ActionResult } from "@/lib/computer/types";
 import type { ReviewType } from "@/types/workspace";
 

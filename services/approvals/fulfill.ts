@@ -53,13 +53,6 @@ export async function executeDecidedApproval(input: {
       status: "prepared",
       jobId: input.approval.jobId ?? undefined,
     });
-    await closeLinkedActiveWork({
-      organizationId: input.organizationId,
-      approvalId: input.approval.id,
-      communicationIds: payload.communicationIds ?? [],
-      status: "cancelled",
-      evidence: message,
-    });
     return { executed: false, message, sent: 0 };
   }
 
@@ -184,39 +177,9 @@ export async function executeDecidedApproval(input: {
       (mailConnected
         ? "Freigegeben, aber der Versand ist fehlgeschlagen. Es wurde nichts als gesendet markiert."
         : "Freigegeben, aber Mail.app-Steuerung ist gerade nicht verfügbar. Es wurde nichts versendet.");
-  await closeLinkedActiveWork({
-    organizationId: input.organizationId,
-    approvalId: input.approval.id,
-    communicationIds: ids,
-    status: sent ? "done" : "failed",
-    evidence: message,
-  });
   return {
     executed: sent > 0,
     sent,
     message,
   };
-}
-
-async function closeLinkedActiveWork(input: {
-  organizationId: string;
-  approvalId: string;
-  communicationIds: string[];
-  status: "done" | "failed" | "cancelled";
-  evidence: string;
-}) {
-  const { loadOpenActiveWork, setActiveWorkStatus } = await import("@/services/work/active");
-  const open = await loadOpenActiveWork({ organizationId: input.organizationId });
-  if (!open || open.status !== "waiting_approval") return;
-  const linkedApproval = open.linkedIds.approvalId === input.approvalId;
-  const linkedMail =
-    Boolean(open.linkedIds.communicationId) &&
-    input.communicationIds.includes(open.linkedIds.communicationId);
-  if (!linkedApproval && !linkedMail) return;
-  await setActiveWorkStatus({
-    organizationId: input.organizationId,
-    workId: open.id,
-    status: input.status,
-    evidence: input.evidence,
-  });
 }

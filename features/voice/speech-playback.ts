@@ -3,7 +3,6 @@
 import { prepareTextForSpeech } from "@/services/voice/prepare-text";
 import { nextUnspokenChunks } from "@/services/voice/chunk-text";
 import { HeuristicFacialProvider } from "@/providers/facial/heuristic";
-import { AvatarTimelineController } from "@/features/avatar/timeline";
 import type { NovaFacialFrame } from "@/types/avatar";
 import type { SpeechViseme } from "@/types/voice";
 
@@ -46,17 +45,13 @@ export class SpeechPlaybackController {
   private analyser: AnalyserNode | null = null;
   private gain: GainNode | null = null;
   private facial = new HeuristicFacialProvider();
-  // Browser-Lip-Sync bleibt Heuristik. /api/nova/facial sagt, ob Audio2Face erreichbar ist.
-  private timeline = new AvatarTimelineController();
   private listener: SpeechPlaybackListener = {};
   private chunkOriginMs = 0;
   private chunkStartedAt = 0;
 
   constructor() {
-    this.timeline.attachClock(() => this.getAudioTimeMs());
     this.facial.setListener((frame) => {
-      this.timeline.pushLive(frame);
-      this.listener.onFacialFrame?.(this.timeline.sample() ?? frame);
+      this.listener.onFacialFrame?.(frame);
       this.listener.onEnergy?.({
         viseme: this.facial.currentViseme,
         intensity: this.facial.currentIntensity,
@@ -86,8 +81,8 @@ export class SpeechPlaybackController {
     }
   }
 
-  loadFacialFrames(frames: NovaFacialFrame[]) {
-    this.timeline.load(frames);
+  loadFacialFrames(_frames: NovaFacialFrame[]) {
+    // Avatar-Timeline entfernt (Phase 1). Lip-Sync läuft nur noch über die Heuristik.
   }
 
   resetStream() {
@@ -99,7 +94,6 @@ export class SpeechPlaybackController {
     this.expectingMore = true;
     this.started = false;
     this.chunkOriginMs = 0;
-    this.timeline.clear();
     void this.unlock();
   }
 
@@ -153,8 +147,8 @@ export class SpeechPlaybackController {
     this.queue = [];
     this.stopGraph();
     this.facial.stopLive();
-    this.timeline.stop();
-    this.timeline.clear();
+    
+    
   }
 
   private enqueue(text: string) {
@@ -250,7 +244,7 @@ export class SpeechPlaybackController {
     this.analyser = analyser;
     this.gain = gain;
     this.chunkStartedAt = ctx.currentTime;
-    this.timeline.start();
+    
     this.facial.startLive(analyser, () => this.getAudioTimeMs());
     if (!this.started) {
       this.started = true;
@@ -276,7 +270,7 @@ export class SpeechPlaybackController {
 
   private notifyIfIdle() {
     if (this.stopped || this.playing || this.queue.length > 0 || this.expectingMore) return;
-    this.timeline.stop();
+    
     this.started = false;
     this.chunkOriginMs = 0;
     this.listener.onEnd?.();

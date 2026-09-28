@@ -1,12 +1,20 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { NovaAvatarPerformance, NovaAvatarEmotion } from "@/components/nova/avatar-performance";
 import { SpeechPlaybackController } from "@/features/voice/speech-playback";
 import { useVoiceEnabled } from "@/features/voice/settings";
 import { inferSpeechEmotion } from "@/services/voice/emotion";
 import type { NovaFacialFrame } from "@/types/avatar";
 import type { SpeechViseme } from "@/types/voice";
+
+type NovaAvatarEmotion = string;
+type NovaAvatarPerformance = {
+  isSpeaking: boolean;
+  speechIntensity: number;
+  viseme: SpeechViseme;
+  emotion: NovaAvatarEmotion;
+  gazeTarget: "user" | "screen" | "away";
+};
 
 export type AfterSpeech = "idle" | "listen" | "done";
 

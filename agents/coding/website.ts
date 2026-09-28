@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
-import { runDesktopAction } from "@/agents/computer/client";
+import { runDesktopAction } from "@/services/desktop-service/client";
 import type { VerificationCheck } from "@/lib/coding/types";
 import type { ActionResult } from "@/lib/computer/types";
 

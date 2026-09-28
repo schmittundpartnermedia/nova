@@ -13,7 +13,7 @@ import type {
 } from "@/lib/research/types";
 import { canonicalizeUrl } from "@/lib/research/url";
 import { resolveAIProvider } from "@/providers/ai/registry";
-import { needsFlagshipModel } from "@/agents/master/intent";
+
 import { addJobStep, completeJobStep } from "@/services/jobs";
 import { persistFetchedSources } from "@/services/research/sources";
 import { prisma } from "@/lib/prisma";
@@ -258,7 +258,7 @@ export async function runResearchWorkflow(input: {
 
   const { provider: ai, decision } = await resolveAIProvider(
     input.context.organizationId,
-    needsFlagshipModel(input.query) ? "master" : "simple",
+    "simple",
   );
 
   async function analyze(currentSources: typeof sources, currentFetched: FetchedPage[], currentRanked: typeof ranked) {

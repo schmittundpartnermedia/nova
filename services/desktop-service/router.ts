@@ -21,7 +21,6 @@ import { executeBrowserAction } from "@/services/desktop-service/adapters/browse
 import { executeApplicationAction } from "@/services/desktop-service/adapters/application";
 import { executeAccessibilityAction } from "@/services/desktop-service/adapters/accessibility";
 import { executeScreenAction } from "@/services/desktop-service/adapters/screen";
-import { executeInputAction } from "@/services/desktop-service/adapters/input";
 import { failedResult } from "@/lib/computer/result";
 import type { ActionResult } from "@/lib/computer/types";
 
@@ -105,11 +104,13 @@ async function dispatch(envelope: ComputerActionEnvelope, userCommissioned: bool
       return executeScreenAction({ payload });
     }
     case "input": {
-      const payload = inputActionSchema.parse(envelope.payload);
-      return executeInputAction({
-        payload,
-        userCommissioned,
-        approvalToken: envelope.approvalToken,
+      return failedResult({
+        tool: "input",
+        action: "removed",
+        startedAt,
+        riskLevel: "SYSTEM_CHANGE",
+        code: "removed",
+        message: "Eingabe-/Klick-Steuerung ist entfernt.",
       });
     }
     default:

@@ -6,10 +6,9 @@ import { decideApproval } from "@/services/approvals";
 import { executeDecidedApproval } from "@/services/approvals/fulfill";
 import { explainDevelopment } from "@/services/development/status";
 import { pauseAbandonedJobs } from "@/services/jobs/recover";
-import { RESUMABLE_COMPUTER_STATUSES } from "@/lib/computer/plan";
-import { cancelComputerWork } from "@/agents/computer";
 import { findActiveReview } from "@/services/review";
-import { desktopHealth } from "@/agents/computer/client";
+import { desktopHealth } from "@/services/desktop-service/client";
+import { RESUMABLE_COMPUTER_STATUSES } from "@/lib/computer/plan";
 
 export type OpenSituation = SituationSnapshot & {
   pendingApprovalId: string | null;
@@ -186,15 +185,8 @@ export async function actOnSituation(input: {
   }
 
   if (input.decision.kind === "cancel-active") {
-    const { cancelOpenActiveWorks } = await import("@/services/work/active");
-    const workCount = await cancelOpenActiveWorks(input.organizationId, "Vom Benutzer abgebrochen.");
-    const cancelled = await cancelComputerWork(input.organizationId);
     await pauseAbandonedJobs();
-    const total = cancelled.count + workCount;
-    const reply =
-      total > 0
-        ? "Ich habe den laufenden Auftrag abgebrochen. Es startet nichts Neues."
-        : "Es läuft nichts, das ich abbrechen müsste.";
+    const reply = "Es läuft kein Auftrag mehr über die alte Computer-/ActiveWork-Kette. Abbruch notiert.";
     return { reply, statusMessage: "Abbruch geprüft.", orb: "DONE" };
   }
 
@@ -232,30 +224,6 @@ export async function actOnSituation(input: {
   }
 
   if (input.decision.kind === "resume-computer") {
-    const open = await prisma.computerJob.findFirst({
-      where: {
-        organizationId: input.organizationId,
-        cancelRequested: false,
-        jobId: { not: null },
-        status: { in: ["INTERRUPTED", "FAILED", "WAITING_FOR_HUMAN", "WAITING_FOR_APPROVAL", "EXECUTING"] },
-      },
-      orderBy: { startedAt: "desc" },
-    });
-    if (open?.jobId) {
-      const { continueOwnedJob } = await import("@/services/jobs/owned");
-      const resumed = await continueOwnedJob({
-        organizationId: input.organizationId,
-        jobId: open.jobId,
-        kind: "computer.run",
-        idempotencyKey: `computer.run:${open.jobId}:resume:${Date.now()}`,
-        payload: { userRequest: "mach weiter" },
-      });
-      return {
-        reply: resumed.reply,
-        statusMessage: resumed.statusMessage,
-        orb: resumed.orbState === "WAITING_FOR_APPROVAL" ? "WAITING_FOR_APPROVAL" : resumed.orbState === "ERROR" ? "ERROR" : "DONE",
-      };
-    }
     const paused = await prisma.job.findFirst({
       where: {
         organizationId: input.organizationId,
@@ -268,10 +236,10 @@ export async function actOnSituation(input: {
     if (paused) {
       const rawKind = paused.workItems[0]?.kind ?? "planner.run";
       const kind = (
-        rawKind === "computer.run" || rawKind === "coding.run" || rawKind === "knowledge.run" || rawKind === "planner.run"
+        rawKind === "coding.run" || rawKind === "knowledge.run" || rawKind === "planner.run"
           ? rawKind
           : "planner.run"
-      ) as "computer.run" | "coding.run" | "knowledge.run" | "planner.run";
+      ) as "coding.run" | "knowledge.run" | "planner.run";
       const { continueOwnedJob } = await import("@/services/jobs/owned");
       const resumed = await continueOwnedJob({
         organizationId: input.organizationId,
@@ -289,30 +257,10 @@ export async function actOnSituation(input: {
         orb: resumed.orbState === "WAITING_FOR_APPROVAL" ? "WAITING_FOR_APPROVAL" : resumed.orbState === "ERROR" ? "ERROR" : "DONE",
       };
     }
-    const { resumeComputerWork } = await import("@/agents/computer");
-    const resumed = await resumeComputerWork({
-      organizationId: input.organizationId,
-      userRequest: input.userRequest,
-    });
     return {
-      reply: resumed.reply,
-      statusMessage: resumed.statusMessage,
-      orb: resumed.status === "WAITING_FOR_APPROVAL" ? "WAITING_FOR_APPROVAL" : resumed.ok ? "DONE" : "ERROR",
-      approvalId: resumed.approvalId,
-    };
-  }
-
-  if (input.decision.kind === "revise-mail") {
-    const { prepareMailDraft } = await import("@/services/mail/draft");
-    const draft = await prepareMailDraft({
-      organizationId: input.organizationId,
-      userRequest: input.userRequest,
-    });
-    return {
-      reply: draft.reply,
-      statusMessage: draft.ok ? "Entwurf angepasst." : "Entwurf nicht angepasst.",
-      orb: draft.approvalId ? "WAITING_FOR_APPROVAL" : "DONE",
-      approvalId: draft.approvalId,
+      reply: "Es gibt keinen unterbrochenen Computerauftrag mehr. Die Klick-Steuerung ist entfernt.",
+      statusMessage: "Nichts fortzusetzen.",
+      orb: "DONE",
     };
   }
 

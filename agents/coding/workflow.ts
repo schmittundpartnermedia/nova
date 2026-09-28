@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
-import { runDesktopAction, cancelDesktopJobs } from "@/agents/computer/client";
+import { runDesktopAction, cancelDesktopJobs } from "@/services/desktop-service/client";
 import { recordComputerAction } from "@/services/computer/audit";
 import { recordActivity } from "@/services/archive";
 import {

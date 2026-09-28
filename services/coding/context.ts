@@ -5,7 +5,7 @@ import { assertOrganizationId } from "@/services/tenant";
 import { upsertDurableMemory } from "@/services/memory";
 import { redactSecrets } from "@/lib/computer/redaction";
 import { wrapExternalContent } from "@/lib/computer/injection";
-import { runDesktopAction } from "@/agents/computer/client";
+import { runDesktopAction } from "@/services/desktop-service/client";
 
 export type LoadedProjectContext = {
   projectId: string;

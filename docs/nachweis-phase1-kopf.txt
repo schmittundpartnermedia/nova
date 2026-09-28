@@ -1,0 +1,46 @@
+NOVA Phase-1-Nachweis Kopf/Gedächtnis – 2026-09-28T23:59:16.250Z
+Host: MinivonJoachim
+NOVA_HOME override: (keine, nutzt ~/Nova)
+Test-NOVA_HOME: /var/folders/5b/fhh5g_7928996fmny_h9ns040000gn/T/nova-phase1-1DcJNe
+Gedächtnis-Ordner: /var/folders/5b/fhh5g_7928996fmny_h9ns040000gn/T/nova-phase1-1DcJNe/gedaechtnis
+Dateien: firma.md, kunden.md, projekte.md
+Modell: gpt-6-astra
+Tool-Calling: Responses API (headTurn)
+
+— Turn 1 (merken) —
+toolsExecuted: [{"name":"gedaechtnis_schreiben","executed":true}]
+toolRounds: 1
+reply: Gemerkt: Eure Firma heißt **rankpilot**, ihr macht **Lokal-SEO** und sucht **Sponsoren aus dem Handwerk in Baden-Württemberg**.
+firma.md nach Turn 1:
+# Firma
+
+- Unsere Firma heißt rankpilot. Wir machen Lokal-SEO. Wir suchen Sponsoren aus dem Handwerk in Baden-Württemberg.
+
+
+— Turn 2 (aus Gedächtnis) —
+toolsExecuted: []
+reply: Zu rankpilot passen vor allem **regional aktive Handwerksbetriebe in Baden-Württemberg**, die vor Ort besser gefunden werden möchten:
+
+- **Sanitär, Heizung und Klima** – lokale Suchanfragen wie „Heizungsbauer Stuttgart“ passen direkt zu eurem Angebot.
+- **Elektriker und Solarteure** – besonders Betriebe, die in mehreren umliegenden Orten Kunden gewinnen wollen.
+- **Dachdecker, Maler und Stuckateure** – für sie können lokale Sichtbarkeit und Google-Bewertungen wichtig sein.
+- **Schreiner und Metallbauer** – etwa Betriebe mit regionalem Einzugsgebiet und individuellen Angeboten.
+
+Das wären allerdings auch passende **Kunden** für euch. **Was sollen die Betriebe konkret sponsern – ein Event, ein Projekt oder etwas anderes?**
+
+— Turn 3 (Bezug auf vorherige Antwort) —
+reply: Weil diese Betriebe **regional Kunden gewinnen** – genau dabei hilft euer Lokal-SEO:
+
+- **SHK und Elektriker:** Kunden suchen häufig einen Anbieter in der Nähe, teils bei akutem Bedarf.
+- **Solarteure und Dachdecker:** Einzelne Aufträge können einen hohen Wert haben. Zusätzliche lokale Anfragen können deshalb attraktiv sein.
+- **Maler, Stuckateure, Schreiner und Metallbauer:** Lokale Auffindbarkeit, Bewertungen und Referenzen können die Auswahl beeinflussen.
+
+**Das macht sie zunächst zu passenden Kunden, nicht automatisch zu Sponsoren.** Als Sponsoren passen sie, wenn ihr ihnen eine relevante regionale Zielgruppe oder eine andere konkrete Gegenleistung bietet. Was wollt ihr sponsern lassen?
+
+— Turn 4 (Neustart, nur Dateien) —
+firma.md noch da: true
+toolsExecuted: []
+reply: Wir suchen Sponsoren aus dem Handwerk in Baden-Württemberg für rankpilot.
+
+ERGEBNIS: Phase-1-Kopf-Nachweis bestanden (API, ohne Mikrofon).
+App-Abnahme durch Nutzer in NOVA.app steht noch aus (PTT).

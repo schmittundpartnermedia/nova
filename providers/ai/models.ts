@@ -1,6 +1,10 @@
 import type { AIRole } from "@/types/ai";
 
-/** Zentrale Default-Modelle. Organization-Overrides liegen in AiProviderConfig. */
+/**
+ * Zentrale Default-Modelle. Organization-Overrides liegen in AiProviderConfig.
+ * Geprüft gegen die echte OpenAI-Model-Liste (Account): gpt-6-astra und gpt-6-sol existieren.
+ * Tool-Calling für gpt-6-* läuft über die Responses API (nicht Chat Completions).
+ */
 export const DEFAULT_MODELS_BY_ROLE: Record<AIRole, string> = {
   master: "gpt-6-astra",
   simple: "gpt-6-sol",

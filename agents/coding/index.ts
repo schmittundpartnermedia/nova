@@ -2,7 +2,7 @@ import type { NovaAgent } from "@/types/agents";
 import { detectCodingIntent } from "@/agents/coding/intent";
 import { runCodingWorkflow, type CodingAgentResult } from "@/agents/coding/workflow";
 import { cancelCodingSessions, consumeCodingCancel } from "@/services/coding/sessions";
-import { cancelDesktopJobs } from "@/agents/computer/client";
+import { cancelDesktopJobs } from "@/services/desktop-service/client";
 
 export type { CodingAgentResult };
 

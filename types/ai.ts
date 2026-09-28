@@ -43,6 +43,45 @@ export type ToolCallOutput = {
   text?: string;
 };
 
+/** Ein Werkzeug für den Kopf (OpenAI Responses / Function Tools). */
+export type HeadToolSpec = {
+  name: string;
+  description: string;
+  parameters: {
+    type: "object";
+    properties: Record<string, unknown>;
+    required: string[];
+    additionalProperties: false;
+  };
+};
+
+export type HeadInputMessage =
+  | { role: "user" | "assistant"; content: string }
+  | { type: "function_call_output"; call_id: string; output: string };
+
+export type HeadToolCall = {
+  callId: string;
+  name: string;
+  arguments: Record<string, unknown>;
+};
+
+export type HeadTurnInput = {
+  instructions: string;
+  input: HeadInputMessage[];
+  tools: HeadToolSpec[];
+  model?: string;
+  /** Innerhalb einer Tool-Schleife: vorherige Response-ID. */
+  previousResponseId?: string;
+};
+
+export type HeadTurnOutput = {
+  responseId: string;
+  text: string;
+  toolCalls: HeadToolCall[];
+  model: string;
+  provider: string;
+};
+
 export type StreamChunk = {
   delta: string;
   done: boolean;
@@ -79,6 +118,11 @@ export interface AIProvider {
   reason(input: ReasonInput): Promise<ReasonOutput>;
   structuredOutput<T>(input: StructuredInput): Promise<T>;
   toolCall(input: ToolCallInput): Promise<ToolCallOutput>;
+  /**
+   * Ein Kopf-Schritt (Responses API bei OpenAI). Unterstützt Function Tools.
+   * Chat Completions mit tools ist für gpt-6-* nicht nutzbar.
+   */
+  headTurn?(input: HeadTurnInput): Promise<HeadTurnOutput>;
   stream(input: GenerateInput): AsyncIterable<StreamChunk>;
   healthCheck(): Promise<HealthCheckResult>;
   /** Optional: Vision. Stub-Provider werfen oder melden „später“. */
