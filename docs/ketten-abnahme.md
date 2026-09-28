@@ -2,34 +2,22 @@
 
 ## Definition fertig
 
-Eine Fähigkeit ist **nur** funktional, wenn die komplette Kette in der echten NOVA.app gilt:
+Komplette Kette in NOVA.app: Verstehen → Rückfragen → ActiveWork → Ausführen → Evidence → erst dann erledigt.
 
-1. Verstehen
-2. Fehlende Infos nachfragen (Slots)
-3. Auftrag im Arbeitsgedächtnis (ActiveWork) halten
-4. Ausführen
-5. Verifizieren (Evidence)
-6. Erst dann „erledigt“
-
-Punktchecks in `.nova/abnahme-matrix.md` sind **keine** Vision-Abnahme.
-
-## Status
+## Status jetzt
 
 | Kette | Status |
 |---|---|
-| ActiveWork-Fundament (Create/Continue/Cancel) | TEIL — live |
-| Kalender lokal (Wann→Titel→anlegen) | TEIL — Smoke grün |
-| Tickets / Projekte / Kontakte via ActiveWork | TEIL |
-| Mail via ActiveWork | TEIL — Real-App-E2E noch offen |
+| ActiveWork-Fundament | TEIL — live |
+| Kalender lokal Slot-Kette | TEIL — Smoke grün |
+| Tickets / Projekte / Kontakte | TEIL — ActiveWork |
+| Mail Absender→Entwurf→Freigabe | TEIL — Smoke bis Approval (kein Auto-Send) |
 | Coding Path-Slot | TEIL — verdrahtet |
-| Computer generic → Rückfrage | TEIL |
-| Computer Mehrschritt wie am Mac | OFFEN |
-| Watch / Stimme / Recherche hart | OFFEN |
-| Verify-Gate überall | TEIL |
-| Vision 100% in NOVA.app | NOCH NICHT |
+| Computer generic | TEIL — Rückfrage statt leerem Plan |
+| Mac Mehrschritt wie du | OFFEN |
+| Stimme / Watch / Recherche hart | OFFEN |
+| Vision 100% | NOCH NICHT |
 
-## Commits
+## Wichtige Commits
 
-- `8d43d79` ActiveWork-Fundament
-- `353c680` Continue-Vorrang + Verify-Sprache
-- `51ad44f` Coding-Path-Slots
+`8d43d79` ActiveWork · `353c680` Continue-Vorrang · `51ad44f` Coding-Slots · `123f9de` Mail-Brief sauber
