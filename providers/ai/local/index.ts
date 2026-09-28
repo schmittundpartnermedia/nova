@@ -1,5 +1,6 @@
 import type {
   AIProvider,
+  AnalyzeImageInput,
   GenerateInput,
   GenerateOutput,
   HealthCheckResult,
@@ -48,7 +49,7 @@ export class LocalAIProvider implements AIProvider {
   }
 
   /** Später: lokale Vision-Modelle. */
-  async analyzeImage(): Promise<never> {
+  async analyzeImage(_input: AnalyzeImageInput): Promise<never> {
     throw notConfigured(`${this.name}.analyzeImage (später)`);
   }
 }

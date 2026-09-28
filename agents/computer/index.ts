@@ -226,12 +226,12 @@ export async function runComputerAgent(input: {
       status: "PLANNED",
     });
     steps = planComputerTask({ kind: intent.kind, userRequest: input.userRequest, workspace });
-    if (intent.kind === "generic" || steps.length === 0) {
+    if (intent.kind === "generic") {
       const looped = await planComputerLoopStep({
         organizationId: input.organizationId,
         userRequest: input.userRequest,
         workspace,
-        useVision: intent.kind === "generic",
+        useVision: true,
       });
       if (looped.steps.length) {
         steps = looped.steps;

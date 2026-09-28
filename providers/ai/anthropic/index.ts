@@ -1,5 +1,6 @@
 import type {
   AIProvider,
+  AnalyzeImageInput,
   GenerateInput,
   GenerateOutput,
   HealthCheckResult,
@@ -48,7 +49,7 @@ export class AnthropicProvider implements AIProvider {
   }
 
   /** Später: Vision über Anthropic. */
-  async analyzeImage(): Promise<never> {
+  async analyzeImage(_input: AnalyzeImageInput): Promise<never> {
     throw notConfigured(`${this.name}.analyzeImage (später)`);
   }
 }
