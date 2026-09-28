@@ -91,11 +91,14 @@ export async function loadOpenActiveWork(input: {
   conversationId?: string;
 }): Promise<ActiveWorkRecord | null> {
   assertOrganizationId(input.organizationId);
+  // Ohne Gesprächskontext keine Open-Works annehmen — sonst kapern verwaiste
+  // clarifying-Jobs (conversationId null) verify:-Skripte und API-Einzelläufe.
+  if (!input.conversationId) return null;
   const row = await prisma.activeWork.findFirst({
     where: {
       organizationId: input.organizationId,
       status: { in: OPEN },
-      ...(input.conversationId ? { OR: [{ conversationId: input.conversationId }, { conversationId: null }] } : {}),
+      OR: [{ conversationId: input.conversationId }, { conversationId: null }],
     },
     orderBy: { updatedAt: "desc" },
   });

@@ -3,25 +3,35 @@ import { prisma } from "@/lib/prisma";
 import { assertOrganizationId } from "@/services/tenant";
 import { resolveAIProvider } from "@/providers/ai/registry";
 import { untrustedMailPrompt } from "@/lib/mail/guard";
+import { DEFAULT_OUTREACH_TEMPLATE, fillMailTemplate } from "@/lib/mail/templates";
 
 const NO_SEND_FOOTER =
   "\n\n---\nDies ist ein NOVA-Entwurf. Es wurde keine E-Mail versendet.";
 
-function draftBody(input: {
+async function loadOutreachTemplate(organizationId: string): Promise<string> {
+  const row = await prisma.mailTemplate.findFirst({
+    where: { organizationId, kind: "outreach", revokedAt: null },
+    orderBy: { updatedAt: "desc" },
+  });
+  return row?.body?.trim() || DEFAULT_OUTREACH_TEMPLATE;
+}
+
+function draftBodyFromTemplate(input: {
+  template: string;
   firstName: string;
+  lastName?: string;
   company: string;
   projectName: string;
+  role?: string | null;
 }) {
-  return `Guten Tag ${input.firstName},
-
-im Rahmen von ${input.projectName} prüfen wir passende Partnerschaften. ${input.company} wirkt für uns relevant.
-
-Ich würde das gern kurz und konkret vorstellen – ohne langen Pitch.
-
-Wäre ein kurzes Gespräch in den nächsten zwei Wochen denkbar?
-
-Freundliche Grüße
-Joachim${NO_SEND_FOOTER}`;
+  const filled = fillMailTemplate(input.template, {
+    vorname: input.firstName,
+    nachname: input.lastName,
+    firma: input.company,
+    projekt: input.projectName,
+    rolle: input.role ?? undefined,
+  });
+  return filled.includes("keine E-Mail versendet") ? filled : `${filled.trim()}${NO_SEND_FOOTER}`;
 }
 
 export const communicationAgent: NovaAgent = {
@@ -163,14 +173,18 @@ Joachim${NO_SEND_FOOTER}`;
         },
       });
 
+      const template = await loadOutreachTemplate(context.organizationId);
       const body =
         (await generateBody(
           `${contact.firstName} ${contact.lastName}, ${contact.company?.name ?? "Unternehmen"}, Rolle: ${contact.role ?? "unbekannt"}`,
         )) ??
-        draftBody({
+        draftBodyFromTemplate({
+          template,
           firstName: contact.firstName,
+          lastName: contact.lastName,
           company: contact.company?.name ?? "Ihr Unternehmen",
           projectName,
+          role: contact.role,
         });
 
       const draft =

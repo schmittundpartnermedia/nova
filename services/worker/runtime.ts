@@ -13,6 +13,7 @@ import {
 import { executeCodingWork, executeComputerWork, executeKnowledgeWork, executePlannerWork } from "@/services/jobs/owned-run";
 import { runDevelopmentWork } from "@/services/development/run";
 import { pauseAbandonedJobs } from "@/services/jobs/recover";
+import { mailSendWorkHandler } from "@/services/mail/send-work";
 
 export type WorkHandler = (item: {
   id: string;
@@ -38,6 +39,7 @@ registerWorkHandler("computer.run", executeComputerWork);
 registerWorkHandler("coding.run", executeCodingWork);
 registerWorkHandler("knowledge.run", executeKnowledgeWork);
 registerWorkHandler("planner.run", executePlannerWork);
+registerWorkHandler("mail.send", mailSendWorkHandler);
 
 export async function tickWorker(workerId: string, now = new Date()) {
   await prisma.$queryRawUnsafe("PRAGMA journal_mode=WAL;");

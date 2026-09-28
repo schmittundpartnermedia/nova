@@ -80,14 +80,22 @@ export function runOpsUnitTests(): string[] {
     assert.equal(detectTicketIntent("Was steht an?"), false);
   });
 
-  check("ui click plans a self-check screenshot", () => {
+  check("ui click plans accessibility self-check without screenshot", () => {
     const steps = planComputerTask({
       kind: "ui_click",
       userRequest: "Klick auf Speichern in TextEdit",
       workspace: "/tmp",
     });
-    assert.equal(steps.some((step) => step.tool === "screen"), true);
-    assert.equal(steps.some((step) => step.tool === "accessibility" && (step.payload as { action?: string }).action === "inspect"), true);
+    assert.equal(steps.some((step) => step.tool === "screen"), false);
+    assert.equal(
+      steps.some(
+        (step) =>
+          step.tool === "accessibility" &&
+          (step.payload as { action?: string }).action === "inspect" &&
+          /ohne Bildschirmaufnahme/i.test(step.purpose),
+      ),
+      true,
+    );
     assert.equal(steps.some((step) => step.tool === "accessibility" && (step.payload as { action?: string }).action === "press"), true);
   });
 

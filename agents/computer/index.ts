@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { detectComputerIntent, type ComputerIntent } from "@/agents/computer/intent";
 import { planComputerTask } from "@/agents/computer/planner";
+import { planComputerLoopStep } from "@/agents/computer/loop";
 import { cancelDesktopJobs, fetchCapabilities, runDesktopAction } from "@/agents/computer/client";
 import {
   createComputerJob,
@@ -16,7 +17,7 @@ import { pickControlFromInspect } from "@/lib/computer/ax-pick";
 import { guessAppName, guessControlName, type PlannedStep } from "@/agents/computer/planner";
 import { prisma } from "@/lib/prisma";
 import { loadEffectResult, withExternalEffect } from "@/services/worker/queue";
-import { createApprovalRequest } from "@/services/approvals";
+import { authorizeExternalAction, createApprovalRequest, riskLevelFromComputerRisk } from "@/services/approvals";
 import { recordActivity } from "@/services/archive";
 import { cancelCodingSessions } from "@/services/coding/sessions";
 import { requestKnowledgeCancel } from "@/services/knowledge/jobs";
@@ -225,6 +226,42 @@ export async function runComputerAgent(input: {
       status: "PLANNED",
     });
     steps = planComputerTask({ kind: intent.kind, userRequest: input.userRequest, workspace });
+    if (intent.kind === "generic" || steps.length === 0) {
+      const looped = await planComputerLoopStep({
+        organizationId: input.organizationId,
+        userRequest: input.userRequest,
+        workspace,
+        useVision: intent.kind === "generic",
+      });
+      if (looped.steps.length) {
+        steps = looped.steps;
+      } else if (looped.needApproval) {
+        const approval = await createApprovalRequest({
+          organizationId: input.organizationId,
+          jobId: input.jobId,
+          actionType: "computer.plan",
+          description: looped.summary,
+          payload: { userRequest: input.userRequest, executed: false },
+        });
+        await updateComputerJob({
+          organizationId: input.organizationId,
+          id: computerJob.id,
+          status: "WAITING_FOR_APPROVAL",
+          result: { perception: looped.perceptionSummary },
+          finished: true,
+        });
+        return {
+          ok: true,
+          status: "WAITING_FOR_APPROVAL",
+          summary: looped.summary,
+          reply: `${looped.summary} Es wurde nichts ausgeführt.`,
+          approvalId: approval.id,
+          actions: [],
+          verified: true,
+          statusMessage: "Freigabe erforderlich",
+        };
+      }
+    }
     allSteps = steps;
     if (intent.kind === "run_script" && steps.length === 0) {
       await updateComputerJob({
@@ -385,6 +422,74 @@ export async function runComputerAgent(input: {
       if (!stepApprovalToken && input.approvalToken && !risk.hardBlocked) {
         stepApprovalToken = input.approvalToken;
       }
+
+      const accessibilityAction = String((step.payload as { action?: string }).action ?? "");
+      const isUiMutation =
+        step.tool === "accessibility" && ["press", "setValue", "select", "click"].includes(accessibilityAction);
+      const isExternalSide =
+        risk.approvalRequired ||
+        isUiMutation ||
+        risk.risk === "EXTERNAL_SIDE_EFFECT" ||
+        risk.risk === "DESTRUCTIVE" ||
+        risk.risk === "PRIVILEGED";
+      if (isExternalSide && !risk.hardBlocked) {
+        const appName = String((step.payload as { app?: string; name?: string }).app ?? (step.payload as { name?: string }).name ?? "").trim();
+        const auth = await authorizeExternalAction({
+          organizationId: input.organizationId,
+          actionType: isUiMutation
+            ? "macos.ui.click"
+            : `computer.${step.tool}.${accessibilityAction || "action"}`,
+          description: step.purpose || risk.reason,
+          jobId: input.jobId,
+          payload: { step, tool: step.tool },
+          approvalToken: stepApprovalToken,
+          riskLevel: riskLevelFromComputerRisk(risk.risk),
+          requiresApproval: risk.approvalRequired,
+          conditions: appName ? { app: appName } : undefined,
+        });
+        if (auth.decision === "deny_hard") {
+          await saveComputerPlan({
+            organizationId: input.organizationId,
+            id: computerJob.id,
+            status: "FAILED",
+            plan: { steps: allSteps, cursor },
+            error: auth.reason,
+            finished: true,
+          });
+          return {
+            ok: false,
+            status: "FAILED",
+            summary: auth.reason,
+            reply: `${auth.reason} Es wurde nichts ausgeführt.`,
+            actions,
+            verified: true,
+            statusMessage: "Nicht erlaubt",
+          };
+        }
+        if (auth.decision === "need_approval") {
+          await saveComputerPlan({
+            organizationId: input.organizationId,
+            id: computerJob.id,
+            status: "WAITING_FOR_APPROVAL",
+            plan: { steps: allSteps, cursor },
+            finished: true,
+          });
+          return {
+            ok: true,
+            status: "WAITING_FOR_APPROVAL",
+            summary: auth.reason,
+            reply: `${auth.reason} Es wurde nichts ausgeführt.`,
+            approvalId: auth.approvalId,
+            actions,
+            verified: true,
+            statusMessage: "Freigabe erforderlich",
+          };
+        }
+        if (auth.via === "token" || auth.via === "standing") {
+          stepApprovalToken = auth.approvalId || stepApprovalToken || "standing";
+        }
+      }
+
       const guarded = await runGuardedDesktopAction({
         organizationId: input.organizationId,
         workItemId: input.workItemId,

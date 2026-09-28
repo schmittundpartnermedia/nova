@@ -317,6 +317,25 @@ function decorate(
       reason: ctx.screen === "PERMISSION_REQUIRED" ? "NOVA benötigt Bildschirmaufnahme-Zugriff." : undefined,
     };
   }
+  if (id.startsWith("input.") || id.startsWith("clipboard.")) {
+    return {
+      ...record,
+      status: ctx.darwin ? (ctx.helper ? "AVAILABLE" : "NOT_IMPLEMENTED") : "UNAVAILABLE",
+      reason: ctx.darwin ? "CGEvent über Native Helper." : "Nur macOS.",
+    };
+  }
+  if (id.startsWith("input.") || id.startsWith("clipboard.")) {
+    return {
+      ...record,
+      status: ctx.darwin ? (ctx.helper ? "AVAILABLE" : "NOT_IMPLEMENTED") : "UNAVAILABLE",
+      permission: "accessibility",
+      reason: ctx.darwin
+        ? ctx.helper
+          ? "CGEvent-Eingabe über den Native Helper."
+          : "Native Helper fehlt."
+        : "Nur macOS.",
+    };
+  }
   if (id === "cursor.available") {
     return { ...record, status: ctx.cursor ? "AVAILABLE" : "UNAVAILABLE" };
   }

@@ -5,6 +5,7 @@ import {
   computerActionEnvelopeSchema,
   cursorActionSchema,
   filesystemActionSchema,
+  inputActionSchema,
   processActionSchema,
   screenActionSchema,
   shellActionSchema,
@@ -20,6 +21,7 @@ import { executeBrowserAction } from "@/services/desktop-service/adapters/browse
 import { executeApplicationAction } from "@/services/desktop-service/adapters/application";
 import { executeAccessibilityAction } from "@/services/desktop-service/adapters/accessibility";
 import { executeScreenAction } from "@/services/desktop-service/adapters/screen";
+import { executeInputAction } from "@/services/desktop-service/adapters/input";
 import { failedResult } from "@/lib/computer/result";
 import type { ActionResult } from "@/lib/computer/types";
 
@@ -101,6 +103,14 @@ async function dispatch(envelope: ComputerActionEnvelope, userCommissioned: bool
     case "screen": {
       const payload = screenActionSchema.parse(envelope.payload);
       return executeScreenAction({ payload });
+    }
+    case "input": {
+      const payload = inputActionSchema.parse(envelope.payload);
+      return executeInputAction({
+        payload,
+        userCommissioned,
+        approvalToken: envelope.approvalToken,
+      });
     }
     default:
       return failedResult({

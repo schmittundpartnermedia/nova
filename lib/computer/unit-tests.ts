@@ -141,7 +141,16 @@ export function runComputerUnitTests(): string[] {
       workspace: "/tmp",
     });
     assert.equal(ui.some((step) => step.tool === "accessibility" && (step.payload as { action?: string }).action === "press"), true);
-    assert.equal(ui.some((step) => step.tool === "screen"), true);
+    assert.equal(
+      ui.some(
+        (step) =>
+          step.tool === "accessibility" &&
+          (step.payload as { action?: string }).action === "inspect" &&
+          /ohne Bildschirmaufnahme/i.test(step.purpose),
+      ),
+      true,
+    );
+    assert.equal(ui.some((step) => step.tool === "screen"), false);
     assert.equal(detectComputerIntent('Führe AppleScript aus: tell application "Finder" to get name').kind, "run_script");
   });
 
@@ -338,7 +347,16 @@ export function runComputerUnitTests(): string[] {
       "Invalid project config at /tmp/x/.cursor/cli.json: schema validation failed. Unrecognized key(s) in object: 'statusLine'",
     );
     assert.equal(Boolean(bad.error), true);
-    assert.equal(Boolean(detectAgentCliConfigError("", bad.error ?? "")), true);
+    assert.match(bad.error ?? "", /statusLine|cli\.json/i);
+    assert.equal(
+      Boolean(
+        detectAgentCliConfigError(
+          "",
+          "Invalid project config at /tmp/x/.cursor/cli.json: schema validation failed. Unrecognized key(s) in object: 'statusLine'",
+        ),
+      ),
+      true,
+    );
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), "nova-cli-sanitize-"));
     fs.mkdirSync(path.join(dir, ".cursor"), { recursive: true });
     fs.writeFileSync(

@@ -61,6 +61,7 @@ model Organization {
   workEffects       WorkEffect[]
   developmentOrders DevelopmentOrder[]
   activeWorks       ActiveWork[]
+  mailTemplates     MailTemplate[]
 
   @@map("organizations")
 }
@@ -466,6 +467,7 @@ model Communication {
   mailThreadId      String?   @map("mail_thread_id")
   inReplyTo         String?   @map("in_reply_to")
   referencesHeader  String?   @map("references_header")
+  templateId        String?   @map("template_id")
   createdAt         DateTime  @default(now()) @map("created_at")
   updatedAt         DateTime  @updatedAt @map("updated_at")
 
@@ -473,11 +475,30 @@ model Communication {
   project      Project?     @relation(fields: [projectId], references: [id], onDelete: SetNull)
   company      Company?     @relation(fields: [companyId], references: [id], onDelete: SetNull)
   contact      Contact?     @relation(fields: [contactId], references: [id], onDelete: SetNull)
+  template     MailTemplate? @relation(fields: [templateId], references: [id], onDelete: SetNull)
   activities   Activity[]
 
   @@index([organizationId])
   @@index([organizationId, status])
   @@map("communications")
+}
+
+model MailTemplate {
+  id             String    @id @default(cuid())
+  organizationId String    @map("organization_id")
+  name           String
+  kind           String    @default("outreach")
+  subject        String?
+  body           String
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
+  revokedAt      DateTime? @map("revoked_at")
+
+  organization   Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  communications Communication[]
+
+  @@index([organizationId, kind])
+  @@map("mail_templates")
 }
 
 model ApprovalRequest {

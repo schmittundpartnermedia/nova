@@ -16,7 +16,7 @@ import { detectMailIntent } from "@/lib/mail/intent";
 import { assertOrganizationId } from "@/services/tenant";
 import { searchMail } from "@/services/mail/search";
 import { auditMail } from "@/services/mail/audit";
-import { createApprovalRequest } from "@/services/approvals";
+import { authorizeExternalAction, createApprovalRequest } from "@/services/approvals";
 import {
   clearPendingMailDraft,
   loadPendingMailDraft,
@@ -25,6 +25,50 @@ import {
   updatePendingMailDraft,
 } from "@/services/mail/pending-draft";
 import { filterSteerableMailAccounts, isSteerableMailAddress } from "@/lib/mail/steerable";
+
+async function requestMailSendApproval(input: {
+  organizationId: string;
+  jobId?: string;
+  description: string;
+  payload: Record<string, unknown>;
+  recipient?: string;
+}): Promise<{ approvalId: string; viaStanding: boolean; reason: string }> {
+  const domain = input.recipient?.includes("@") ? input.recipient.split("@").pop() : undefined;
+  const auth = await authorizeExternalAction({
+    organizationId: input.organizationId,
+    actionType: "mail.send",
+    description: input.description,
+    jobId: input.jobId,
+    payload: input.payload,
+    riskLevel: "external",
+    requiresApproval: true,
+    conditions: domain ? { recipientDomain: domain } : undefined,
+  });
+  if (auth.decision === "allow" && auth.via === "standing") {
+    return { approvalId: auth.approvalId ?? auth.policyId ?? "standing", viaStanding: true, reason: auth.reason };
+  }
+  if (auth.decision === "need_approval") {
+    return { approvalId: auth.approvalId, viaStanding: false, reason: auth.reason };
+  }
+  if (auth.decision === "deny_hard") {
+    const approval = await createApprovalRequest({
+      organizationId: input.organizationId,
+      jobId: input.jobId,
+      actionType: "mail.send",
+      description: `${input.description}\n\n(${auth.reason})`,
+      payload: { ...input.payload, deniedByPolicy: true },
+    });
+    return { approvalId: approval.id, viaStanding: false, reason: auth.reason };
+  }
+  const approval = await createApprovalRequest({
+    organizationId: input.organizationId,
+    jobId: input.jobId,
+    actionType: "mail.send",
+    description: input.description,
+    payload: input.payload,
+  });
+  return { approvalId: approval.id, viaStanding: false, reason: "Einzelfreigabe." };
+}
 
 export type PrepareMailDraftResult = {
   ok: boolean;
@@ -336,19 +380,19 @@ async function reviseOpenDraft(input: {
     subject: draft.subject,
     body: draft.body,
   });
-  const approval = await createApprovalRequest({
+  const approval = await requestMailSendApproval({
     organizationId: input.organizationId,
     jobId: input.jobId,
-    actionType: "mail.send",
     description: shown,
     payload: { communicationIds: [draft.id], to: to === "unbekannt" ? undefined : to },
+    recipient: to === "unbekannt" ? undefined : to,
   });
   return {
     ok: true,
     communicationId: draft.id,
-    approvalId: approval.id,
-    reply: shown,
-    waitingApproval: true,
+    approvalId: approval.approvalId,
+    reply: approval.viaStanding ? `${shown}\n\n${approval.reason}` : shown,
+    waitingApproval: !approval.viaStanding,
   };
 }
 
@@ -412,12 +456,12 @@ async function createExplicitDraft(input: {
     detail: subject,
     jobId: input.jobId,
   });
-  const approval = await createApprovalRequest({
+  const approval = await requestMailSendApproval({
     organizationId: input.organizationId,
     jobId: input.jobId,
-    actionType: "mail.send",
     description: shown,
     payload: { communicationIds: [draft.id], to: input.to },
+    recipient: input.to,
   });
   await auditMail({
     organizationId: input.organizationId,
@@ -429,9 +473,9 @@ async function createExplicitDraft(input: {
   return {
     ok: true,
     communicationId: draft.id,
-    approvalId: approval.id,
-    reply: shown,
-    waitingApproval: true,
+    approvalId: approval.approvalId,
+    reply: approval.viaStanding ? `${shown}\n\n${approval.reason}` : shown,
+    waitingApproval: !approval.viaStanding,
   };
 }
 
@@ -529,12 +573,12 @@ async function createReplyDraft(input: {
     subject,
     body: draft.body,
   });
-  const approval = await createApprovalRequest({
+  const approval = await requestMailSendApproval({
     organizationId: input.organizationId,
     jobId: input.jobId,
-    actionType: "mail.send",
     description: shown,
     payload: { communicationIds: [draft.id], to: latest.fromAddress },
+    recipient: latest.fromAddress,
   });
   await auditMail({
     organizationId: input.organizationId,
@@ -546,9 +590,9 @@ async function createReplyDraft(input: {
   return {
     ok: true,
     communicationId: draft.id,
-    approvalId: approval.id,
-    reply: shown,
-    waitingApproval: true,
+    approvalId: approval.approvalId,
+    reply: approval.viaStanding ? `${shown}\n\n${approval.reason}` : shown,
+    waitingApproval: !approval.viaStanding,
   };
 }
 

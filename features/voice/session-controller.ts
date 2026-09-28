@@ -44,6 +44,7 @@ export class VoiceSessionController {
   private vad = new VoiceActivityDetector();
   private silenceTimer: unknown = null;
   private silenceTick: unknown = null;
+  private pttHeld = false;
   private guardTimer: unknown = null;
   private level = 0;
   private lastError: string | null = null;
@@ -92,11 +93,70 @@ export class VoiceSessionController {
   }
 
   async toggle() {
+    if (this.config.pushToTalk) {
+      // PTT: Klick startet nicht Dauerhören – nur Hinweis; Aufnahme nur bei Hold.
+      if (isVoiceSessionActive(this.model.state) || this.model.state === "STARTING") {
+        this.stop();
+      }
+      return;
+    }
     if (isVoiceSessionActive(this.model.state) || this.model.state === "STARTING") {
       this.stop();
       return;
     }
     await this.start();
+  }
+
+  /** Push-to-Talk: Taste/Button gedrückt – Mikro an, kein Hintergrundhören davor. */
+  async holdStart() {
+    if (!this.config.pushToTalk) {
+      await this.start();
+      return;
+    }
+    this.pttHeld = true;
+    if (this.model.state === "OFF" || this.model.state === "ERROR") {
+      await this.start();
+    }
+    if (!isVoiceSessionActive(this.model.state) && this.model.state !== "STARTING") return;
+    this.capture?.setCollecting(true);
+    this.vad.reset(this.clock.now());
+    this.utteranceFromMs = this.clock.now();
+    this.lastTurnActivityAt = this.clock.now();
+    this.pendingTranscript = null;
+    this.finalizing = false;
+    if (this.model.state === "NOVA_SPEAKING" || this.model.state === "PROCESSING") {
+      this.dispatch({ type: "BARGE_IN", at: this.clock.now() });
+    } else if (
+      this.model.state === "LISTENING" ||
+      this.model.state === "SILENCE_WAIT" ||
+      this.model.state === "INTERRUPTED"
+    ) {
+      this.dispatch({ type: "VOICE_START", at: this.clock.now() });
+    }
+    this.emit();
+  }
+
+  /** Push-to-Talk: loslassen – verarbeiten und Mikro wieder aus. */
+  async holdEnd() {
+    if (!this.config.pushToTalk) return;
+    this.pttHeld = false;
+    if (this.model.state === "OFF" || this.model.state === "ERROR" || this.model.state === "STARTING") return;
+    this.clearSilence();
+    if (this.model.state === "LISTENING") {
+      // nichts gesprochen
+      this.stop();
+      return;
+    }
+    if (this.model.state === "USER_SPEAKING" || this.model.state === "SILENCE_WAIT") {
+      await this.finalizeTurn();
+    }
+    // Nach dem Turn kein Dauerhören – Session beenden.
+    if (this.model.state !== "PROCESSING" && this.model.state !== "NOVA_SPEAKING") {
+      this.stop();
+    } else {
+      this.pauseInput();
+      this.capture?.setCollecting(false);
+    }
   }
 
   async start() {
@@ -187,6 +247,11 @@ export class VoiceSessionController {
       this.tentativeResumeAt = null;
       this.utteranceFromMs = null;
       this.pendingTranscript = null;
+      if (this.config.pushToTalk) {
+        // Kein Dauerhören nach NOVA-Antwort.
+        this.stop();
+        return;
+      }
       this.vad.wake(this.clock.now());
       this.capture?.setCollecting(true);
       this.dispatch({ type: "NOVA_IDLE" });
@@ -302,6 +367,8 @@ export class VoiceSessionController {
 
   private scheduleTurnWatchdog() {
     this.clearSilence();
+    // Push-to-Talk: solange Taste gehalten, nicht per Pause finalisieren.
+    if (this.config.pushToTalk && this.pttHeld) return;
     if (this.model.state !== "USER_SPEAKING" && this.model.state !== "SILENCE_WAIT") return;
     const origin = this.lastTurnActivityAt;
     if (origin == null) return;

@@ -195,3 +195,13 @@ export async function listPendingApprovals(organizationId: string) {
     orderBy: { createdAt: "desc" },
   });
 }
+
+export {
+  authorizeExternalAction,
+  isIrreversibleAction,
+  riskLevelFromComputerRisk,
+  standingActionTypeFor,
+  type AuthorizeExternalInput,
+  type AuthorizeExternalResult,
+  type ExternalRiskLevel,
+} from "@/services/approvals/authorize";

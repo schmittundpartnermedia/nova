@@ -3,6 +3,7 @@ import { getCurrentTenant } from "@/services/tenant";
 import { listPendingApprovals, listStandingPolicies, standingActionLabel } from "@/services/approvals";
 import { getOrCreateActiveConversation } from "@/services/conversation";
 import { findResumableComputerJob } from "@/services/computer/audit";
+import { resumePromptMessage } from "@/services/jobs/resume-prompt";
 import { buildWatchAlert, scanWatch } from "@/agents/watch";
 import { prisma } from "@/lib/prisma";
 import { loadNovaWorld } from "@/services/nova/world";
@@ -13,7 +14,7 @@ export const runtime = "nodejs";
 export async function GET() {
   try {
     const tenant = await getCurrentTenant();
-    const [pending, latestJob, conversation, standing, resumable, watchScan, world] = await Promise.all([
+    const [pending, latestJob, conversation, standing, resumable, watchScan, world, resumePrompt] = await Promise.all([
       listPendingApprovals(tenant.organizationId),
       prisma.job.findFirst({
         where: { organizationId: tenant.organizationId },
@@ -25,6 +26,7 @@ export async function GET() {
       findResumableComputerJob(tenant.organizationId),
       scanWatch(tenant.organizationId),
       loadNovaWorld(tenant.organizationId),
+      resumePromptMessage(tenant.organizationId),
     ]);
 
     const remaining = resumable ? Math.max(0, resumable.plan.steps.length - resumable.plan.cursor) : 0;
@@ -43,6 +45,7 @@ export async function GET() {
         label: standingActionLabel(item.actionType),
       })),
       latestJob,
+      resumePrompt,
       resumableComputerJob: resumable
         ? {
             id: resumable.job.id,

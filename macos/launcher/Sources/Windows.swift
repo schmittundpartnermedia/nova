@@ -160,6 +160,39 @@ final class NovaWebWindowController: NSWindowController, WKNavigationDelegate, W
         }
     }
 
+    /// Globaler Hotkey: halten = aufnehmen, loslassen = verarbeiten (kein Dauerhören).
+    func pushToTalkDown() {
+        webView.evaluateJavaScript(
+            """
+            (function() {
+              window.dispatchEvent(new CustomEvent('nova-ptt', { detail: { phase: 'down' } }));
+              if (typeof window.__novaPushToTalkDown === 'function') window.__novaPushToTalkDown();
+              return 'down';
+            })()
+            """
+        ) { [weak self] result, error in
+            self?.log?.info("PTT-Down", fields: [
+                "result": (result as? String) ?? error?.localizedDescription ?? "nil",
+            ])
+        }
+    }
+
+    func pushToTalkUp() {
+        webView.evaluateJavaScript(
+            """
+            (function() {
+              window.dispatchEvent(new CustomEvent('nova-ptt', { detail: { phase: 'up' } }));
+              if (typeof window.__novaPushToTalkUp === 'function') window.__novaPushToTalkUp();
+              return 'up';
+            })()
+            """
+        ) { [weak self] result, error in
+            self?.log?.info("PTT-Up", fields: [
+                "result": (result as? String) ?? error?.localizedDescription ?? "nil",
+            ])
+        }
+    }
+
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
         webView.evaluateJavaScript(
             """

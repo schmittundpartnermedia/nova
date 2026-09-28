@@ -15,6 +15,7 @@ export type ComputerIntentKind =
   | "screenshot"
   | "run_script"
   | "find_file"
+  | "open_url"
   | "resume"
   | "generic"
   | "none";
@@ -55,6 +56,11 @@ export function detectComputerIntent(userRequest: string): ComputerIntent {
 
   if (/öffne die lokale nova|lokale nova-seite|localhost.*prüf|seite.*erreichbar/i.test(lower)) {
     return { kind: "open_local", userCommissioned: true, statusMessage: "Browser wird geprüft" };
+  }
+
+  const urlMatch = text.match(/https?:\/\/[^\s<>"']+/i);
+  if (urlMatch && /\b(?:öffne|oeffne|open|browser|geh(?:e)?\s+zu|lade|navigier)\b/i.test(lower)) {
+    return { kind: "open_url", userCommissioned: true, statusMessage: "Seite wird geöffnet" };
   }
 
   if (/\b(?:klick(?:e|en)?(?:\s+auf)?|drück(?:e|en)?(?:\s+auf)?|tippe(?:\s+(?:in|auf))?)\b/i.test(lower)) {

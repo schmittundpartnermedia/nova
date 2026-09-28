@@ -1,10 +1,12 @@
 import type {
   AIProvider,
+  AnalyzeImageInput,
   GenerateInput,
   GenerateOutput,
   HealthCheckResult,
   ReasonInput,
   ReasonOutput,
+  ScreenPerception,
   StreamChunk,
   StructuredInput,
   ToolCallInput,
@@ -202,6 +204,17 @@ export class MockAIProvider implements AIProvider {
       ok: true,
       provider: this.id,
       message: "MockAIProvider ist aktiv. Kein externer KI-Anbieter verbunden.",
+    };
+  }
+
+  async analyzeImage(_input?: AnalyzeImageInput) {
+    return {
+      summary: "",
+      windows: [],
+      elements: [],
+      state: "mock",
+      provider: this.id,
+      model: "mock-vision",
     };
   }
 }

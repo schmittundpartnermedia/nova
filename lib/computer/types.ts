@@ -27,6 +27,13 @@ export const CAPABILITY_IDS = [
   "macos.ui.type",
   "macos.ui.select",
   "macos.script",
+  "input.click",
+  "input.move",
+  "input.scroll",
+  "input.key",
+  "input.type",
+  "clipboard.get",
+  "clipboard.set",
   "filesystem.read",
   "filesystem.search",
   "filesystem.write",
@@ -105,6 +112,7 @@ export type ToolName =
   | "process"
   | "screen"
   | "accessibility"
+  | "input"
   | "computer";
 
 export type VerificationResult = {

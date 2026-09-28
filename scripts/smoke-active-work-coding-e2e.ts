@@ -20,9 +20,8 @@ async function main() {
   const sandbox = path.join(process.cwd(), ".nova", "coding-e2e-sandbox");
   fs.mkdirSync(sandbox, { recursive: true });
   fs.writeFileSync(path.join(sandbox, "README.md"), "# NOVA Coding E2E\n", "utf8");
-  // Alte Probe entfernen, falls vorhanden
-  const hello = path.join(sandbox, "hello-nova.txt");
-  if (fs.existsSync(hello)) fs.unlinkSync(hello);
+  const helloPath = path.join(sandbox, "hello-nova.txt");
+  if (fs.existsSync(helloPath)) fs.unlinkSync(helloPath);
   console.log("sandbox", sandbox);
 
   const ask = await startActiveWorkFromIntent({
@@ -43,9 +42,8 @@ async function main() {
   console.log((run?.reply ?? "").slice(0, 400));
   assert(run?.handled, "Coding-Lauf muss gehandelt werden");
 
-  const hello = path.join(sandbox, "hello-nova.txt");
-  const created = fs.existsSync(hello);
-  console.log("hello exists", created, created ? fs.readFileSync(hello, "utf8").slice(0, 80) : "");
+  const created = fs.existsSync(helloPath);
+  console.log("hello exists", created, created ? fs.readFileSync(helloPath, "utf8").slice(0, 80) : "");
 
   // Auch ohne Datei: ActiveWork darf nicht offen hängen (done/failed/cancelled).
   const open = await loadOpenActiveWork({ organizationId: org.id });

@@ -27,6 +27,15 @@ struct Command: Decodable {
     let script: String?
     let maxDepth: Int?
     let persist: Bool?
+    let x: Double?
+    let y: Double?
+    let deltaX: Double?
+    let deltaY: Double?
+    let key: String?
+    let keyCode: Int?
+    let modifiers: [String]?
+    let text: String?
+    let button: String?
 }
 
 func writeJSON(_ object: [String: Any]) {
@@ -508,6 +517,115 @@ func windows() -> [[String: Any]] {
     }
 }
 
+func postMouse(type: CGEventType, x: Double, y: Double, button: CGMouseButton = .left) -> Bool {
+    guard let event = CGEvent(mouseEventSource: nil, mouseType: type, mouseCursorPosition: CGPoint(x: x, y: y), mouseButton: button) else {
+        return false
+    }
+    event.post(tap: .cghidEventTap)
+    return true
+}
+
+func inputMove(x: Double, y: Double) -> [String: Any] {
+    let ok = postMouse(type: .mouseMoved, x: x, y: y)
+    return ["ok": ok, "data": ["x": x, "y": y]]
+}
+
+func inputClick(x: Double, y: Double, button: String) -> [String: Any] {
+    let mouseButton: CGMouseButton = button == "right" ? .right : .left
+    let down: CGEventType = button == "right" ? .rightMouseDown : .leftMouseDown
+    let up: CGEventType = button == "right" ? .rightMouseUp : .leftMouseUp
+    let moved = postMouse(type: .mouseMoved, x: x, y: y, button: mouseButton)
+    let pressed = postMouse(type: down, x: x, y: y, button: mouseButton)
+    usleep(30_000)
+    let released = postMouse(type: up, x: x, y: y, button: mouseButton)
+    return ["ok": moved && pressed && released, "data": ["x": x, "y": y, "button": button]]
+}
+
+func inputScroll(x: Double?, y: Double?, deltaX: Double, deltaY: Double) -> [String: Any] {
+    if let x, let y {
+        _ = postMouse(type: .mouseMoved, x: x, y: y)
+    }
+    guard let event = CGEvent(scrollWheelEvent2Source: nil, units: .pixel, wheelCount: 2, wheel1: Int32(deltaY), wheel2: Int32(deltaX), wheel3: 0) else {
+        return ["ok": false, "error": "scroll_event_failed"]
+    }
+    event.post(tap: .cghidEventTap)
+    return ["ok": true, "data": ["deltaX": deltaX, "deltaY": deltaY]]
+}
+
+func modifierFlags(_ names: [String]) -> CGEventFlags {
+    var flags: CGEventFlags = []
+    for name in names {
+        switch name.lowercased() {
+        case "command", "cmd": flags.insert(.maskCommand)
+        case "shift": flags.insert(.maskShift)
+        case "option", "alt": flags.insert(.maskAlternate)
+        case "control", "ctrl": flags.insert(.maskControl)
+        default: break
+        }
+    }
+    return flags
+}
+
+func keyCodeForName(_ key: String?) -> CGKeyCode? {
+    guard let key else { return nil }
+    switch key.lowercased() {
+    case "return", "enter": return 36
+    case "tab": return 48
+    case "space": return 49
+    case "delete", "backspace": return 51
+    case "escape", "esc": return 53
+    case "left": return 123
+    case "right": return 124
+    case "down": return 125
+    case "up": return 126
+    default: return nil
+    }
+}
+
+func inputKey(key: String?, keyCode: Int?, modifiers: [String]) -> [String: Any] {
+    guard let resolved = keyCode ?? keyCodeForName(key).map({ Int($0) }) else {
+        return ["ok": false, "error": "unknown_key"]
+    }
+    let code = CGKeyCode(resolved)
+    let flags = modifierFlags(modifiers)
+    guard let down = CGEvent(keyboardEventSource: nil, virtualKey: code, keyDown: true),
+          let up = CGEvent(keyboardEventSource: nil, virtualKey: code, keyDown: false) else {
+        return ["ok": false, "error": "key_event_failed"]
+    }
+    down.flags = flags
+    up.flags = flags
+    down.post(tap: .cghidEventTap)
+    up.post(tap: .cghidEventTap)
+    return ["ok": true, "data": ["key": key ?? "", "keyCode": Int(code), "modifiers": modifiers]]
+}
+
+func inputTypeText(_ text: String) -> [String: Any] {
+    guard !text.isEmpty else { return ["ok": false, "error": "empty_text"] }
+    var utf16 = Array(text.utf16)
+    guard let down = CGEvent(keyboardEventSource: nil, virtualKey: 0, keyDown: true),
+          let up = CGEvent(keyboardEventSource: nil, virtualKey: 0, keyDown: false) else {
+        return ["ok": false, "error": "type_event_failed"]
+    }
+    down.keyboardSetUnicodeString(stringLength: utf16.count, unicodeString: &utf16)
+    up.keyboardSetUnicodeString(stringLength: utf16.count, unicodeString: &utf16)
+    down.post(tap: .cghidEventTap)
+    up.post(tap: .cghidEventTap)
+    return ["ok": true, "data": ["length": text.count]]
+}
+
+func clipboardGet() -> [String: Any] {
+    let pasteboard = NSPasteboard.general
+    let text = pasteboard.string(forType: .string) ?? ""
+    return ["ok": true, "data": ["text": text]]
+}
+
+func clipboardSet(_ text: String) -> [String: Any] {
+    let pasteboard = NSPasteboard.general
+    pasteboard.clearContents()
+    let ok = pasteboard.setString(text, forType: .string)
+    return ["ok": ok, "data": ["length": text.count]]
+}
+
 let raw = CommandLine.arguments.dropFirst().joined(separator: " ")
 guard let data = raw.data(using: .utf8), let command = try? JSONDecoder().decode(Command.self, from: data) else {
     writeJSON(["ok": false, "error": "invalid_command"])
@@ -558,6 +676,20 @@ case "automation.mail":
     writeJSON(mailAutomationState())
 case "applescript.run":
     writeJSON(runAppleScript(command.script ?? command.value ?? ""))
+case "input.click":
+    writeJSON(inputClick(x: command.x ?? 0, y: command.y ?? 0, button: command.button ?? "left"))
+case "input.move":
+    writeJSON(inputMove(x: command.x ?? 0, y: command.y ?? 0))
+case "input.scroll":
+    writeJSON(inputScroll(x: command.x, y: command.y, deltaX: command.deltaX ?? 0, deltaY: command.deltaY ?? 0))
+case "input.key":
+    writeJSON(inputKey(key: command.key, keyCode: command.keyCode, modifiers: command.modifiers ?? []))
+case "input.type":
+    writeJSON(inputTypeText(command.text ?? command.value ?? ""))
+case "clipboard.get":
+    writeJSON(clipboardGet())
+case "clipboard.set":
+    writeJSON(clipboardSet(command.text ?? command.value ?? ""))
 default:
     writeJSON(["ok": false, "error": "unknown_cmd", "cmd": command.cmd])
     exit(1)

@@ -266,6 +266,25 @@ export function classifyComputerAction(input: {
       autonomousAllowed: Boolean(input.userCommissioned),
     };
   }
+  if (input.tool === "input") {
+    if (input.action === "clipboardGet" || input.action === "move") {
+      return decision("READ_ONLY", true, "Mausposition oder Zwischenablage lesen.");
+    }
+    if (input.action === "clipboardSet" || input.action === "type" || input.action === "key") {
+      return {
+        ...decision("WORKSPACE_WRITE", true, "Tastatur oder Zwischenablage schreiben."),
+        approvalClass: input.userCommissioned ? "B" : "C",
+        approvalRequired: !input.userCommissioned,
+        autonomousAllowed: Boolean(input.userCommissioned),
+      };
+    }
+    return {
+      ...decision("WORKSPACE_WRITE", true, "Maus-/Scroll-Eingabe."),
+      approvalClass: input.userCommissioned ? "B" : "C",
+      approvalRequired: !input.userCommissioned,
+      autonomousAllowed: Boolean(input.userCommissioned),
+    };
+  }
   return decision("READ_ONLY", true, "Standard-Computeraktion.");
 }
 

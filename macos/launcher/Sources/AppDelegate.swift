@@ -15,9 +15,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var lockFd: Int32 = -1
     private var mailConsent: MailConsentBridge?
     private let workQueue = DispatchQueue(label: "io.elevum.nova.supervisor", qos: .userInitiated)
+    private var pushToTalkMonitor: Any?
+    private var pushToTalkHeld = false
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         buildMenu()
+        installPushToTalkMonitor()
         if let existing = SingleInstance.existing(bundleIdentifier: LaunchConfig.defaultBundleIdentifier) {
             existing.activate(options: [.activateIgnoringOtherApps])
             didShutdown = true
@@ -282,6 +285,68 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         mainMenu.addItem(editItem)
 
         NSApp.mainMenu = mainMenu
+    }
+
+    /// Systemweiter Push-to-Talk: Taste halten = Mikro an, loslassen = verarbeiten. Kein Dauerhören.
+    private func installPushToTalkMonitor() {
+        if pushToTalkMonitor != nil { return }
+        pushToTalkMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.flagsChanged, .keyDown, .keyUp]) { [weak self] event in
+            self?.handlePushToTalk(event)
+        }
+        NSEvent.addLocalMonitorForEvents(matching: [.flagsChanged, .keyDown, .keyUp]) { [weak self] event in
+            self?.handlePushToTalk(event)
+            return event
+        }
+    }
+
+    private func pushToTalkKeyCode() -> UInt16 {
+        let raw = (UserDefaults.standard.string(forKey: "novaPushToTalkKey")
+            ?? ProcessInfo.processInfo.environment["NOVA_PTT_KEY"]
+            ?? "rightOption").lowercased()
+        switch raw {
+        case "leftoption", "option", "alt": return 58
+        case "rightcommand", "rcommand": return 54
+        case "leftcommand", "command", "cmd": return 55
+        case "fn": return 63
+        case "f5": return 96
+        default: return 61 // rightOption
+        }
+    }
+
+    private func handlePushToTalk(_ event: NSEvent) {
+        let code = pushToTalkKeyCode()
+        let isModifierKey = [58, 61, 54, 55, 63].contains(code)
+        if isModifierKey {
+            guard event.type == .flagsChanged, event.keyCode == code else { return }
+            let held: Bool
+            switch code {
+            case 58: held = event.modifierFlags.contains(.option) && !event.modifierFlags.contains(.function)
+            case 61: held = event.modifierFlags.contains(.option)
+            case 54, 55: held = event.modifierFlags.contains(.command)
+            case 63: held = event.modifierFlags.contains(.function)
+            default: held = false
+            }
+            // rightOption vs leftOption: keyCode distinguishes
+            if code == 61 || code == 58 {
+                // flagsChanged with matching keyCode is enough
+            }
+            if held && !pushToTalkHeld {
+                pushToTalkHeld = true
+                DispatchQueue.main.async { self.webWindow?.pushToTalkDown() }
+            } else if !held && pushToTalkHeld {
+                pushToTalkHeld = false
+                DispatchQueue.main.async { self.webWindow?.pushToTalkUp() }
+            }
+            return
+        }
+        if event.keyCode != code { return }
+        if event.type == .keyDown && !event.isARepeat && !pushToTalkHeld {
+            pushToTalkHeld = true
+            DispatchQueue.main.async { self.webWindow?.pushToTalkDown() }
+        } else if event.type == .keyUp && pushToTalkHeld {
+            pushToTalkHeld = false
+            DispatchQueue.main.async { self.webWindow?.pushToTalkUp() }
+        }
     }
 
     @objc private func startVoiceSession() {

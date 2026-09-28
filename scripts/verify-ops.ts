@@ -2,6 +2,7 @@ import { PrismaClient } from "@prisma/client";
 import { bootstrapAgents, getAgent } from "@/agents/bootstrap";
 import { runOpsUnitTests } from "@/lib/ops/unit-tests";
 import { runComputerUnitTests } from "@/lib/computer/unit-tests";
+import { runApprovalAuthorizeUnitTests } from "@/lib/approvals/unit-tests";
 import { LocalCalendarProvider } from "@/connectors/calendar/local";
 import { MockMailProvider } from "@/connectors/mail/mock";
 import { scanWatch } from "@/agents/watch";
@@ -23,6 +24,8 @@ async function main() {
   if (units.length) throw new Error(units.join("; "));
   const computerUnits = runComputerUnitTests();
   if (computerUnits.length) throw new Error(computerUnits.join("; "));
+  const approvalUnits = runApprovalAuthorizeUnitTests();
+  if (approvalUnits.length) throw new Error(approvalUnits.join("; "));
 
   bootstrapAgents();
   assert(getAgent("calendar")?.definition.implemented === true, "Calendar Agent nicht implementiert");

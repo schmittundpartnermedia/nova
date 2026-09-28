@@ -54,6 +54,24 @@ export type HealthCheckResult = {
   message: string;
 };
 
+/** Screenshot / Bild → strukturierte Wahrnehmung (nicht dauerhaft speichern). */
+export type AnalyzeImageInput = {
+  /** PNG/JPEG als data-URL oder Roh-Base64 */
+  imageBase64: string;
+  mimeType?: "image/png" | "image/jpeg" | "image/webp";
+  question: string;
+  model?: string;
+};
+
+export type ScreenPerception = {
+  summary: string;
+  windows: Array<{ title: string; app?: string; focused?: boolean }>;
+  elements: Array<{ label: string; role?: string; value?: string }>;
+  state: string;
+  provider: string;
+  model: string;
+};
+
 export interface AIProvider {
   id: string;
   name: string;
@@ -63,6 +81,8 @@ export interface AIProvider {
   toolCall(input: ToolCallInput): Promise<ToolCallOutput>;
   stream(input: GenerateInput): AsyncIterable<StreamChunk>;
   healthCheck(): Promise<HealthCheckResult>;
+  /** Optional: Vision. Stub-Provider werfen oder melden „später“. */
+  analyzeImage?(input: AnalyzeImageInput): Promise<ScreenPerception>;
 }
 
 export type AIRole = "master" | "simple" | "sensitive" | "fallback";

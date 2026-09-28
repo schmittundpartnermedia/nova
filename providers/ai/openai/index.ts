@@ -1,11 +1,13 @@
 import OpenAI from "openai";
 import type {
   AIProvider,
+  AnalyzeImageInput,
   GenerateInput,
   GenerateOutput,
   HealthCheckResult,
   ReasonInput,
   ReasonOutput,
+  ScreenPerception,
   StreamChunk,
   StructuredInput,
   ToolCallInput,
@@ -15,6 +17,7 @@ import { OPENAI_DEFAULT_MODEL, modelAllowsCustomTemperature } from "@/providers/
 import { hasOpenAIApiKey, publicErrorMessage, redactSecrets } from "@/lib/secrets";
 
 const HEALTH_TTL_MS = 30_000;
+const VISION_MODEL = process.env.NOVA_VISION_MODEL?.trim() || "gpt-4.1-mini";
 
 type CachedHealth = {
   at: number;
@@ -40,6 +43,13 @@ function buildMessages(input: GenerateInput): OpenAI.Chat.ChatCompletionMessageP
   }
   messages.push({ role: "user", content: input.prompt });
   return messages;
+}
+
+function normalizeImageDataUrl(input: AnalyzeImageInput): string {
+  const mime = input.mimeType ?? "image/png";
+  const raw = input.imageBase64.trim();
+  if (raw.startsWith("data:")) return raw;
+  return `data:${mime};base64,${raw.replace(/\s+/g, "")}`;
 }
 
 export class OpenAIProvider implements AIProvider {
@@ -124,6 +134,63 @@ export class OpenAIProvider implements AIProvider {
     } catch (error) {
       if (error instanceof SyntaxError) {
         throw new Error("Die Modellantwort war kein gültiges JSON.");
+      }
+      throw new Error(publicErrorMessage(error));
+    }
+  }
+
+  async analyzeImage(input: AnalyzeImageInput): Promise<ScreenPerception> {
+    const model = input.model?.trim() || VISION_MODEL;
+    try {
+      const completion = await this.getClient().chat.completions.create({
+        model,
+        temperature: 0.1,
+        response_format: { type: "json_object" },
+        messages: [
+          {
+            role: "system",
+            content:
+              'Du analysierst einen macOS-Screenshot für NOVA. Antworte nur JSON: {"summary":"...","windows":[{"title":"...","app":"...","focused":true}],"elements":[{"label":"...","role":"...","value":"..."}],"state":"..."}. Keine Passwörter, keine Inhalte sensibler Fenster (Banking, Keychain, 1Password) in summary/elements übernehmen — nur „sensibles Fenster“.',
+          },
+          {
+            role: "user",
+            content: [
+              { type: "text", text: input.question },
+              { type: "image_url", image_url: { url: normalizeImageDataUrl(input) } },
+            ],
+          },
+        ],
+      });
+      const raw = completion.choices[0]?.message?.content ?? "{}";
+      const parsed = JSON.parse(redactSecrets(raw)) as {
+        summary?: string;
+        windows?: Array<{ title?: string; app?: string; focused?: boolean }>;
+        elements?: Array<{ label?: string; role?: string; value?: string }>;
+        state?: string;
+      };
+      return {
+        summary: String(parsed.summary ?? "").slice(0, 2000),
+        windows: Array.isArray(parsed.windows)
+          ? parsed.windows.slice(0, 20).map((item) => ({
+              title: String(item.title ?? "").slice(0, 200),
+              app: item.app ? String(item.app).slice(0, 120) : undefined,
+              focused: Boolean(item.focused),
+            }))
+          : [],
+        elements: Array.isArray(parsed.elements)
+          ? parsed.elements.slice(0, 40).map((item) => ({
+              label: String(item.label ?? "").slice(0, 200),
+              role: item.role ? String(item.role).slice(0, 80) : undefined,
+              value: item.value ? String(item.value).slice(0, 200) : undefined,
+            }))
+          : [],
+        state: String(parsed.state ?? "").slice(0, 500),
+        provider: this.id,
+        model: completion.model ?? model,
+      };
+    } catch (error) {
+      if (error instanceof SyntaxError) {
+        throw new Error("Vision-Antwort war kein gültiges JSON.");
       }
       throw new Error(publicErrorMessage(error));
     }

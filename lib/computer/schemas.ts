@@ -168,6 +168,27 @@ export const screenActionSchema = z.discriminatedUnion("action", [
   z.object({ action: z.literal("inspect") }),
 ]);
 
+export const inputActionSchema = z.discriminatedUnion("action", [
+  z.object({ action: z.literal("click"), x: z.number(), y: z.number(), button: z.enum(["left", "right"]).optional() }),
+  z.object({ action: z.literal("move"), x: z.number(), y: z.number() }),
+  z.object({
+    action: z.literal("scroll"),
+    x: z.number().optional(),
+    y: z.number().optional(),
+    deltaX: z.number().optional(),
+    deltaY: z.number().optional(),
+  }),
+  z.object({
+    action: z.literal("key"),
+    key: z.string().min(1).max(40).optional(),
+    keyCode: z.number().int().nonnegative().optional(),
+    modifiers: z.array(z.enum(["command", "shift", "option", "control"])).max(4).optional(),
+  }),
+  z.object({ action: z.literal("type"), text: z.string().min(1).max(20_000) }),
+  z.object({ action: z.literal("clipboardGet") }),
+  z.object({ action: z.literal("clipboardSet"), text: z.string().max(200_000) }),
+]);
+
 export const computerActionEnvelopeSchema = z.object({
   organizationId: organizationIdSchema,
   jobId: z.string().min(1).max(128).optional(),
@@ -177,7 +198,7 @@ export const computerActionEnvelopeSchema = z.object({
   approvalToken: z.string().min(1).max(256).optional(),
   userCommissioned: z.boolean().optional(),
   source: contentSourceSchema.default("nova_plan"),
-  tool: z.enum(["browser", "filesystem", "shell", "cursor", "application", "process", "screen", "accessibility"]),
+  tool: z.enum(["browser", "filesystem", "shell", "cursor", "application", "process", "screen", "accessibility", "input"]),
   payload: z.unknown(),
 });
 
@@ -190,3 +211,4 @@ export type BrowserAction = z.infer<typeof browserActionSchema>;
 export type ApplicationAction = z.infer<typeof applicationActionSchema>;
 export type AccessibilityAction = z.infer<typeof accessibilityActionSchema>;
 export type ScreenAction = z.infer<typeof screenActionSchema>;
+export type InputAction = z.infer<typeof inputActionSchema>;

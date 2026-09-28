@@ -46,4 +46,9 @@ export class LocalAIProvider implements AIProvider {
         : "Kein LOCAL_AI_BASE_URL gesetzt. Interface für Ollama/LM Studio vorbereitet.",
     };
   }
+
+  /** Später: lokale Vision-Modelle. */
+  async analyzeImage(): Promise<never> {
+    throw notConfigured(`${this.name}.analyzeImage (später)`);
+  }
 }

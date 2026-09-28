@@ -223,6 +223,8 @@ export function NovaShell() {
     supported: voiceSupported,
     start: startVoiceSession,
     stop: stopVoiceSession,
+    pressPushToTalk,
+    releasePushToTalk,
     notifyProcessing,
     notifyNovaSpeaking,
     notifyNovaIdle,
@@ -233,6 +235,35 @@ export function NovaShell() {
     sessionActiveRef.current =
       sessionSnap.active || sessionSnap.state === "PROCESSING";
   }, [sessionSnap.active, sessionSnap.state]);
+
+  useEffect(() => {
+    const onPtt = (event: Event) => {
+      const phase = (event as CustomEvent<{ phase?: string }>).detail?.phase;
+      if (phase === "down") {
+        clearIdleTimer();
+        setOrbState("LISTENING");
+        setStatus("Zuhören (Push-to-Talk)");
+        pressPushToTalk();
+      } else if (phase === "up") {
+        releasePushToTalk();
+      }
+    };
+    window.addEventListener("nova-ptt", onPtt as EventListener);
+    (window as unknown as { __novaPushToTalkDown?: () => void }).__novaPushToTalkDown = () => {
+      clearIdleTimer();
+      setOrbState("LISTENING");
+      setStatus("Zuhören (Push-to-Talk)");
+      pressPushToTalk();
+    };
+    (window as unknown as { __novaPushToTalkUp?: () => void }).__novaPushToTalkUp = () => {
+      releasePushToTalk();
+    };
+    return () => {
+      window.removeEventListener("nova-ptt", onPtt as EventListener);
+      delete (window as unknown as { __novaPushToTalkDown?: () => void }).__novaPushToTalkDown;
+      delete (window as unknown as { __novaPushToTalkUp?: () => void }).__novaPushToTalkUp;
+    };
+  }, [clearIdleTimer, pressPushToTalk, releasePushToTalk]);
 
   useEffect(() => {
     setAfterSpeech((next) => {
@@ -943,6 +974,8 @@ export function NovaShell() {
               dictation={sessionSnap.transcript}
               onSubmit={(value) => void sendMessage(value, "text")}
               onMic={handleMic}
+              onMicDown={pressPushToTalk}
+              onMicUp={releasePushToTalk}
               onStopSpeech={stopSpeech}
               onToggleVoice={toggleEnabled}
               onDraftChange={handleDraftChange}

@@ -1,9 +1,14 @@
 /**
  * Ein Mikrofon-Stream, RMS-VAD, HTTP-Transkription.
- * Kurze Pause beendet den Turn. Während NOVA spricht, kann die Nutzerstimme unterbrechen.
+ * Standard: Push-to-Talk (Taste halten = aufnehmen, loslassen = verarbeiten).
+ * Kein Aktivierungswort, kein Zuhören im Hintergrund im Wartezustand.
  */
 
 export const VOICE_SESSION_CONFIG = {
+  /** true = nur aufnehmen solange Hotkey/Button gehalten wird; kein Dauerhören. */
+  pushToTalk: true,
+  /** Vom Nutzer wählbar; Default Rechts-Option. Launcher liest NOVA_PTT_KEY / UserDefaults. */
+  pushToTalkKeyDefault: "rightOption",
   silenceTimeoutMs: 800,
   minSpeechDurationMs: 160,
   vadHangoverMs: 280,
@@ -33,6 +38,11 @@ export const VOICE_SESSION_CONFIG = {
   pcmBufferSeconds: 30,
 } as const;
 
-export type VoiceSessionConfig = Omit<typeof VOICE_SESSION_CONFIG, "bargeInEnabled"> & {
+export type VoiceSessionConfig = Omit<
+  typeof VOICE_SESSION_CONFIG,
+  "bargeInEnabled" | "pushToTalk" | "pushToTalkKeyDefault"
+> & {
   bargeInEnabled: boolean;
+  pushToTalk: boolean;
+  pushToTalkKeyDefault: string;
 };

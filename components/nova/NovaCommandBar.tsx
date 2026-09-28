@@ -24,6 +24,8 @@ export function NovaCommandBar({
   dictation = "",
   onSubmit,
   onMic,
+  onMicDown,
+  onMicUp,
   onStopSpeech,
   onToggleVoice,
   onDraftChange,
@@ -42,6 +44,8 @@ export function NovaCommandBar({
   dictation?: string;
   onSubmit: (value: string) => void;
   onMic: () => void;
+  onMicDown?: () => void;
+  onMicUp?: () => void;
   onStopSpeech: () => void;
   onToggleVoice: () => void;
   onDraftChange?: (value: string) => void;
@@ -153,29 +157,41 @@ export function NovaCommandBar({
           <button
             type="button"
             id="nova-mic-btn"
-            onClick={onMic}
+            onClick={onMicDown || onMicUp ? undefined : onMic}
+            onPointerDown={(event) => {
+              if (!onMicDown) return;
+              event.preventDefault();
+              (event.currentTarget as HTMLButtonElement).setPointerCapture(event.pointerId);
+              onMicDown();
+            }}
+            onPointerUp={() => onMicUp?.()}
+            onPointerCancel={() => onMicUp?.()}
+            onPointerLeave={(event) => {
+              if (event.buttons === 0) return;
+              onMicUp?.();
+            }}
             className={micClass}
             style={{ ["--silence-progress" as string]: String(silenceProgress) }}
             aria-label={
               sessionActive
-                ? "Voice Session beenden"
+                ? "Push-to-Talk gedrückt – loslassen zum Senden"
                 : voiceSupported
-                  ? "Voice Session starten"
+                  ? "Push-to-Talk halten zum Sprechen"
                   : "Spracheingabe vorbereitet"
             }
             title={
               sessionActive
-                ? "Voice Session beenden"
+                ? "Loslassen: Aufnahme verarbeiten"
                 : voiceSupported
-                  ? "Voice Session starten"
+                  ? "Taste halten zum Sprechen (kein Dauerhören)"
                   : "Spracheingabe vorbereitet"
             }
           >
             <span className="nova-ax-label">
               {sessionActive
-                ? "Voice Session beenden"
+                ? "Push-to-Talk gedrückt – loslassen zum Senden"
                 : voiceSupported
-                  ? "Voice Session starten"
+                  ? "Push-to-Talk halten zum Sprechen"
                   : "Spracheingabe vorbereitet"}
             </span>
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">

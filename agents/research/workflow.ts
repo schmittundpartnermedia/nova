@@ -468,30 +468,76 @@ async function persistCompanies(context: AgentRunContext, companies: ResearchCom
     ]
       .filter(Boolean)
       .join("\n");
-    if (existing) {
-      await prisma.company.update({
-        where: { id: existing.id },
+    const row = existing
+      ? await prisma.company.update({
+          where: { id: existing.id },
+          data: {
+            website: company.website ?? existing.website,
+            industry: company.industry ?? existing.industry,
+            notes: notes || existing.notes,
+            sourceId: sourceId ?? existing.sourceId,
+            isMock: false,
+          },
+        })
+      : await prisma.company.create({
+          data: {
+            organizationId: context.organizationId,
+            projectId: context.projectId,
+            name: company.name,
+            website: company.website,
+            industry: company.industry,
+            notes,
+            sourceId,
+            isMock: false,
+          },
+        });
+
+    for (const contact of (company.publicContacts ?? []).slice(0, 8)) {
+      const fullName = String(contact.name ?? "").trim();
+      if (!fullName) continue;
+      const parts = fullName.split(/\s+/);
+      const firstName = parts[0] || fullName;
+      const lastName = parts.slice(1).join(" ") || "";
+      const channel = String(contact.channel ?? "").trim();
+      const email = channel.includes("@") ? channel.toLowerCase() : undefined;
+      const existingContact = await prisma.contact.findFirst({
+        where: {
+          organizationId: context.organizationId,
+          companyId: row.id,
+          ...(email
+            ? { email }
+            : { firstName, lastName }),
+        },
+      });
+      if (existingContact) {
+        await prisma.contact.update({
+          where: { id: existingContact.id },
+          data: {
+            role: contact.role ?? existingContact.role,
+            email: email ?? existingContact.email,
+            notes: [existingContact.notes, channel && !email ? `Kanal: ${channel}` : ""]
+              .filter(Boolean)
+              .join("\n") || existingContact.notes,
+            sourceId: sourceId ?? existingContact.sourceId,
+            isMock: false,
+          },
+        });
+        continue;
+      }
+      await prisma.contact.create({
         data: {
-          website: company.website ?? existing.website,
-          industry: company.industry ?? existing.industry,
-          notes: notes || existing.notes,
-          sourceId: sourceId ?? existing.sourceId,
+          organizationId: context.organizationId,
+          companyId: row.id,
+          projectId: context.projectId,
+          firstName,
+          lastName,
+          role: contact.role,
+          email,
+          notes: channel && !email ? `Kanal: ${channel}` : undefined,
+          sourceId,
           isMock: false,
         },
       });
-      continue;
     }
-    await prisma.company.create({
-      data: {
-        organizationId: context.organizationId,
-        projectId: context.projectId,
-        name: company.name,
-        website: company.website,
-        industry: company.industry,
-        notes,
-        sourceId,
-        isMock: false,
-      },
-    });
   }
 }

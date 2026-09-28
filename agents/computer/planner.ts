@@ -74,6 +74,24 @@ export function planComputerTask(input: {
           userCommissioned: true,
         },
       ];
+    case "open_url": {
+      const url = extractHttpUrl(input.userRequest);
+      if (!url) return [];
+      return [
+        {
+          tool: "browser",
+          payload: { action: "open", url },
+          purpose: `Seite öffnen: ${url}`,
+          userCommissioned: true,
+        },
+        {
+          tool: "browser",
+          payload: { action: "read" },
+          purpose: "Seiteninhalt lesen",
+          userCommissioned: true,
+        },
+      ];
+    }
     case "cursor_ask":
       return [
         {
@@ -249,6 +267,9 @@ export function planComputerTask(input: {
       if (/screenshot|bildschirmfoto/i.test(lower)) {
         return planComputerTask({ ...input, kind: "screenshot" });
       }
+      if (extractHttpUrl(input.userRequest)) {
+        return planComputerTask({ ...input, kind: "open_url" });
+      }
       if (app && /\b(?:öffne|oeffne|starte|start)\b/i.test(lower)) {
         return planComputerTask({ ...input, kind: "open_app" });
       }
@@ -266,6 +287,12 @@ export function planComputerTask(input: {
     default:
       return [];
   }
+}
+
+function extractHttpUrl(request: string): string | null {
+  const match = request.match(/https?:\/\/[^\s<>"'）\]]+/i);
+  if (!match?.[0]) return null;
+  return match[0].replace(/[.,;:!?)]+$/, "");
 }
 
 function guessFilename(request: string): string {

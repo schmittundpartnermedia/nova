@@ -10,9 +10,17 @@ Connector-Konfiguration speichert nicht-geheime JSON-Daten. Credentials gehören
 
 ## Freigaben
 
-Externe Aktionen brauchen `ApprovalRequest`.
+Externe Aktionen brauchen `ApprovalRequest` oder eine gültige `ApprovalPolicy`.
 
-Dauerfreigaben (`ApprovalPolicy`) sind als Datenmodell vorbereitet: `scope`, `conditions`, `limits`, `created_at`, `revoked_at`. In V1 noch nicht produktiv genutzt.
+Zentrale Prüfung: `authorizeExternalAction` in `services/approvals/authorize.ts` — vor jeder extern wirksamen Aktion (Master, Mail, Computer, Worker).
+
+Dauerfreigaben (`ApprovalPolicy`) sind produktiv für:
+- `mail.send.batch` (inkl. einzelner `mail.send`)
+- `macos.ui.click`
+
+mit `scope`, `conditions` (z. B. `allowedApps`, `allowedRecipientDomains`) und `limits` (z. B. `maxPerDay`). In der UI schaltbar und widerrufbar.
+
+Unumkehrbare Aktionen (Löschen, Zahlungen, Veröffentlichen) sind **nie** per Dauerfreigabe freigebbar — immer Einzelfreigabe.
 
 ## Ehrlichkeit
 

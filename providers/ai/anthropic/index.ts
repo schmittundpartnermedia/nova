@@ -46,4 +46,9 @@ export class AnthropicProvider implements AIProvider {
         : "Kein ANTHROPIC_API_KEY gesetzt. Interface vorbereitet.",
     };
   }
+
+  /** Später: Vision über Anthropic. */
+  async analyzeImage(): Promise<never> {
+    throw notConfigured(`${this.name}.analyzeImage (später)`);
+  }
 }

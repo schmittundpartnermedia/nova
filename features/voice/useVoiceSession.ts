@@ -48,6 +48,14 @@ export function useVoiceSession(onTurn: (turn: VoiceTurn) => void) {
     controllerRef.current?.stop();
   }, []);
 
+  const pressPushToTalk = useCallback(() => {
+    void controllerRef.current?.holdStart();
+  }, []);
+
+  const releasePushToTalk = useCallback(() => {
+    void controllerRef.current?.holdEnd();
+  }, []);
+
   const toggle = useCallback(() => {
     void controllerRef.current?.toggle();
   }, []);
@@ -80,6 +88,8 @@ export function useVoiceSession(onTurn: (turn: VoiceTurn) => void) {
     start,
     stop,
     toggle,
+    pressPushToTalk,
+    releasePushToTalk,
     notifyProcessing,
     notifyNovaSpeaking,
     notifyNovaIdle,
