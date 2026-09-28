@@ -9,6 +9,7 @@ import { deliverApprovedDraft } from "@/services/mail/send";
 import { decideApproval } from "@/services/approvals";
 import { prepareMailAccess } from "@/services/mail/access";
 import { ensureAppleMailFresh } from "@/services/mail/apple-connect";
+import { hasPendingMailDraft } from "@/services/mail/pending-draft";
 
 export async function answerMail(input: {
   organizationId: string;
@@ -17,6 +18,31 @@ export async function answerMail(input: {
 }) {
   assertOrganizationId(input.organizationId);
   const intent = detectMailIntent(input.userRequest);
+  const pendingDraft = await hasPendingMailDraft(input.organizationId);
+
+  if (
+    pendingDraft &&
+    intent.kind !== "inbox" &&
+    intent.kind !== "search" &&
+    intent.kind !== "show" &&
+    intent.kind !== "send-confirm"
+  ) {
+    const draft = await prepareMailDraft({ organizationId: input.organizationId, userRequest: input.userRequest });
+    return {
+      reply: draft.reply,
+      statusMessage: draft.needsAccount
+        ? "Absender wählen."
+        : draft.approvalId
+          ? "Entwurf wartet auf Freigabe."
+          : draft.ok
+            ? "Mailauftrag."
+            : "Mailauftrag unvollständig.",
+      waitingApproval: Boolean(draft.approvalId),
+      approvalId: draft.approvalId,
+      actionType: draft.approvalId ? "mail.send" : undefined,
+    };
+  }
+
   if (intent.kind === "inbox") {
     const access = await prepareMailAccess({
       organizationId: input.organizationId,
@@ -54,9 +80,16 @@ export async function answerMail(input: {
     const draft = await prepareMailDraft({ organizationId: input.organizationId, userRequest: input.userRequest });
     return {
       reply: draft.reply,
-      statusMessage: "Entwurf wartet auf Freigabe.",
-      waitingApproval: true,
-      approvalId: "approvalId" in draft ? draft.approvalId : undefined,
+      statusMessage: draft.needsAccount
+        ? "Absender wählen."
+        : draft.approvalId
+          ? "Entwurf wartet auf Freigabe."
+          : draft.ok
+            ? "Entwurf."
+            : "Entwurf nicht möglich.",
+      waitingApproval: Boolean(draft.approvalId),
+      approvalId: draft.approvalId,
+      actionType: draft.approvalId ? "mail.send" : undefined,
     };
   }
   if (intent.kind === "send-confirm") {
@@ -82,7 +115,11 @@ export async function answerMail(input: {
         waitingApproval: false,
       };
     }
-    return { reply: verified === 1 ? "Die Mail ist versendet und vom Provider bestätigt." : `${verified} Mails sind versendet und bestätigt.`, statusMessage: "Versand bestätigt.", waitingApproval: false };
+    return {
+      reply: verified === 1 ? "Die Mail ist versendet und vom Provider bestätigt." : `${verified} Mails sind versendet und bestätigt.`,
+      statusMessage: "Versand bestätigt.",
+      waitingApproval: false,
+    };
   }
   return { reply: "Dazu habe ich keinen Mailauftrag erkannt.", statusMessage: "Kein Mailauftrag.", waitingApproval: false };
 }

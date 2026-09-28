@@ -371,7 +371,11 @@ export function NovaShell() {
           if (payload.approvalId) {
             setApproval({
               id: String(payload.approvalId),
-              description: String(payload.statusMessage ?? "Freigabe erforderlich"),
+              description: String(
+                (typeof payload.reply === "string" && payload.reply.trim()) ||
+                  payload.statusMessage ||
+                  "Freigabe erforderlich",
+              ),
               status: "pending",
               actionType: typeof payload.actionType === "string" ? payload.actionType : undefined,
             });

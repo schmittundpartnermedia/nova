@@ -33,6 +33,13 @@ export function detectMailIntent(userRequest: string): MailIntent {
   if (/\b(?:schreib(?:e|en)?|verfass(?:e|en)?)\b/i.test(text) && /\b(?:e-?mail|mail)\b/i.test(text)) {
     return { kind: "draft", statusMessage: "Ich bereite einen Entwurf vor." };
   }
+  if (
+    /\b(?:schick(?:e|en)?|send(?:e|en)?|versend(?:e|en)?)\b/i.test(text) &&
+    /\b(?:e-?mail|mail)\b/i.test(text) &&
+    !/^(ja[,.]?\s+)?(senden|schick(e)? (sie|die mail|es)|mail raus)\.?$/i.test(text)
+  ) {
+    return { kind: "draft", statusMessage: "Ich bereite einen Entwurf vor." };
+  }
   const from = text.match(/\b(?:von|hat)\s+([A-ZÄÖÜ][\wäöüÄÖÜß.-]+(?:\s+[A-ZÄÖÜ][\wäöüÄÖÜß.-]+)?)/);
   if (from && /\b(?:e-?mails?|mails?|geschrieben|antwort)\b/i.test(text)) {
     return { kind: "search", query: from[1], statusMessage: "Ich suche den Verlauf." };

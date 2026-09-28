@@ -8,6 +8,11 @@ import { classifyMail, detectPriority, isConsumerDomain } from "@/lib/mail/class
 import { inspectMailContent } from "@/lib/mail/guard";
 import { detectMailIntent } from "@/lib/mail/intent";
 import {
+  extractAccountChoice,
+  formatDraftForApproval,
+  parseMailDraftSpec,
+} from "@/lib/mail/draft-spec";
+import {
   accountEmail,
   assertMailScriptSafe,
   deliveryFromVerification,
@@ -109,9 +114,30 @@ export function runMailUnitTests(): string[] {
       detectMailIntent("Schreib einen Mailentwurf von info@rankpilot.de an joachimschmitt2012@googlemail.com. Betreff: NOVA Testmail.").kind,
       "draft",
     );
+    assert.equal(detectMailIntent("Schick eine Mail an test@example.com mit Inhalt: Hallo.").kind, "draft");
     assert.equal(detectMailIntent("Ändere den Entwurf.").kind, "draft");
     assert.equal(detectMailIntent("Ja, senden.").kind, "send-confirm");
     assert.equal(detectMailIntent("Wie spät ist es?").kind, "none");
+  });
+
+  check("draft spec parses account body and approval text", () => {
+    const spec = parseMailDraftSpec(
+      "Schreib eine Mail von a@x.de an b@y.de. Betreff: Termin. Inhalt: Bitte morgen um 10 Uhr anrufen.",
+    );
+    assert.equal(spec.from, "a@x.de");
+    assert.equal(spec.to, "b@y.de");
+    assert.equal(spec.subject, "Termin");
+    assert.match(spec.bodyHint ?? "", /morgen um 10/i);
+    assert.equal(extractAccountChoice("von a@x.de"), "a@x.de");
+    const shown = formatDraftForApproval({
+      from: "a@x.de",
+      to: "b@y.de",
+      subject: "Termin",
+      body: "Bitte anrufen.\n\n---\nDies ist ein NOVA-Entwurf. Es wurde keine E-Mail versendet.",
+    });
+    assert.match(shown, /Absender: a@x.de/);
+    assert.match(shown, /Bitte anrufen/);
+    assert.equal(shown.includes("keine E-Mail versendet"), false);
   });
 
   check("apple mail scripts stay on apple events", () => {

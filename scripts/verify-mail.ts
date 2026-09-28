@@ -165,11 +165,19 @@ async function main() {
   const attachment = await prisma.mailAttachment.findFirst({ where: { organizationId: orgA.id, filename: "angebot.txt" } });
   assert(attachment?.status === "indexed" && attachment.knowledgeSourceId, "Anhang nicht im Knowledge");
 
-  const draft = await prepareMailDraft({
+  const asked = await prepareMailDraft({
     organizationId: orgA.id,
     userRequest: "Antworte, dass wir nächste Woche telefonieren können.",
   });
+  assert(asked.needsAccount && /von welchem mailkonto/i.test(asked.reply), asked.reply);
+  assert(!asked.approvalId, "Absenderfrage darf noch keine Freigabe öffnen");
+  const draft = await prepareMailDraft({
+    organizationId: orgA.id,
+    userRequest: "von joachim@example.com",
+  });
   assert(draft.ok && draft.approvalId, "Entwurf ohne Freigabe");
+  assert(/Absender: joachim@example.com/i.test(draft.reply), draft.reply);
+  assert(/nächste Woche telefonieren/i.test(draft.reply), draft.reply);
   const unsent = await deliverApprovedDraft({ organizationId: orgA.id, communicationId: draft.communicationId!, approved: false });
   assert(unsent.status === "WAITING_FOR_APPROVAL" && unsent.executed === false, "Versand ohne Freigabe");
   const communication = await prisma.communication.findFirst({ where: { id: draft.communicationId!, organizationId: orgA.id } });

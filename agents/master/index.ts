@@ -607,6 +607,13 @@ export async function runMaster(input: {
   if (dialog.kind !== "social" && mailIntent.kind !== "none") {
     return runMailMasterPath(input, mailIntent.statusMessage);
   }
+  if (dialog.kind !== "social") {
+    const { hasPendingMailDraft } = await import("@/services/mail/pending-draft");
+    const { looksLikeAccountPick } = await import("@/lib/mail/draft-spec");
+    if ((await hasPendingMailDraft(input.organizationId)) || looksLikeAccountPick(input.userRequest)) {
+      return runMailMasterPath(input, "Ich setze den Mailentwurf fort.");
+    }
+  }
 
   if (dialog.kind !== "social" && detectCalendarIntent(input.userRequest)) {
     return runLocalMasterPath(input, "Ich schaue in den Kalender.", "calendar", "calendar", {
