@@ -631,6 +631,41 @@ export async function runMaster(input: {
 
   const codingIntent = detectCodingIntent(input.userRequest);
   if (dialog.kind !== "social" && codingIntent.kind !== "none") {
+    const pathHint =
+      input.userRequest.match(/(?:\/Users\/[^\s]+|\/Volumes\/[^\s]+|\/tmp\/[^\s]+)/)?.[0] ||
+      input.userRequest.match(/\bPfad\s*[:=]\s*(\S+)/i)?.[1] ||
+      null;
+    if (!pathHint) {
+      const { startActiveWorkFromIntent } = await import("@/services/work/continue");
+      const started = await startActiveWorkFromIntent({
+        organizationId: input.organizationId,
+        conversationId: input.conversationId,
+        domain: "coding",
+        goal: input.userRequest.slice(0, 120),
+        brief: input.userRequest,
+        slots: { task: input.userRequest },
+      });
+      await emit(input.onEvent, { type: "status", orbState: started.orbState, statusMessage: started.statusMessage });
+      await emit(input.onEvent, { type: "delta", delta: started.reply });
+      rememberConversation({
+        organizationId: input.organizationId,
+        conversationId: input.conversationId,
+        userRequest: input.userRequest,
+        reply: started.reply,
+        domain: "coding",
+      });
+      return {
+        jobId: "",
+        status: "completed",
+        orbState: started.orbState,
+        statusMessage: started.statusMessage,
+        reply: started.reply,
+        mock: false,
+        providerMode: "fallback",
+        providerId: "active-work",
+        model: "nova-active-work",
+      };
+    }
     return runCodingMasterPath(input, codingIntent.statusMessage);
   }
 

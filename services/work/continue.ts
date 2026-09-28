@@ -222,25 +222,60 @@ async function executeReadyWork(input: {
     });
   }
 
-  if (input.work.domain === "computer" || input.work.domain === "coding") {
-    const goal = input.work.slots.goal || input.work.slots.task || input.work.goal;
+  if (input.work.domain === "computer") {
+    const goal = input.work.slots.goal || input.work.goal;
     await setActiveWorkStatus({
       organizationId: input.organizationId,
       workId: input.work.id,
       status: "clarifying",
-      lastQuestion:
-        input.work.domain === "coding"
-          ? "Welchen konkreten Coding-Schritt und welchen Projektpfad soll ich nehmen?"
-          : "Welchen konkreten Mac-Schritt soll ich ausführen? (App öffnen, Datei suchen, klicken, Screenshot, …)",
+      lastQuestion: "Welchen konkreten Mac-Schritt soll ich ausführen? (App öffnen, Datei suchen, klicken, Screenshot, …)",
     });
     return {
       handled: true,
-      reply:
-        input.work.domain === "coding"
-          ? `Ich habe den Coding-Auftrag „${goal}“ gemerkt. Nenne bitte den Projektpfad und den genauen Umbau.`
-          : `Ich habe den Mac-Auftrag „${goal}“ gemerkt. Sag mir den nächsten konkreten Schritt (z. B. „öffne TextEdit“ oder „Screenshot“).`,
+      reply: `Ich habe den Mac-Auftrag „${goal}“ gemerkt. Sag mir den nächsten konkreten Schritt (z. B. „öffne TextEdit“ oder „Screenshot“).`,
       statusMessage: "Nächster Schritt fehlt.",
       orbState: "DONE",
+      work: input.work,
+    };
+  }
+
+  if (input.work.domain === "coding") {
+    const pathSlot = input.work.slots.path?.trim();
+    const task = input.work.slots.task || input.work.goal;
+    if (!pathSlot) {
+      await setActiveWorkStatus({
+        organizationId: input.organizationId,
+        workId: input.work.id,
+        status: "clarifying",
+        lastQuestion: "In welchem Projektpfad soll ich den Coding-Auftrag ausführen?",
+      });
+      return {
+        handled: true,
+        reply: `Ich habe den Coding-Auftrag „${task}“ gemerkt. Nenne bitte den absoluten Projektpfad.`,
+        statusMessage: "Pfad fehlt.",
+        orbState: "DONE",
+        work: input.work,
+      };
+    }
+    const { runCodingAgent } = await import("@/agents/coding");
+    const coding = await runCodingAgent({
+      organizationId: input.organizationId,
+      userRequest: `${task} (Pfad: ${pathSlot})`,
+      workspacePath: pathSlot,
+    });
+    const verified = coding.verified === true || coding.status === "VERIFIED";
+    await setActiveWorkStatus({
+      organizationId: input.organizationId,
+      workId: input.work.id,
+      status: verified ? "done" : "failed",
+      evidence: coding.reply || coding.summary,
+    });
+    return {
+      handled: true,
+      reply: coding.reply || coding.summary,
+      statusMessage: verified ? "Erledigt und geprüft." : coding.statusMessage || "Nicht verifiziert.",
+      orbState: verified ? "DONE" : "ERROR",
+      approvalId: coding.approvalId,
       work: input.work,
     };
   }
