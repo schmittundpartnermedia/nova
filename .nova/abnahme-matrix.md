@@ -1,4 +1,7 @@
-# Abnahme
+# Abnahme (Punktchecks — nicht Vision)
+
+> Diese Matrix prüft **Einzelpunkte**. Sie ist **nicht** die Vision-Abnahme.
+> Vision = komplette Ketten in `.nova/ketten-abnahme.md`.
 
 | 01 Text eingeben und Antwort sehen | FUNKTIONAL UND REAL VERIFIZIERT |
 | 02 warum nicht? | FUNKTIONAL UND REAL VERIFIZIERT |

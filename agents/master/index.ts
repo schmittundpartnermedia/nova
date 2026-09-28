@@ -478,14 +478,59 @@ export async function runMaster(input: {
     }
   }
 
+  // ActiveWork zuerst: offene Auftragsketten nicht durch Focus-Continue zerbrechen.
+  {
+    const { loadOpenActiveWork } = await import("@/services/work/active");
+    const { continueActiveWork } = await import("@/services/work/continue");
+    const openWork = await loadOpenActiveWork({
+      organizationId: input.organizationId,
+      conversationId: input.conversationId,
+    });
+    if (openWork && !utteranceOpensWork(input.userRequest)) {
+      const continued = await continueActiveWork({
+        organizationId: input.organizationId,
+        conversationId: input.conversationId,
+        userRequest: input.userRequest,
+      });
+      if (continued?.handled) {
+        await emit(input.onEvent, { type: "status", orbState: continued.orbState, statusMessage: continued.statusMessage });
+        await emit(input.onEvent, { type: "delta", delta: continued.reply });
+        rememberConversation({
+          organizationId: input.organizationId,
+          conversationId: input.conversationId,
+          userRequest: input.userRequest,
+          reply: continued.reply,
+          domain: continued.work?.domain,
+        });
+        return {
+          jobId: "",
+          status: continued.orbState === "ERROR" ? "failed" : continued.orbState === "WAITING_FOR_APPROVAL" ? "waiting_for_approval" : "completed",
+          orbState: continued.orbState,
+          statusMessage: continued.statusMessage,
+          reply: continued.reply,
+          approvalId: continued.approvalId,
+          actionType: continued.actionType,
+          mock: false,
+          providerMode: "fallback",
+          providerId: "active-work",
+          model: "nova-active-work",
+        };
+      }
+    }
+  }
+
   const conversationMove = classifyConversationMove(input.userRequest);
   if (input.conversationId && conversationMove === "return") {
     const frame = await popDialogFocus(input.conversationId);
     if (frame) return answerBoundToFrame(input, frame, "return");
   }
   if (input.conversationId && conversationMove === "continue" && !utteranceOpensWork(input.userRequest)) {
-    const focus = await loadDialogFocus(input.conversationId);
-    if (focus.current) return answerBoundToFrame(input, focus.current, "continue");
+    // Offenes ActiveWork hat Vorrang vor reinem Text-Continue.
+    const { loadOpenActiveWork } = await import("@/services/work/active");
+    if (!(await loadOpenActiveWork({ organizationId: input.organizationId, conversationId: input.conversationId }))) {
+      const focus = await loadDialogFocus(input.conversationId);
+      if (focus.current) return answerBoundToFrame(input, focus.current, "continue");
+    }
   }
 
   const dialog = detectDialogMove(input.userRequest);
@@ -604,6 +649,51 @@ export async function runMaster(input: {
   }
 
   const mailIntent = detectMailIntent(input.userRequest);
+  if (dialog.kind !== "social" && mailIntent.kind === "draft") {
+    const { startActiveWorkFromIntent } = await import("@/services/work/continue");
+    const { parseMailDraftSpec } = await import("@/lib/mail/draft-spec");
+    const spec = parseMailDraftSpec(input.userRequest);
+    const slots: Record<string, string> = {};
+    if (spec.from) slots.from = spec.from;
+    if (spec.to) slots.to = spec.to;
+    if (spec.subject) slots.subject = spec.subject;
+    if (spec.bodyHint) slots.body = spec.bodyHint;
+    const started = await startActiveWorkFromIntent({
+      organizationId: input.organizationId,
+      conversationId: input.conversationId,
+      domain: "mail",
+      goal: spec.subject || "Mailentwurf",
+      brief: input.userRequest,
+      slots,
+    });
+    await emit(input.onEvent, { type: "status", orbState: started.orbState, statusMessage: started.statusMessage });
+    await emit(input.onEvent, { type: "delta", delta: started.reply });
+    rememberConversation({
+      organizationId: input.organizationId,
+      conversationId: input.conversationId,
+      userRequest: input.userRequest,
+      reply: started.reply,
+      domain: "mail",
+    });
+    return {
+      jobId: "",
+      status:
+        started.orbState === "ERROR"
+          ? "failed"
+          : started.orbState === "WAITING_FOR_APPROVAL"
+            ? "waiting_for_approval"
+            : "completed",
+      orbState: started.orbState,
+      statusMessage: started.statusMessage,
+      reply: started.reply,
+      approvalId: started.approvalId,
+      actionType: started.actionType,
+      mock: false,
+      providerMode: "fallback",
+      providerId: "active-work",
+      model: "nova-active-work",
+    };
+  }
   if (dialog.kind !== "social" && mailIntent.kind !== "none") {
     return runMailMasterPath(input, mailIntent.statusMessage);
   }
@@ -616,6 +706,48 @@ export async function runMaster(input: {
   }
 
   if (dialog.kind !== "social" && detectCalendarIntent(input.userRequest)) {
+    const { parseWhen, guessTitle } = await import("@/lib/calendar/when");
+    const lower = input.userRequest.toLowerCase();
+    const isList =
+      /\b(list|übersicht|was steht|welche termine|zeige termine|stehen an)\b/i.test(lower) ||
+      (/\btermine?\b/i.test(lower) && !/\banleg|erstell|trag/i.test(lower));
+    const isCancel = /\b(absag|lösch|stornier)\b/i.test(lower);
+    if (!isList && !isCancel) {
+      const { startActiveWorkFromIntent } = await import("@/services/work/continue");
+      const when = parseWhen(input.userRequest);
+      const slots: Record<string, string> = {};
+      if (when) slots.when = input.userRequest;
+      const title = guessTitle(input.userRequest);
+      if (title && title.toLowerCase() !== "termin") slots.title = title;
+      const started = await startActiveWorkFromIntent({
+        organizationId: input.organizationId,
+        conversationId: input.conversationId,
+        domain: "calendar",
+        goal: title || "Termin anlegen",
+        brief: input.userRequest,
+        slots,
+      });
+      await emit(input.onEvent, { type: "status", orbState: started.orbState, statusMessage: started.statusMessage });
+      await emit(input.onEvent, { type: "delta", delta: started.reply });
+      rememberConversation({
+        organizationId: input.organizationId,
+        conversationId: input.conversationId,
+        userRequest: input.userRequest,
+        reply: started.reply,
+        domain: "calendar",
+      });
+      return {
+        jobId: "",
+        status: started.orbState === "ERROR" ? "failed" : "completed",
+        orbState: started.orbState,
+        statusMessage: started.statusMessage,
+        reply: started.reply,
+        mock: false,
+        providerMode: "fallback",
+        providerId: "active-work",
+        model: "nova-active-work",
+      };
+    }
     return runLocalMasterPath(input, "Ich schaue in den Kalender.", "calendar", "calendar", {
       userRequest: input.userRequest,
     });
@@ -640,12 +772,36 @@ export async function runMaster(input: {
     return runLocalMasterPath(input, "Ich schaue in die Tickets.", "task", "list-tasks", { list: true });
   }
   if (dialog.kind !== "social" && ticketIntent === "create") {
-    return runLocalMasterPath(input, "Ich lege das Ticket an.", "task", "create-task", {
-      title: guessTicketTitle(input.userRequest),
-      description: input.userRequest,
-      dueDays: 1,
-      ticket: true,
+    const { startActiveWorkFromIntent } = await import("@/services/work/continue");
+    const title = guessTicketTitle(input.userRequest);
+    const started = await startActiveWorkFromIntent({
+      organizationId: input.organizationId,
+      conversationId: input.conversationId,
+      domain: "ticket",
+      goal: title || "Ticket anlegen",
+      brief: input.userRequest,
+      slots: title ? { title, description: input.userRequest } : {},
     });
+    await emit(input.onEvent, { type: "status", orbState: started.orbState, statusMessage: started.statusMessage });
+    await emit(input.onEvent, { type: "delta", delta: started.reply });
+    rememberConversation({
+      organizationId: input.organizationId,
+      conversationId: input.conversationId,
+      userRequest: input.userRequest,
+      reply: started.reply,
+      domain: "ticket",
+    });
+    return {
+      jobId: "",
+      status: started.orbState === "ERROR" ? "failed" : "completed",
+      orbState: started.orbState,
+      statusMessage: started.statusMessage,
+      reply: started.reply,
+      mock: false,
+      providerMode: "fallback",
+      providerId: "active-work",
+      model: "nova-active-work",
+    };
   }
   if (dialog.kind !== "social" && detectWatchIntent(input.userRequest)) {
     return runLocalMasterPath(input, "Ich schaue, was ansteht.", "watch", "watch", {
@@ -657,10 +813,35 @@ export async function runMaster(input: {
     return runLocalMasterPath(input, "Ich schaue in die Projekte.", "project", "list", { list: true });
   }
   if (dialog.kind !== "social" && projectIntent.kind === "create") {
-    return runLocalMasterPath(input, "Ich lege das Projekt an.", "project", "create", {
-      create: true,
-      name: projectIntent.name,
+    const { startActiveWorkFromIntent } = await import("@/services/work/continue");
+    const started = await startActiveWorkFromIntent({
+      organizationId: input.organizationId,
+      conversationId: input.conversationId,
+      domain: "project",
+      goal: projectIntent.name || "Projekt anlegen",
+      brief: input.userRequest,
+      slots: projectIntent.name ? { name: projectIntent.name } : {},
     });
+    await emit(input.onEvent, { type: "status", orbState: started.orbState, statusMessage: started.statusMessage });
+    await emit(input.onEvent, { type: "delta", delta: started.reply });
+    rememberConversation({
+      organizationId: input.organizationId,
+      conversationId: input.conversationId,
+      userRequest: input.userRequest,
+      reply: started.reply,
+      domain: "project",
+    });
+    return {
+      jobId: "",
+      status: started.orbState === "ERROR" ? "failed" : "completed",
+      orbState: started.orbState,
+      statusMessage: started.statusMessage,
+      reply: started.reply,
+      mock: false,
+      providerMode: "fallback",
+      providerId: "active-work",
+      model: "nova-active-work",
+    };
   }
   if (dialog.kind !== "social" && projectIntent.kind === "status") {
     return runLocalMasterPath(input, "Ich schaue den Projektstatus an.", "project", "load-context", {

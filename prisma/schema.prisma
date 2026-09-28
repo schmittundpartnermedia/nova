@@ -60,6 +60,7 @@ model Organization {
   workItems         WorkItem[]
   workEffects       WorkEffect[]
   developmentOrders DevelopmentOrder[]
+  activeWorks       ActiveWork[]
 
   @@map("organizations")
 }
@@ -515,6 +516,32 @@ model ApprovalPolicy {
   @@index([organizationId])
   @@map("approval_policies")
 }
+
+
+model ActiveWork {
+  id               String    @id @default(cuid())
+  organizationId   String    @map("organization_id")
+  conversationId   String?   @map("conversation_id")
+  domain           String
+  goal             String
+  brief            String
+  slots            String    @default("{}")
+  missingSlots     String    @default("[]") @map("missing_slots")
+  status           String    @default("clarifying")
+  lastQuestion     String?   @map("last_question")
+  evidence         String? 
+  linkedIds        String    @default("{}") @map("linked_ids")
+  createdAt        DateTime  @default(now()) @map("created_at")
+  updatedAt        DateTime  @updatedAt @map("updated_at")
+  completedAt      DateTime? @map("completed_at")
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, status])
+  @@index([organizationId, conversationId])
+  @@map("active_works")
+}
+
 
 model Conversation {
   id             String   @id @default(cuid())

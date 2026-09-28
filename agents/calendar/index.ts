@@ -108,7 +108,9 @@ export const calendarAgent: NovaAgent = {
       };
     }
 
-    const when = parseWhen(request);
+    const explicitTitle = typeof input.title === "string" ? input.title.trim() : "";
+    const explicitWhen = typeof input.when === "string" ? input.when.trim() : "";
+    const when = parseWhen(explicitWhen || request);
     if (!when) {
       return {
         ok: false,
@@ -116,7 +118,7 @@ export const calendarAgent: NovaAgent = {
         data: { executed: false, action: "create" },
       };
     }
-    const title = guessTitle(request);
+    const title = explicitTitle || guessTitle(request);
     const created = await calendar.create(context.organizationId, {
       title,
       startsAt: when.startsAt.toISOString(),
