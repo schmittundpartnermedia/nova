@@ -1809,6 +1809,16 @@
   border: 0;
 }
 
+/* AX-sichtbar, optisch unsichtbar — clip:rect nimmt den Namen sonst aus dem Accessibility-Tree. */
+.nova-ax-label {
+  position: absolute;
+  left: -10000px;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
 @media (max-width: 800px) {
   .nova-avatar-lab-stage,
   .nova-avatar-lab-grid {

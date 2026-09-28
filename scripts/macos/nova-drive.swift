@@ -184,7 +184,9 @@ if command == "section" {
 func clickButton(_ win: AXUIElement, titles: [String]) -> String? {
   for title in titles {
     if let btn = find(win, where: {
-      str($0, kAXRoleAttribute as String) == "AXButton" &&
+      let role = str($0, kAXRoleAttribute as String)
+      let isClickable = role == "AXButton" || role == "AXCheckBox" || role == "AXToggle"
+      return isClickable &&
         (str($0, kAXTitleAttribute as String) == title ||
           str($0, kAXDescriptionAttribute as String) == title ||
           str($0, "AXIdentifier") == title)

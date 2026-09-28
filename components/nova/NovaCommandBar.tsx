@@ -152,10 +152,10 @@ export function NovaCommandBar({
           </button>
           <button
             type="button"
+            id="nova-mic-btn"
             onClick={onMic}
             className={micClass}
             style={{ ["--silence-progress" as string]: String(silenceProgress) }}
-            aria-pressed={sessionActive}
             aria-label={
               sessionActive
                 ? "Voice Session beenden"
@@ -165,14 +165,18 @@ export function NovaCommandBar({
             }
             title={
               sessionActive
-                ? "Voice Session aktiv — klicken zum Beenden"
+                ? "Voice Session beenden"
                 : voiceSupported
-                  ? "Mikrofon"
+                  ? "Voice Session starten"
                   : "Spracheingabe vorbereitet"
             }
           >
-            <span className="sr-only">
-              {sessionActive ? "Voice Session beenden" : voiceSupported ? "Voice Session starten" : "Spracheingabe vorbereitet"}
+            <span className="nova-ax-label">
+              {sessionActive
+                ? "Voice Session beenden"
+                : voiceSupported
+                  ? "Voice Session starten"
+                  : "Spracheingabe vorbereitet"}
             </span>
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
               <path
