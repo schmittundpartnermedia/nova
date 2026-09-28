@@ -55,7 +55,10 @@ export const DOMAIN_SLOTS: Record<ActiveWorkDomain, SlotDef[]> = {
     { key: "path", question: "In welchem Projektpfad soll ich arbeiten?", required: true },
     { key: "task", question: "Was genau soll ich im Code umsetzen?", required: true },
   ],
-  knowledge: [{ key: "query", question: "Wonach soll ich im Wissen suchen?", required: true }],
+  knowledge: [
+    { key: "query", question: "Wonach soll ich im Wissen suchen?", required: false },
+    { key: "path", question: "Welchen Ordner oder welche Datei soll ich einlesen?", required: false },
+  ],
   research: [{ key: "query", question: "Was soll ich recherchieren?", required: true }],
   generic: [{ key: "goal", question: "Was genau soll ich erledigen?", required: true }],
 };

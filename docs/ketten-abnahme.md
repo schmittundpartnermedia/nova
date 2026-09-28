@@ -15,5 +15,7 @@ Komplette Kette in NOVA.app: Verstehen → Rückfragen → ActiveWork → Ausfü
 | Coding Path-Slot | TEIL — verdrahtet |
 | Computer generic → Plan | TEIL — App/Screenshot/Datei |
 | Computer Mehrschritt ActiveWork | TEIL — Schritt→prüfen→weiter/fertig (Smoke: TextEdit) |
-| Stimme / Watch / Recherche hart | OFFEN |
+| Wissen Import Pfad→Einlesen | TEIL — ActiveWork + Smoke |
+| Recherche ActiveWork + Verify | TEIL — ohne Connector klar fehlgeschlagen |
+| Stimme / Watch E2E | OFFEN |
 | Vision 100% | NOCH NICHT |

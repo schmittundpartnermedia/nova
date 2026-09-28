@@ -495,7 +495,9 @@ export async function runMaster(input: {
         (openWork.domain === "project" && detectProjectIntent(input.userRequest).kind !== "none") ||
         (openWork.domain === "contact" && detectContactIntent(input.userRequest)) ||
         (openWork.domain === "computer" && detectComputerIntent(input.userRequest).kind !== "none") ||
-        (openWork.domain === "coding" && detectCodingIntent(input.userRequest).kind !== "none");
+        (openWork.domain === "coding" && detectCodingIntent(input.userRequest).kind !== "none") ||
+        (openWork.domain === "knowledge" && detectKnowledgeIntent(input.userRequest).kind !== "none") ||
+        (openWork.domain === "research" && needsLiveResearch(input.userRequest));
       const mustContinue =
         openWork.status === "clarifying" ||
         openWork.status === "waiting_approval" ||
@@ -728,11 +730,102 @@ export async function runMaster(input: {
   }
 
   if (dialog.kind !== "social" && knowledgeIntent.kind === "import") {
+    if (!knowledgeIntent.paths.length) {
+      const { startActiveWorkFromIntent } = await import("@/services/work/continue");
+      const started = await startActiveWorkFromIntent({
+        organizationId: input.organizationId,
+        conversationId: input.conversationId,
+        domain: "knowledge",
+        goal: "Unterlagen einlesen",
+        brief: input.userRequest,
+        slots: {},
+      });
+      await emit(input.onEvent, { type: "status", orbState: started.orbState, statusMessage: started.statusMessage });
+      await emit(input.onEvent, { type: "delta", delta: started.reply });
+      rememberConversation({
+        organizationId: input.organizationId,
+        conversationId: input.conversationId,
+        userRequest: input.userRequest,
+        reply: started.reply,
+        domain: "knowledge",
+      });
+      return {
+        jobId: "",
+        status: "completed",
+        orbState: started.orbState,
+        statusMessage: started.statusMessage,
+        reply: started.reply,
+        mock: false,
+        providerMode: "fallback",
+        providerId: "active-work",
+        model: "nova-active-work",
+      };
+    }
     return runKnowledgeMasterPath(input, knowledgeIntent.statusMessage);
   }
 
   if (dialog.kind !== "social" && knowledgeIntent.kind === "query") {
-    return runKnowledgeQueryPath(input, knowledgeIntent.statusMessage);
+    const { startActiveWorkFromIntent } = await import("@/services/work/continue");
+    const started = await startActiveWorkFromIntent({
+      organizationId: input.organizationId,
+      conversationId: input.conversationId,
+      domain: "knowledge",
+      goal: input.userRequest.slice(0, 120),
+      brief: input.userRequest,
+      slots: { query: input.userRequest },
+    });
+    await emit(input.onEvent, { type: "status", orbState: started.orbState, statusMessage: started.statusMessage });
+    await emit(input.onEvent, { type: "delta", delta: started.reply });
+    rememberConversation({
+      organizationId: input.organizationId,
+      conversationId: input.conversationId,
+      userRequest: input.userRequest,
+      reply: started.reply,
+      domain: "knowledge",
+    });
+    return {
+      jobId: "",
+      status: started.orbState === "ERROR" ? "failed" : "completed",
+      orbState: started.orbState,
+      statusMessage: started.statusMessage,
+      reply: started.reply,
+      mock: false,
+      providerMode: "fallback",
+      providerId: "active-work",
+      model: "nova-active-work",
+    };
+  }
+
+  if (dialog.kind !== "social" && needsLiveResearch(input.userRequest)) {
+    const { startActiveWorkFromIntent } = await import("@/services/work/continue");
+    const started = await startActiveWorkFromIntent({
+      organizationId: input.organizationId,
+      conversationId: input.conversationId,
+      domain: "research",
+      goal: input.userRequest.slice(0, 120),
+      brief: input.userRequest,
+      slots: { query: input.userRequest },
+    });
+    await emit(input.onEvent, { type: "status", orbState: started.orbState, statusMessage: started.statusMessage });
+    await emit(input.onEvent, { type: "delta", delta: started.reply });
+    rememberConversation({
+      organizationId: input.organizationId,
+      conversationId: input.conversationId,
+      userRequest: input.userRequest,
+      reply: started.reply,
+      domain: "research",
+    });
+    return {
+      jobId: "",
+      status: started.orbState === "ERROR" ? "failed" : "completed",
+      orbState: started.orbState,
+      statusMessage: started.statusMessage,
+      reply: started.reply,
+      mock: false,
+      providerMode: "fallback",
+      providerId: "active-work",
+      model: "nova-active-work",
+    };
   }
 
   const mailIntent = detectMailIntent(input.userRequest);

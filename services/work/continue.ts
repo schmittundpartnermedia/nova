@@ -92,6 +92,30 @@ export async function continueActiveWork(input: {
     });
   }
 
+  // Knowledge-Import: Pfad ist optional im Schema, wird aber dialogisch nachgefragt.
+  if (
+    work.status === "clarifying" &&
+    work.domain === "knowledge" &&
+    !work.slots.path?.trim() &&
+    /Pfad|Ordner|Datei/i.test(work.lastQuestion ?? "")
+  ) {
+    const pathValue = coercePathAnswer(input.userRequest);
+    if (pathValue) {
+      const updated = await updateActiveWorkSlots({
+        organizationId: input.organizationId,
+        workId: work.id,
+        slots: { path: pathValue },
+        brief: `${work.brief}\n${input.userRequest}`.trim(),
+      });
+      return executeReadyWork({
+        organizationId: input.organizationId,
+        conversationId: input.conversationId,
+        work: updated,
+        userRequest: input.userRequest,
+      });
+    }
+  }
+
   if (work.status === "ready" || work.status === "clarifying") {
     return executeReadyWork({
       organizationId: input.organizationId,
@@ -345,6 +369,185 @@ ${stepNote} Nächster Schritt oder sag „fertig“.`,
     };
   }
 
+  if (input.work.domain === "knowledge") {
+    const pathFromUtterance = coercePathAnswer(input.userRequest);
+    let pathSlot = input.work.slots.path?.trim() || pathFromUtterance || "";
+    if (pathFromUtterance && !input.work.slots.path?.trim()) {
+      input.work = await updateActiveWorkSlots({
+        organizationId: input.organizationId,
+        workId: input.work.id,
+        slots: { path: pathFromUtterance },
+      });
+      pathSlot = pathFromUtterance;
+    }
+    const query = input.work.slots.query?.trim() || input.work.goal;
+    if (pathSlot || /\b(importier|lern|lies|lese|unterlagen|ordner|datei)\b/i.test(input.work.brief)) {
+      if (!pathSlot) {
+        await setActiveWorkStatus({
+          organizationId: input.organizationId,
+          workId: input.work.id,
+          status: "clarifying",
+          lastQuestion: "Welchen Ordner oder welche Datei soll ich einlesen?",
+        });
+        return {
+          handled: true,
+          reply: "Zum Einlesen brauche ich einen Pfad (Ordner oder Datei). Nenne ihn bitte absolut, z. B. `/Users/…/Dokument.pdf`.",
+          statusMessage: "Pfad fehlt.",
+          orbState: "DONE",
+          work: input.work,
+        };
+      }
+      const { runKnowledgeAgent } = await import("@/agents/knowledge");
+      let result;
+      try {
+        result = await runKnowledgeAgent({
+          organizationId: input.organizationId,
+          userRequest: `Lies die Unterlagen unter ${pathSlot}`,
+          paths: [pathSlot],
+        });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "Import fehlgeschlagen.";
+        await setActiveWorkStatus({
+          organizationId: input.organizationId,
+          workId: input.work.id,
+          status: "failed",
+          evidence: message,
+        });
+        return {
+          handled: true,
+          reply: `Einlesen nicht möglich: ${message}`,
+          statusMessage: "Nicht erledigt.",
+          orbState: "ERROR",
+          work: input.work,
+        };
+      }
+      const ok = Boolean(result.ok) && Boolean(result.reply) && !/fehlgeschlagen|abgebrochen/i.test(result.statusMessage ?? "");
+      await setActiveWorkStatus({
+        organizationId: input.organizationId,
+        workId: input.work.id,
+        status: ok ? "done" : "failed",
+        evidence: result.reply,
+      });
+      return {
+        handled: true,
+        reply: result.reply,
+        statusMessage: ok ? "Erledigt und geprüft." : result.statusMessage || "Nicht erledigt.",
+        orbState: ok ? "DONE" : "ERROR",
+        work: input.work,
+      };
+    }
+    const { runKnowledgeAgent } = await import("@/agents/knowledge");
+    const result = await runKnowledgeAgent({
+      organizationId: input.organizationId,
+      userRequest: query,
+      query,
+    });
+    const hasHit = Boolean(result.reply) && !/nichts gefunden|keine treffer|nicht gefunden/i.test(result.reply);
+    await setActiveWorkStatus({
+      organizationId: input.organizationId,
+      workId: input.work.id,
+      status: hasHit ? "done" : "clarifying",
+      evidence: result.reply,
+      lastQuestion: hasHit ? null : "Wonach genau soll ich noch suchen?",
+    });
+    return {
+      handled: true,
+      reply: hasHit
+        ? result.reply
+        : `${result.reply}\n\nWenn du die Frage enger formulierst oder einen Dateinamen nennst, suche ich weiter.`,
+      statusMessage: hasHit ? "Erledigt und geprüft." : "Keine Treffer — Kette offen.",
+      orbState: "DONE",
+      work: input.work,
+    };
+  }
+
+  if (input.work.domain === "research") {
+    const query = input.work.slots.query?.trim() || input.work.goal;
+    if (!query || query.length < 4) {
+      await setActiveWorkStatus({
+        organizationId: input.organizationId,
+        workId: input.work.id,
+        status: "clarifying",
+        lastQuestion: "Was genau soll ich recherchieren?",
+      });
+      return {
+        handled: true,
+        reply: "Wozu soll ich im Web nachschauen? Formuliere die Frage bitte konkret.",
+        statusMessage: "Frage fehlt.",
+        orbState: "DONE",
+        work: input.work,
+      };
+    }
+    const { createJob, updateJobStatus } = await import("@/services/jobs");
+    const { researchAgent } = await import("@/agents/research");
+    const job = await createJob({
+      organizationId: input.organizationId,
+      userRequest: query,
+      goal: input.work.goal || query,
+    });
+    await updateJobStatus(input.organizationId, job.id, "running", { startedAt: new Date() });
+    let result;
+    try {
+      result = await researchAgent.run(
+        { query },
+        {
+          organizationId: input.organizationId,
+          jobId: job.id,
+          userRequest: query,
+          goal: query,
+        },
+      );
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Recherche fehlgeschlagen.";
+      await updateJobStatus(input.organizationId, job.id, "failed", { completedAt: new Date() });
+      await setActiveWorkStatus({
+        organizationId: input.organizationId,
+        workId: input.work.id,
+        status: "failed",
+        evidence: message,
+      });
+      return {
+        handled: true,
+        reply: `Recherche nicht möglich: ${message}`,
+        statusMessage: "Nicht erledigt.",
+        orbState: "ERROR",
+        work: input.work,
+      };
+    }
+    const data = (result.data ?? {}) as {
+      answer?: string;
+      searchConnected?: boolean;
+      invented?: boolean;
+      sourceIds?: string[];
+    };
+    const answer = String(data.answer ?? result.summary ?? "").trim();
+    const blocked = data.searchConnected === false;
+    const invented = data.invented === true;
+    const ok = !blocked && !invented && Boolean(answer) && !/nicht zuverlässig prüfen/i.test(answer);
+    await updateJobStatus(input.organizationId, job.id, ok ? "completed" : "failed", {
+      completedAt: new Date(),
+    });
+    await setActiveWorkStatus({
+      organizationId: input.organizationId,
+      workId: input.work.id,
+      status: ok ? "done" : blocked ? "failed" : "clarifying",
+      evidence: answer || result.summary,
+      lastQuestion: ok || blocked ? null : "Wonach genau soll ich noch recherchieren?",
+      linkedIds: { jobId: job.id },
+    });
+    return {
+      handled: true,
+      reply: answer || result.summary,
+      statusMessage: ok
+        ? "Erledigt und geprüft."
+        : blocked
+          ? "Recherche nicht möglich — kein Search Connector."
+          : "Recherche unsicher — Kette offen.",
+      orbState: ok ? "DONE" : "ERROR",
+      work: input.work,
+    };
+  }
+
   if (input.work.domain === "coding") {
     const pathSlot = input.work.slots.path?.trim();
     const task = input.work.slots.task || input.work.goal;
@@ -399,6 +602,22 @@ ${stepNote} Nächster Schritt oder sag „fertig“.`,
     orbState: "ERROR",
     work: input.work,
   };
+}
+
+
+function coercePathAnswer(userRequest: string): string | null {
+  const text = userRequest.trim().replace(/^["'`]|["'`]$/g, "");
+  if (!text || /\n/.test(text)) return null;
+  // Freie Antwort auf Pfad-Frage: ganze Äußerung, auch mit Leerzeichen im Volume-Namen.
+  if (text.startsWith("/") || text.startsWith("~/") || text.startsWith("./") || /^[A-Za-z]:[\\/]/.test(text)) {
+    return text;
+  }
+  const match = /(?:`([^`]+)`|"([^"]+)"|'([^']+)')/.exec(text);
+  const quoted = (match?.[1] ?? match?.[2] ?? match?.[3] ?? "").trim();
+  if (quoted && (quoted.startsWith("/") || quoted.startsWith("~/") || quoted.startsWith("./") || /^[A-Za-z]:[\\/]/.test(quoted))) {
+    return quoted;
+  }
+  return null;
 }
 
 async function runLocalDomain(
