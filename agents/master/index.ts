@@ -1034,7 +1034,7 @@ ${input.userRequest}`,
       orbState:
         coding.status === "WAITING_FOR_APPROVAL"
           ? "WAITING_FOR_APPROVAL"
-          : coding.status === "FAILED"
+          : coding.status === "FAILED" || coding.status === "UNVERIFIED"
             ? "ERROR"
             : "DONE",
       statusMessage: coding.statusMessage,

@@ -1,16 +1,22 @@
 # Abnahme Rest-Report (Real-App)
 
-Stand: 2026-09-28, Verifikation in laufender NOVA.app.
+Stand: 2026-09-28 (Abschluss), Verifikation in NOVA.app + API.
 
-## Geschlossen in diesem Durchlauf
-- Coding/Cursor: statusLine-Blockade behoben; Intent Datei-Anlegen; Real `coding-sandbox/marker-app.txt` = `app-ok`, Session COMPLETED/VERIFIED
-- TextEdit öffnen: Real „TextEdit ist geöffnet.“
-- Resume: INTERRUPTED + `mach weiter` → VERIFIED; Fortsetzen-UI auch ohne offene Plan-Schritte
-- Mail-Freigabe-UI: Entwurf + Freigeben funktioniert; Versand ohne verbundenes Apple-Mail-Konto bewusst geblockt/fehlgeschlagen
-- Fehler-Pfad: Coding mit unerlaubtem Workspace liefert Fehlerantwort; ERROR-Orb wird nicht mehr von Voice überschrieben
+## Geschlossen
+- Coding/Cursor inkl. statusLine-Sanitize, Intent Datei-Anlegen, needsPath ohne Fake-„Neues Projekt“
+- Mail senden mit verbundenem Konto + Freigabe → SEND_VERIFIED
+- TextEdit öffnen; UI-Klick Ablage VERIFIED (ohne Bildschirmaufnahme-Abhängigkeit)
+- Löschen NOVA hart blockiert; Shell/Git-Status
+- Resume INTERRUPTED → mach weiter → VERIFIED
+- Fehler: orbState ERROR + Status „Pfad fehlt“
+- Sprache: Mic-Session Start/Stopp; Transcribe-API mit deutschem Audio OK
+- Automation/Mail/Mic Freigaben vom Benutzer erteilt
 
-## Benutzerfreigabe nötig (siehe Chat)
-- Automation TCC (Mail / AppleScript)
-- Apple Mail in NOVA verbinden
-- Mikrofon-TCC + echte Spracheingabe
-- Optional Bildschirmaufnahme
+## Optional
+- Bildschirmaufnahme nur für reine Screen-Caps (Screenshot-Capture funktioniert bereits über Helper)
+
+## Commits (Auszug)
+- Coding/Resume/Fehler-Orb/Mail-Entwurf ohne Konto
+- Mic AX + nova-drive CheckBox/Button
+- UI-Klick ohne Screen-Capture-Selbstprüfung
+- VERIFIED-Bug bei fehlgeschlagenen Computer-Schritten

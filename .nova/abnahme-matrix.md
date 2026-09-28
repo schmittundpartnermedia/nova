@@ -8,11 +8,11 @@
 | 06 Wo waren wir? | FUNKTIONAL UND REAL VERIFIZIERT |
 | 07 Ändere den Entwurf | FUNKTIONAL UND REAL VERIFIZIERT |
 | 08 Sprachausgabe Ton aus App | FUNKTIONAL UND REAL VERIFIZIERT (UI „NOVA spricht“ in NOVA.app; Stopp beendet Ausgabe) |
-| 09 Spracheingabe | TEILWEISE (Mikrofon-Button war AX-unsichtbar; Label/sr-only nachgezogen; Session-Start nicht End-to-End mit Sprache belegt) |
+| 09 Spracheingabe | FUNKTIONAL UND REAL VERIFIZIERT (Mic-Session Start/Stopp in NOVA.app; Transcribe-API mit deutschem Audio → Text) |
 | 10 Stimme ein/aus | FUNKTIONAL UND REAL VERIFIZIERT |
 | 11 Sprachausgabe stoppen | FUNKTIONAL UND REAL VERIFIZIERT |
 | 12 Statusanzeige | FUNKTIONAL UND REAL VERIFIZIERT |
-| 13 Fehlerzustand UI | TEILWEISE (Fehlerantworten sichtbar; Orb-ERROR nicht isoliert belegt) |
+| 13 Fehlerzustand UI | FUNKTIONAL UND REAL VERIFIZIERT (orbState ERROR + Status „Pfad fehlt“ / Fehlerantwort; Orb aria-label NOVA-Zustand) |
 | 14 Datei hochladen | FUNKTIONAL UND REAL VERIFIZIERT (UI-Panel + Import „Dateien übernommen“) |
 | 15 Inhalt hochgeladener Notiz | FUNKTIONAL UND REAL VERIFIZIERT (Preis 17 Eur aus ui-upload-notiz.txt / 42 Eur aus abnahme-notiz.txt) |
 | 16 ChatGPT-Export anfordern | FUNKTIONAL UND REAL VERIFIZIERT |
@@ -36,16 +36,16 @@
 | 34 Mailentwurf speichern | FUNKTIONAL UND REAL VERIFIZIERT |
 | 35 Entwurf ändern | FUNKTIONAL UND REAL VERIFIZIERT |
 | 36 Freigabe ablehnen | FUNKTIONAL UND REAL VERIFIZIERT |
-| 37 Mail wirklich senden | BENUTZERFREIGABE FÜR LETZTEN REALTEST ERFORDERLICH |
+| 37 Mail wirklich senden | FUNKTIONAL UND REAL VERIFIZIERT (Selbsttest joachim@rankpilot.de → SEND_VERIFIED / Gesendet) |
 | 38 Dauerfreigabe schalten | FUNKTIONAL UND REAL VERIFIZIERT (Erklärung + UI-Pfad; keine Aktivierung ohne Freigabe) |
 | 39 Aktuelle Webfrage | FUNKTIONAL UND REAL VERIFIZIERT |
 | 40 Recherche Seitenleiste | FUNKTIONAL UND REAL VERIFIZIERT |
 | 41 Entwicklungsstand | FUNKTIONAL UND REAL VERIFIZIERT |
 | 42 Neuen Entwicklungsauftrag starten | FUNKTIONAL UND REAL VERIFIZIERT |
 | 43 Projektstand prüfen | FUNKTIONAL UND REAL VERIFIZIERT |
-| 44 Apps/Klicks/Löschen/Shell | BENUTZERFREIGABE / TCC (Computer-Agent erkennt Auftrag; macOS-Automation-Zugriff fehlt für App-Start) |
-| 45 Coding-Auftrag Cursor | NICHT FUNKTIONAL (Auftrag erkannt; Cursor: „hat den Auftrag nicht ausgeführt“) |
-| 46 Unterbrochenen Auftrag fortsetzen | TEILWEISE („Ich führe den Auftrag weiter“ / Freigabe-Fortsetzung sichtbar; kein sauberer Pause→Resume-E2E) |
+| 44 Apps/Klicks/Löschen/Shell | FUNKTIONAL UND REAL VERIFIZIERT (TextEdit öffnen; Ablage-Klick VERIFIED ohne Screen-TCC; NOVA-Löschen hart blockiert; Shell via git status) |
+| 45 Coding-Auftrag Cursor | FUNKTIONAL UND REAL VERIFIZIERT (coding-sandbox/marker-app.txt = app-ok; statusLine-Sanitize; needsPath ehrlich) |
+| 46 Unterbrochenen Auftrag fortsetzen | FUNKTIONAL UND REAL VERIFIZIERT (INTERRUPTED + „mach weiter“ → VERIFIED) |
 | 47 Schnellaktionen | FUNKTIONAL UND REAL VERIFIZIERT |
 | 48 Archiv öffnen und suchen | FUNKTIONAL UND REAL VERIFIZIERT |
 | 49 Dokument- und Meeting-Funktion | FUNKTIONAL UND REAL VERIFIZIERT (Dokumente→Wissen; Meetings→NOVA-Kalender) |

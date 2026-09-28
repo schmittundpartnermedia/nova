@@ -124,12 +124,6 @@ export function planComputerTask(input: {
           purpose: `AppleScript in ${compiled.app}`,
           userCommissioned: true,
         },
-        {
-          tool: "screen",
-          payload: { action: "capture", persist: false },
-          purpose: "Selbstprüfung nach AppleScript",
-          userCommissioned: true,
-        },
       ];
     }
     case "quit_app": {
@@ -182,9 +176,9 @@ export function planComputerTask(input: {
           userCommissioned: true,
         });
         steps.push({
-          tool: "screen",
-          payload: { action: "capture", persist: false },
-          purpose: "Selbstprüfung nach UI-Eingabe",
+          tool: "accessibility",
+          payload: { action: "inspect", app: app || undefined, maxDepth: 2 },
+          purpose: "Selbstprüfung nach UI-Eingabe (Accessibility, ohne Bildschirmaufnahme)",
           userCommissioned: true,
         });
         return steps;
@@ -203,9 +197,9 @@ export function planComputerTask(input: {
           userCommissioned: true,
         });
         steps.push({
-          tool: "screen",
-          payload: { action: "capture", persist: false },
-          purpose: "Selbstprüfung nach UI-Klick",
+          tool: "accessibility",
+          payload: { action: "inspect", app: app || undefined, maxDepth: 2 },
+          purpose: "Selbstprüfung nach UI-Klick (Accessibility, ohne Bildschirmaufnahme)",
           userCommissioned: true,
         });
         return steps;

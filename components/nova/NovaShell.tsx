@@ -52,6 +52,7 @@ type WatchAlert = {
 function humanStatus(state: OrbState, text: string): string {
   if (state === "LISTENING") return text || "Zuhören";
   if (state === "THINKING") return text || "Ich denke nach …";
+  if (state === "ERROR") return text?.trim() ? text : "Fehler";
   if (state === "WORKING") {
     const cleaned = text
       .replace(/\b[\w.]*Agent[\w.]*\b/gi, "")

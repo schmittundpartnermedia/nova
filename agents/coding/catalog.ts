@@ -35,7 +35,20 @@ export async function resolveCodingProject(input: {
     };
   }
   const hint = input.projectHint ?? inferHint(input.userRequest);
-  const name = hint ? displayName(hint) : inferNewSiteName(input.userRequest) ?? "Neues Projekt";
+  const inferredName = inferNewSiteName(input.userRequest);
+  const name = hint ? displayName(hint) : inferredName ?? "Neues Projekt";
+
+  // Ohne Projekt-Hinweis und ohne „Website für X“ nicht still auf ein altes „Neues Projekt“ springen.
+  if (!hint && !inferredName && !input.createIfMissing) {
+    const explicit = extractExplicitPath(input.userRequest);
+    if (!explicit) {
+      return {
+        needsPath: true,
+        name,
+        reason: "Ich habe keinen lokalen Pfad für diesen Coding-Auftrag gefunden. Bitte nenne mir den Projektordner.",
+      };
+    }
+  }
 
   const existing = await findExisting(input.organizationId, hint, name);
   if (existing) return existing;

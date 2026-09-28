@@ -477,9 +477,9 @@ export async function runComputerAgent(input: {
             userCommissioned: true,
           });
           queue.push({
-            tool: "screen",
-            payload: { action: "capture", persist: false },
-            purpose: "Selbstprüfung nach UI-Klick",
+            tool: "accessibility",
+            payload: { action: "inspect", app: guessAppName(input.userRequest) || undefined, maxDepth: 2 },
+            purpose: "Selbstprüfung nach UI-Klick (Accessibility, ohne Bildschirmaufnahme)",
             userCommissioned: true,
           });
         }
@@ -594,13 +594,17 @@ export async function runComputerAgent(input: {
       }
     }
 
-    const verified = actions.length > 0 && actions.every((item) => item.success === false || item.verification?.verified);
-    const allVerifiedSuccess = actions.filter((item) => item.success).every((item) => item.verification?.verified);
-    const status: ComputerJobStatus = verified && allVerifiedSuccess && actions.some((item) => item.success)
-      ? "VERIFIED"
-      : actions.some((item) => item.success)
-        ? "EXECUTED"
-        : "FAILED";
+    const successful = actions.filter((item) => item.success);
+    const failed = actions.filter((item) => !item.success);
+    const allVerifiedSuccess =
+      successful.length > 0 && successful.every((item) => item.verification?.verified !== false);
+    // Fehlgeschlagene Schritte dürfen nie als VERIFIED durchrutschen.
+    const status: ComputerJobStatus =
+      failed.length === 0 && allVerifiedSuccess
+        ? "VERIFIED"
+        : successful.length > 0
+          ? "EXECUTED"
+          : "FAILED";
 
     await updateComputerJob({
       organizationId: input.organizationId,

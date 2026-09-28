@@ -138,7 +138,13 @@ export function Orb({ state }: { state: OrbState }) {
   }, []);
 
   return (
-    <div className="relative grid place-items-center" aria-hidden="true">
+    <div
+      className="relative grid place-items-center"
+      data-orb-state={state}
+      aria-label={`NOVA-Zustand ${state}`}
+      role="img"
+    >
+      <span className="nova-ax-label">{`NOVA-Zustand ${state}`}</span>
       <canvas ref={canvasRef} className="block" />
     </div>
   );
