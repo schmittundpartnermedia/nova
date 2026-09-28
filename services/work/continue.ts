@@ -133,8 +133,11 @@ async function executeReadyWork(input: {
 
   if (input.work.domain === "mail") {
     const { prepareMailDraft } = await import("@/services/mail/draft");
-    // Sauberer Slot-Brief + aktuelle Äußerung (z. B. „ja“ / Absender) für Pending-Fortsetzung.
-    const brief = `${composeMailBrief(input.work)} ${input.userRequest}`.trim();
+    // Minimaler Slot-Brief; Absender-Antwort nur anhängen, wenn from noch fehlt.
+    const base = composeMailBrief(input.work);
+    const brief = input.work.slots.from
+      ? base
+      : `${base} ${input.userRequest}`.trim();
     const draft = await prepareMailDraft({
       organizationId: input.organizationId,
       userRequest: brief,
@@ -353,9 +356,10 @@ function composeMailBrief(work: ActiveWorkRecord): string {
   if (work.slots.from) parts.push(`von ${work.slots.from}`);
   if (work.slots.to) parts.push(`an ${work.slots.to}`);
   if (work.slots.subject) parts.push(`Betreff: ${work.slots.subject}`);
-  if (work.slots.body) parts.push(`Inhalt: ${work.slots.body}`);
-  else if (work.brief.trim()) parts.push(work.brief.trim());
-  return parts.join(". ");
+  if (work.slots.body) {
+    parts.push(`Inhalt: ${work.slots.body}`);
+  }
+  return `${parts.join(". ")}.`;
 }
 
 function composeCalendarBrief(work: ActiveWorkRecord): string {
