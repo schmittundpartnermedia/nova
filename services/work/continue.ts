@@ -230,17 +230,117 @@ async function executeReadyWork(input: {
 
   if (input.work.domain === "computer") {
     const goal = input.work.slots.goal || input.work.goal;
+    if (/^(fertig|das wars|das war.?s|erledigt|schluss|stop)\.?$/i.test(input.userRequest.trim())) {
+      await setActiveWorkStatus({
+        organizationId: input.organizationId,
+        workId: input.work.id,
+        status: "done",
+        evidence: input.work.evidence || "Mac-Auftrag vom Benutzer abgeschlossen.",
+      });
+      return {
+        handled: true,
+        reply: "Alles klar. Der Mac-Auftrag ist abgeschlossen.",
+        statusMessage: "Erledigt und geprüft.",
+        orbState: "DONE",
+        work: input.work,
+      };
+    }
+
+    const { detectComputerIntent } = await import("@/agents/computer/intent");
+    const stepIntent = detectComputerIntent(input.userRequest);
+    const concrete =
+      stepIntent.kind !== "none" &&
+      stepIntent.kind !== "generic" &&
+      stepIntent.kind !== "cancel" &&
+      stepIntent.kind !== "resume";
+
+    // Erster Aufruf ohne konkreten Schritt → nachfragen.
+    if (!concrete && input.userRequest.trim() === goal.trim()) {
+      await setActiveWorkStatus({
+        organizationId: input.organizationId,
+        workId: input.work.id,
+        status: "clarifying",
+        lastQuestion: "Welchen konkreten Mac-Schritt soll ich ausführen?",
+      });
+      return {
+        handled: true,
+        reply: `Ich habe den Mac-Auftrag „${goal}“ gemerkt. Sag mir den nächsten konkreten Schritt (z. B. „öffne TextEdit“, „Screenshot“, „suche Datei …“). Wenn du fertig bist: „fertig“.`,
+        statusMessage: "Nächster Schritt fehlt.",
+        orbState: "DONE",
+        work: input.work,
+      };
+    }
+
+    if (!concrete) {
+      await setActiveWorkStatus({
+        organizationId: input.organizationId,
+        workId: input.work.id,
+        status: "clarifying",
+        lastQuestion: "Welchen konkreten Mac-Schritt soll ich ausführen?",
+      });
+      return {
+        handled: true,
+        reply: `Dazu brauche ich einen konkreten Mac-Schritt. Beispiele: „öffne TextEdit“, „Screenshot“, „suche die Datei …“. Oder sag „fertig“.`,
+        statusMessage: "Nächster Schritt fehlt.",
+        orbState: "DONE",
+        work: input.work,
+      };
+    }
+
+    const { runComputerAgent } = await import("@/agents/computer");
+    const computer = await runComputerAgent({
+      organizationId: input.organizationId,
+      userRequest: input.userRequest,
+    });
+    const verified = computer.verified === true;
+    const evidence = [input.work.evidence, computer.reply || computer.summary]
+      .filter(Boolean)
+      .join("\n---\n");
+    if (computer.approvalId) {
+      await setActiveWorkStatus({
+        organizationId: input.organizationId,
+        workId: input.work.id,
+        status: "waiting_approval",
+        evidence,
+        linkedIds: { approvalId: computer.approvalId },
+      });
+      return {
+        handled: true,
+        reply: computer.reply,
+        statusMessage: "Freigabe erforderlich.",
+        orbState: "WAITING_FOR_APPROVAL",
+        approvalId: computer.approvalId,
+        work: input.work,
+      };
+    }
+
+    // Kette offen halten: Slots zuerst, dann wieder clarifying (sonst promotion auf ready).
+    await updateActiveWorkSlots({
+      organizationId: input.organizationId,
+      workId: input.work.id,
+      slots: {
+        ...input.work.slots,
+        lastStep: input.userRequest,
+        lastStepOk: verified ? "1" : "0",
+      },
+    });
     await setActiveWorkStatus({
       organizationId: input.organizationId,
       workId: input.work.id,
       status: "clarifying",
-      lastQuestion: "Welchen konkreten Mac-Schritt soll ich ausführen? (App öffnen, Datei suchen, klicken, Screenshot, …)",
+      evidence,
+      lastQuestion: "Nächster Mac-Schritt oder „fertig“?",
     });
+    const stepNote = verified
+      ? "Schritt ausgeführt und geprüft."
+      : "Schritt nicht vollständig verifiziert.";
     return {
       handled: true,
-      reply: `Ich habe den Mac-Auftrag „${goal}“ gemerkt. Sag mir den nächsten konkreten Schritt (z. B. „öffne TextEdit“ oder „Screenshot“).`,
-      statusMessage: "Nächster Schritt fehlt.",
-      orbState: "DONE",
+      reply: `${computer.reply}
+
+${stepNote} Nächster Schritt oder sag „fertig“.`,
+      statusMessage: verified ? "Schritt geprüft — Kette offen." : "Schritt unsicher — Kette offen.",
+      orbState: verified ? "DONE" : "ERROR",
       work: input.work,
     };
   }

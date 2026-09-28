@@ -242,6 +242,27 @@ export function planComputerTask(input: {
     }
     case "resume":
       return [];
+    case "generic": {
+      // Versuche konkrete Schritte aus dem Freitext, statt leeren Plan.
+      const app = guessAppName(input.userRequest);
+      const lower = input.userRequest.toLowerCase();
+      if (/screenshot|bildschirmfoto/i.test(lower)) {
+        return planComputerTask({ ...input, kind: "screenshot" });
+      }
+      if (app && /\b(?:öffne|oeffne|starte|start)\b/i.test(lower)) {
+        return planComputerTask({ ...input, kind: "open_app" });
+      }
+      if (app && /\b(?:beende|beenden|schließe|schliesse|quit)\b/i.test(lower)) {
+        return planComputerTask({ ...input, kind: "quit_app" });
+      }
+      if (/\b(datei|ordner|festplatte|lies|lese|zeig|suche|finde)\b/i.test(lower)) {
+        return planComputerTask({ ...input, kind: "find_file" });
+      }
+      if (app) {
+        return planComputerTask({ ...input, kind: "open_app" });
+      }
+      return [];
+    }
     default:
       return [];
   }
