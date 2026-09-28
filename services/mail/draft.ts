@@ -326,7 +326,7 @@ async function reviseOpenDraft(input: {
     jobId: input.jobId,
     actionType: "mail.send",
     description: shown,
-    payload: { communicationIds: [draft.id] },
+    payload: { communicationIds: [draft.id], to: to === "unbekannt" ? undefined : to },
   });
   return {
     ok: true,
@@ -402,7 +402,7 @@ async function createExplicitDraft(input: {
     jobId: input.jobId,
     actionType: "mail.send",
     description: shown,
-    payload: { communicationIds: [draft.id] },
+    payload: { communicationIds: [draft.id], to: input.to },
   });
   await auditMail({
     organizationId: input.organizationId,
@@ -519,7 +519,7 @@ async function createReplyDraft(input: {
     jobId: input.jobId,
     actionType: "mail.send",
     description: shown,
-    payload: { communicationIds: [draft.id] },
+    payload: { communicationIds: [draft.id], to: latest.fromAddress },
   });
   await auditMail({
     organizationId: input.organizationId,

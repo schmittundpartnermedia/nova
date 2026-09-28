@@ -59,9 +59,22 @@ export const communicationAgent: NovaAgent = {
         body = generated.text.includes("keine E-Mail versendet") ? generated.text : `${generated.text.trim()}${NO_SEND_FOOTER}`;
       }
       if (!body.includes("keine E-Mail versendet")) body = `${body.trim()}${NO_SEND_FOOTER}`;
-      const contact = to
+      let contact = to
         ? await prisma.contact.findFirst({ where: { organizationId: context.organizationId, email: to.toLowerCase() } })
         : null;
+      if (to && !contact) {
+        const local = to.split("@")[0] || "Empfänger";
+        contact = await prisma.contact.create({
+          data: {
+            organizationId: context.organizationId,
+            projectId: context.projectId,
+            firstName: local,
+            lastName: "",
+            email: to.toLowerCase(),
+            notes: "Automatisch für Mailentwurf angelegt.",
+          },
+        });
+      }
       const draft = await prisma.communication.create({
         data: {
           organizationId: context.organizationId,

@@ -50,6 +50,24 @@ async function main() {
   });
   console.log("3", c?.statusMessage, "|", c?.orbState);
   console.log("open after", (await loadOpenActiveWork({ organizationId: org.id }))?.status ?? "none");
+
+  // Zweite Kette: Screenshot als Alltagsschritt
+  await cancelOpenActiveWorks(org.id);
+  const shot = await startActiveWorkFromIntent({
+    organizationId: org.id,
+    domain: "computer",
+    goal: "Screenshot",
+    brief: "Mach einen Screenshot vom Desktop",
+    slots: { goal: "Mach einen Screenshot vom Desktop" },
+  });
+  console.log("4", shot.statusMessage, "|", shot.orbState);
+  console.log(shot.reply.slice(0, 200));
+  const shotDone = await continueActiveWork({
+    organizationId: org.id,
+    userRequest: "fertig",
+  });
+  console.log("5", shotDone?.statusMessage, "|", shotDone?.orbState);
+  console.log("open final", (await loadOpenActiveWork({ organizationId: org.id }))?.status ?? "none");
 }
 
 main().finally(() => prisma.$disconnect());

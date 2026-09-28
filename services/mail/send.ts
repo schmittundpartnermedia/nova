@@ -10,6 +10,7 @@ export async function deliverApprovedDraft(input: {
   communicationId: string;
   approved: boolean;
   provider?: MailProvider;
+  fallbackTo?: string;
 }): Promise<MailSendResult> {
   assertOrganizationId(input.organizationId);
   const draft = await prisma.communication.findFirst({
@@ -23,7 +24,7 @@ export async function deliverApprovedDraft(input: {
     return { ok: false, executed: false, mock: false, status: "WAITING_FOR_APPROVAL", reason: "Versand wartet auf Freigabe." };
   }
   const to = draft.contact?.email?.trim();
-  const headerTo = to || recipientFromBody(draft);
+  const headerTo = to || input.fallbackTo?.trim() || recipientFromBody(draft);
   if (!headerTo) {
     await prisma.communication.update({ where: { id: draft.id }, data: { deliveryStatus: "FAILED", status: "failed" } });
     await auditMail({

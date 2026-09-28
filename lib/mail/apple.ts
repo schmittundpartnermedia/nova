@@ -54,6 +54,22 @@ on novaStamp(recv)
   end try
   return ""
 end novaStamp
+on lowerText(rawText)
+  set t to rawText as text
+  set lowerChars to "abcdefghijklmnopqrstuvwxyz"
+  set upperChars to "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+  set out to ""
+  repeat with i from 1 to length of t
+    set ch to character i of t
+    set pos to offset of ch in upperChars
+    if pos > 0 then
+      set out to out & character pos of lowerChars
+    else
+      set out to out & ch
+    end if
+  end repeat
+  return out
+end lowerText
 `;
 
 export function escapeAppleScript(value: string): string {
@@ -607,29 +623,40 @@ export function sentLookupScript(accountId: string, subject: string, recipient: 
 tell application "Mail"
   set a to first account whose id is ${quoted(accountId)}
   set boxes to {}
+  try
+    set end of boxes to sent mailbox of a
+  end try
   repeat with b in mailboxes of a
-    set n to name of b
-    if n is "Sent" or n is "Sent Messages" or n is "Sent Items" or n is "Gesendet" or n is "Gesendete Objekte" or n is "Gesendete" then set end of boxes to b
+    set n to name of b as text
+    set nl to my lowerText(n)
+    if nl is "sent" or nl is "sent messages" or nl is "sent items" or nl is "gesendet" or nl is "gesendete objekte" or nl is "gesendete" or nl contains "gesendet" or nl contains "sent" then
+      set end of boxes to b
+    end if
   end repeat
+  set wantSubject to my lowerText(${quoted(subject)})
+  set wantTo to my lowerText(${quoted(recipient)})
   repeat with b in boxes
-    set total to count of messages of b
-    set takeN to total
-    if takeN > 8 then set takeN to 8
-    repeat with i from 1 to takeN
-      set m to message i of b
-      set hitSubject to subject of m as text
-      set hitTo to ""
-      try
-        if (count of to recipients of m) > 0 then set hitTo to address of to recipient 1 of m
-      end try
-      if hitSubject is ${quoted(subject)} and hitTo contains ${quoted(recipient)} then
-        set mid to ""
+    try
+      set total to count of messages of b
+      set takeN to total
+      if takeN > 40 then set takeN to 40
+      repeat with i from 1 to takeN
+        set m to message i of b
+        set hitSubject to my lowerText(subject of m as text)
+        set hitTo to ""
         try
-          set mid to message id of m
+          if (count of to recipients of m) > 0 then set hitTo to my lowerText(address of to recipient 1 of m as text)
         end try
-        return mid
-      end if
-    end repeat
+        if hitSubject is wantSubject and (wantTo is "" or hitTo contains wantTo) then
+          set mid to ""
+          try
+            set mid to message id of m
+          end try
+          if mid is "" then set mid to "sent-confirmed"
+          return mid
+        end if
+      end repeat
+    end try
   end repeat
   return ""
 end tell`;

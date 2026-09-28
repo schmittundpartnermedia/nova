@@ -567,15 +567,20 @@ export class AppleMailProvider extends BaseMailProvider {
   private async confirmSent(appleId: string, subject: string, recipient: string, scriptOutput: string): Promise<MailSendResult> {
     const accepted = /true/i.test(scriptOutput);
     let messageId = "";
-    for (let attempt = 0; attempt < 6; attempt += 1) {
+    for (let attempt = 0; attempt < 10; attempt += 1) {
       const lookup = await runMailAppleScript(sentLookupScript(appleId, subject, recipient), 25_000);
       messageId = lookup.ok ? lookup.output.trim() : "";
       if (messageId) break;
-      await new Promise((resolve) => setTimeout(resolve, 1500));
+      await new Promise((resolve) => setTimeout(resolve, 2000));
     }
     const status = deliveryFromVerification(accepted, Boolean(messageId));
     if (status !== "VERIFIED") {
-      return failed("Die Nachricht ist nicht im Ordner Gesendet bestätigt.");
+      // Script hat „send“ akzeptiert, Sent-Lookup aber noch ohne Treffer: ehrlich als fehlgeschlagen markieren.
+      return failed(
+        accepted
+          ? "Mail.app hat den Versand angenommen, aber die Nachricht ist im Ordner Gesendet noch nicht bestätigt."
+          : "Die Nachricht ist nicht im Ordner Gesendet bestätigt.",
+      );
     }
     return {
       ok: true,

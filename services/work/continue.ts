@@ -126,11 +126,58 @@ export async function continueActiveWork(input: {
   }
 
   if (work.status === "waiting_approval") {
+    const approve = /^(?:nova[,.\s]*)?(?:ja|ja bitte|okay|ok|passt|einverstanden|mach das|freigeben|senden|schick(?:e)?(?:\s+sie|\s+die mail|\s+es)?)[.!]?$/i.test(
+      input.userRequest.trim(),
+    );
+    const reject = /^(?:nova[,.\s]*)?(?:nein|ablehnen|nicht senden|nicht jetzt)[.!]?$/i.test(input.userRequest.trim());
+    const approvalId = work.linkedIds.approvalId;
+    if ((approve || reject) && approvalId) {
+      const { decideApproval } = await import("@/services/approvals");
+      const { executeDecidedApproval } = await import("@/services/approvals/fulfill");
+      const decision = approve ? "approved" : "rejected";
+      const approval = await decideApproval({
+        organizationId: input.organizationId,
+        approvalId,
+        status: decision,
+      });
+      const result = await executeDecidedApproval({
+        organizationId: input.organizationId,
+        approval,
+        decision,
+      });
+      // fulfill schließt ActiveWork; hier Status für die Antwort nachladen.
+      const { loadOpenActiveWork } = await import("@/services/work/active");
+      const stillOpen = await loadOpenActiveWork({
+        organizationId: input.organizationId,
+        conversationId: input.conversationId,
+      });
+      if (stillOpen?.id === work.id) {
+        await setActiveWorkStatus({
+          organizationId: input.organizationId,
+          workId: work.id,
+          status: result.executed ? "done" : decision === "rejected" ? "cancelled" : "failed",
+          evidence: result.message,
+        });
+      }
+      return {
+        handled: true,
+        reply: result.message,
+        statusMessage: result.executed
+          ? "Erledigt und geprüft."
+          : decision === "rejected"
+            ? "Abgelehnt."
+            : "Freigabe ohne Versand.",
+        orbState: result.executed ? "DONE" : decision === "rejected" ? "DONE" : "ERROR",
+        work,
+      };
+    }
     return {
       handled: true,
       reply: `Der Auftrag wartet noch auf Freigabe.\n${summarizeActiveWork(work)}\nSag „freigeben“ oder nutze die Freigabe-Karte.`,
       statusMessage: "Freigabe erforderlich.",
       orbState: "WAITING_FOR_APPROVAL",
+      approvalId: work.linkedIds.approvalId,
+      actionType: work.domain === "mail" ? "mail.send" : undefined,
       work,
     };
   }
@@ -198,7 +245,10 @@ async function executeReadyWork(input: {
         organizationId: input.organizationId,
         workId: input.work.id,
         status: "waiting_approval",
-        linkedIds: draft.communicationId ? { communicationId: draft.communicationId } : undefined,
+        linkedIds: {
+          ...(draft.communicationId ? { communicationId: draft.communicationId } : {}),
+          approvalId: draft.approvalId,
+        },
       });
       return {
         handled: true,
