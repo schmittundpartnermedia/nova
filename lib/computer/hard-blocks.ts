@@ -36,6 +36,12 @@ const HARD_BLOCK_PATTERNS: Array<{ code: string; message: string; pattern: RegEx
     pattern: /lösch.*(?:nova-?projekt|repository|repo\b)|delete.*(?:repository|repo\b|nova.?project)/i,
   },
   {
+    code: "delete_elevum",
+    message: "Daten auf der Festplatte ELEVUM werden niemals gelöscht — auch nicht mit Freigabe.",
+    pattern:
+      /(?:lösch|entferne|rm\s+-|delete|remove).{0,80}elevum|elevum.{0,80}(?:lösch|entferne|löschen|delete|remove)|\/Volumes\/ELEVUM.{0,40}(?:lösch|rm\s|delete)/i,
+  },
+  {
     code: "force_push_deploy",
     message: "git push, force push und Production-Deploys sind ohne Freigabe hart blockiert.",
     pattern: /git\s+push\s+[^\n]*--force|--force(?:-with-lease)?|force.?push|deploy.*prod|production.?deploy/i,
@@ -53,8 +59,29 @@ export function detectHardBlock(text: string): HardBlockReason | null {
   return null;
 }
 
+/** Geheimnisse / Systempfade — kein Zugriff. */
 export function isHardBlockedPath(target: string): boolean {
   return /(?:^|\/)\.ssh(?:\/|$)|(?:^|\/)\.gnupg(?:\/|$)|keychain|cookies\.sqlite|(?:^|\/)private\/var\/db\/receipts/i.test(
     target,
   );
+}
+
+/** Projekt-Festplatte ELEVUM: Lesen/Schreiben ok, Löschen nie. */
+export function isProtectedProjectVolumePath(target: string): boolean {
+  const value = target.trim();
+  if (!value) return false;
+  const normalized = value.replace(/\\/g, "/");
+  return (
+    /(^|\/)Volumes\/ELEVUM(\/|$)/i.test(normalized) ||
+    /(^|\/)ELEVUM(\/Projekte|\/Unternehmen|\/Entwicklung|\/NOVA)(\/|$)/i.test(normalized)
+  );
+}
+
+export function isDestructiveElevumAction(action: string, target: string, argv: string[] = []): boolean {
+  const destructiveAction = /^(delete|deleteRecursive|rm|rmdir|unlink|trash)$/i.test(action);
+  const destructiveArgv =
+    argv.some((part) => /^(rm|rmdir|unlink)$/i.test(part)) || argv.some((part) => /^-rf$|^-fr$/.test(part));
+  if (!destructiveAction && !destructiveArgv) return false;
+  if (isProtectedProjectVolumePath(target)) return true;
+  return argv.some((part) => isProtectedProjectVolumePath(part));
 }

@@ -1,4 +1,4 @@
-import { detectHardBlock, isHardBlockedPath } from "@/lib/computer/hard-blocks";
+import { detectHardBlock, isDestructiveElevumAction, isHardBlockedPath } from "@/lib/computer/hard-blocks";
 import { isIrreversibleBrowserAction } from "@/lib/computer/browser-policy";
 import type { ApprovalClass, ComputerRiskClass } from "@/lib/computer/types";
 
@@ -68,6 +68,17 @@ export function classifyShellCommand(input: {
   if (PRIVILEGED_COMMANDS.has(bin) || argv.includes("sudo")) {
     return decision("PRIVILEGED", input.userCommissioned, "Privilegierter Systembefehl.");
   }
+  if (isDestructiveElevumAction(bin, input.cwd ?? "", argv)) {
+    return {
+      risk: "DESTRUCTIVE",
+      approvalClass: "C",
+      approvalRequired: true,
+      autonomousAllowed: false,
+      reason: "Daten auf der Festplatte ELEVUM werden niemals gelöscht — auch nicht mit Freigabe.",
+      hardBlocked: true,
+      hardBlockCode: "delete_elevum",
+    };
+  }
   if (DESTRUCTIVE_COMMANDS.has(bin) || /-rf\b/.test(joined) || /\brm\s+-/.test(joined)) {
     return decision("DESTRUCTIVE", input.userCommissioned, "Zerstörender Dateisystembefehl.");
   }
@@ -136,6 +147,17 @@ export function classifyFilesystemAction(input: {
       reason: "Geschützter Pfad oder hart blockierte Aktion.",
       hardBlocked: true,
       hardBlockCode: "protected_path",
+    };
+  }
+  if (isDestructiveElevumAction(input.action, input.target)) {
+    return {
+      risk: "DESTRUCTIVE",
+      approvalClass: "C",
+      approvalRequired: true,
+      autonomousAllowed: false,
+      reason: "Daten auf der Festplatte ELEVUM werden niemals gelöscht — auch nicht mit Freigabe.",
+      hardBlocked: true,
+      hardBlockCode: "delete_elevum",
     };
   }
   if (input.action === "delete" || input.action === "deleteRecursive") {
