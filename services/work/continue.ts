@@ -1,4 +1,5 @@
 import { parseSlotValue } from "@/lib/work/slots";
+import { looksLikeAccountAffirmative, looksLikeAccountPick } from "@/lib/mail/draft-spec";
 import {
   loadOpenActiveWork,
   setActiveWorkStatus,
@@ -133,11 +134,12 @@ async function executeReadyWork(input: {
 
   if (input.work.domain === "mail") {
     const { prepareMailDraft } = await import("@/services/mail/draft");
-    // Minimaler Slot-Brief; Absender-Antwort nur anhängen, wenn from noch fehlt.
+    // Minimaler Slot-Brief; Absender-Antwort nur bei Konto-Wahl anhängen.
     const base = composeMailBrief(input.work);
-    const brief = input.work.slots.from
-      ? base
-      : `${base} ${input.userRequest}`.trim();
+    const accountUtterance =
+      looksLikeAccountPick(input.userRequest) || looksLikeAccountAffirmative(input.userRequest);
+    const brief =
+      !input.work.slots.from && accountUtterance ? `${base} ${input.userRequest}`.trim() : base;
     const draft = await prepareMailDraft({
       organizationId: input.organizationId,
       userRequest: brief,
