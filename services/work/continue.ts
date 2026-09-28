@@ -589,6 +589,32 @@ ${stepNote} Nächster Schritt oder sag „fertig“.`,
     };
   }
 
+  if (input.work.domain === "watch") {
+    const { scanWatch, formatWatchScan } = await import("@/agents/watch");
+    const scan = await scanWatch(input.organizationId);
+    const reply = formatWatchScan(scan);
+    const hasSignal =
+      scan.overdueTasks.length +
+        scan.staleDrafts.length +
+        scan.upcomingMeetings.length +
+        scan.newImportantMail.length +
+        scan.overdueFollowUps.length >
+      0;
+    await setActiveWorkStatus({
+      organizationId: input.organizationId,
+      workId: input.work.id,
+      status: "done",
+      evidence: reply,
+    });
+    return {
+      handled: true,
+      reply,
+      statusMessage: hasSignal ? "Erledigt und geprüft." : "Nichts Offenes — geprüft.",
+      orbState: "DONE",
+      work: input.work,
+    };
+  }
+
   await setActiveWorkStatus({
     organizationId: input.organizationId,
     workId: input.work.id,

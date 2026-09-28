@@ -497,7 +497,8 @@ export async function runMaster(input: {
         (openWork.domain === "computer" && detectComputerIntent(input.userRequest).kind !== "none") ||
         (openWork.domain === "coding" && detectCodingIntent(input.userRequest).kind !== "none") ||
         (openWork.domain === "knowledge" && detectKnowledgeIntent(input.userRequest).kind !== "none") ||
-        (openWork.domain === "research" && needsLiveResearch(input.userRequest));
+        (openWork.domain === "research" && needsLiveResearch(input.userRequest)) ||
+        (openWork.domain === "watch" && detectWatchIntent(input.userRequest));
       const mustContinue =
         openWork.status === "clarifying" ||
         openWork.status === "waiting_approval" ||
@@ -1021,9 +1022,35 @@ export async function runMaster(input: {
     };
   }
   if (dialog.kind !== "social" && detectWatchIntent(input.userRequest)) {
-    return runLocalMasterPath(input, "Ich schaue, was ansteht.", "watch", "watch", {
-      userRequest: input.userRequest,
+    const { startActiveWorkFromIntent } = await import("@/services/work/continue");
+    const started = await startActiveWorkFromIntent({
+      organizationId: input.organizationId,
+      conversationId: input.conversationId,
+      domain: "watch",
+      goal: "Was steht an",
+      brief: input.userRequest,
+      slots: {},
     });
+    await emit(input.onEvent, { type: "status", orbState: started.orbState, statusMessage: started.statusMessage });
+    await emit(input.onEvent, { type: "delta", delta: started.reply });
+    rememberConversation({
+      organizationId: input.organizationId,
+      conversationId: input.conversationId,
+      userRequest: input.userRequest,
+      reply: started.reply,
+      domain: "watch",
+    });
+    return {
+      jobId: "",
+      status: started.orbState === "ERROR" ? "failed" : "completed",
+      orbState: started.orbState,
+      statusMessage: started.statusMessage,
+      reply: started.reply,
+      mock: false,
+      providerMode: "fallback",
+      providerId: "active-work",
+      model: "nova-active-work",
+    };
   }
   const projectIntent = detectProjectIntent(input.userRequest);
   if (dialog.kind !== "social" && projectIntent.kind === "list") {

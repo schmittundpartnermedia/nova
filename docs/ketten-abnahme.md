@@ -16,6 +16,8 @@ Komplette Kette in NOVA.app: Verstehen → Rückfragen → ActiveWork → Ausfü
 | Computer generic → Plan | TEIL — App/Screenshot/Datei |
 | Computer Mehrschritt ActiveWork | TEIL — Schritt→prüfen→weiter/fertig (Smoke: TextEdit) |
 | Wissen Import Pfad→Einlesen | TEIL — ActiveWork + Smoke |
-| Recherche ActiveWork + Verify | TEIL — ohne Connector klar fehlgeschlagen |
-| Stimme / Watch E2E | OFFEN |
-| Vision 100% | NOCH NICHT |
+| Recherche ActiveWork + Verify | TEIL — mit Connector Evidence |
+| Watch-Scan ActiveWork | TEIL — ActiveWork + Smoke |
+| Stimme Session→ActiveWork→TTS-Text | TEIL — verify:voice-session + Smoke |
+| Stimme Live-Mic in NOVA.app | OFFEN — manuell |
+| Vision 100% Real-App E2E | NOCH NICHT |
