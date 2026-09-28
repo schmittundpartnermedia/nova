@@ -9,7 +9,9 @@ import { inspectMailContent } from "@/lib/mail/guard";
 import { detectMailIntent } from "@/lib/mail/intent";
 import {
   extractAccountChoice,
+  formatAccountQuestion,
   formatDraftForApproval,
+  looksLikeAccountAffirmative,
   parseMailDraftSpec,
 } from "@/lib/mail/draft-spec";
 import {
@@ -129,6 +131,18 @@ export function runMailUnitTests(): string[] {
     assert.equal(spec.subject, "Termin");
     assert.match(spec.bodyHint ?? "", /morgen um 10/i);
     assert.equal(extractAccountChoice("von a@x.de"), "a@x.de");
+    assert.equal(looksLikeAccountAffirmative("ja"), true);
+    const ask = formatAccountQuestion({
+      accounts: [
+        { emailAddress: "a@x.de", displayName: "Privat" },
+        { emailAddress: "b@y.de", displayName: null },
+      ],
+      suggested: { emailAddress: "a@x.de", displayName: "Privat" },
+      rememberedBrief: "Mail an b@y.de wegen Termin",
+    });
+    assert.match(ask, /Vorschlag: Privat <a@x.de>/);
+    assert.match(ask, /Mail an b@y.de/);
+    assert.equal(/1\. b@y.de/.test(ask), false);
     const shown = formatDraftForApproval({
       from: "a@x.de",
       to: "b@y.de",

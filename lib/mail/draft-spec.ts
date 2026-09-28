@@ -35,26 +35,58 @@ export function extractAccountChoice(userRequest: string): string | null {
 }
 
 export function looksLikeAccountPick(userRequest: string): boolean {
-  if (extractAccountChoice(userRequest)) return true;
-  if (/^(konto|absender)\s*\d{1,2}\.?$/i.test(userRequest.trim())) return true;
+  const text = userRequest.trim();
+  if (extractAccountChoice(text)) return true;
+  if (/^(konto|absender)?\s*\d{1,2}\.?$/i.test(text)) return true;
+  if (looksLikeAccountAffirmative(text)) return true;
   return false;
 }
 
-export function formatAccountQuestion(
-  accounts: Array<{ emailAddress: string; displayName: string | null }>,
-): string {
+export function looksLikeAccountAffirmative(userRequest: string): boolean {
+  return /^(ja|jo|yes|ok|okay|passt|genau|mach|mach das|bitte|von dort|dieses|dieses konto|das konto|die erste|erstes|nummer\s*\d{1,2})[.!]?$/i.test(
+    userRequest.trim(),
+  );
+}
+
+export function looksLikePendingMailFollowUp(userRequest: string): boolean {
+  const text = userRequest.trim();
+  if (!text) return false;
+  if (looksLikeAccountPick(text)) return true;
+  if (/^(abbrechen|cancel|vergiss|stopp)\.?$/i.test(text)) return true;
+  if (/\b(?:betreff|inhalt|text|nachricht|ergänz|erganz|änder|aender|noch|dazu|auch)\b/i.test(text)) return true;
+  if (text.length <= 120 && !/\b(?:kalender|ticket|projekt|code|cursor|screenshot)\b/i.test(text)) return true;
+  return false;
+}
+
+export function formatAccountQuestion(input: {
+  accounts: Array<{ emailAddress: string; displayName: string | null }>;
+  suggested?: { emailAddress: string; displayName: string | null } | null;
+  rememberedBrief?: string | null;
+}): string {
+  const accounts = input.accounts;
   if (!accounts.length) {
     return "Kein Mailkonto ist verbunden. Bitte zuerst Apple Mail in NOVA verbinden. Es wurde nichts vorbereitet und nichts versendet.";
   }
+
+  const brief = input.rememberedBrief?.trim();
+  const memoryLine = brief
+    ? `Ich habe den Auftrag noch: ${brief.slice(0, 160)}${brief.length > 160 ? "…" : ""}\n\n`
+    : "";
+
+  const suggested = input.suggested ?? (accounts.length === 1 ? accounts[0] : null);
+  if (suggested) {
+    const label = accountLabel(suggested);
+    if (accounts.length === 1) {
+      return `${memoryLine}Ich würde von ${label} senden. Passt das? Sag „ja“ oder nenne ein anderes Konto. Es wurde noch nichts versendet.`;
+    }
+    return `${memoryLine}Zuletzt / Vorschlag: ${label}. Soll ich von dort senden? Sag „ja“, eine Nummer oder die Adresse.\nAndere Konten nur auf Wunsch („andere Konten“). Es wurde noch nichts versendet.`;
+  }
+
   const list = accounts
-    .map((account, index) => {
-      const label = account.displayName?.trim()
-        ? `${account.displayName.trim()} <${account.emailAddress}>`
-        : account.emailAddress;
-      return `${index + 1}. ${label}`;
-    })
+    .slice(0, 6)
+    .map((account, index) => `${index + 1}. ${accountLabel(account)}`)
     .join("\n");
-  return `Von welchem Mailkonto soll ich senden?\n\n${list}\n\nAntworte mit der Adresse oder „von …“. Es wurde noch nichts versendet.`;
+  return `${memoryLine}Von welchem Konto soll ich senden?\n${list}\nSag Nummer oder Adresse. Es wurde noch nichts versendet.`;
 }
 
 export function formatDraftForApproval(input: {
@@ -69,6 +101,12 @@ export function formatDraftForApproval(input: {
 
 export function stripDraftFooter(body: string): string {
   return body.replace(/\n---\n[\s\S]*$/m, "").trim();
+}
+
+export function accountLabel(account: { emailAddress: string; displayName: string | null }): string {
+  return account.displayName?.trim()
+    ? `${account.displayName.trim()} <${account.emailAddress}>`
+    : account.emailAddress;
 }
 
 function extractBodyHint(

@@ -169,11 +169,11 @@ async function main() {
     organizationId: orgA.id,
     userRequest: "Antworte, dass wir nächste Woche telefonieren können.",
   });
-  assert(asked.needsAccount && /von welchem mailkonto/i.test(asked.reply), asked.reply);
+  assert(asked.needsAccount && /(vorschlag|würde von|von welchem konto)/i.test(asked.reply), asked.reply);
   assert(!asked.approvalId, "Absenderfrage darf noch keine Freigabe öffnen");
   const draft = await prepareMailDraft({
     organizationId: orgA.id,
-    userRequest: "von joachim@example.com",
+    userRequest: "ja",
   });
   assert(draft.ok && draft.approvalId, "Entwurf ohne Freigabe");
   assert(/Absender: joachim@example.com/i.test(draft.reply), draft.reply);

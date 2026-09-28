@@ -6,7 +6,9 @@ import {
   extractAccountChoice,
   formatAccountQuestion,
   formatDraftForApproval,
+  looksLikeAccountAffirmative,
   looksLikeAccountPick,
+  looksLikePendingMailFollowUp,
   parseMailDraftSpec,
   stripDraftFooter,
 } from "@/lib/mail/draft-spec";
@@ -18,7 +20,9 @@ import { createApprovalRequest } from "@/services/approvals";
 import {
   clearPendingMailDraft,
   loadPendingMailDraft,
+  preferredMailAccount,
   savePendingMailDraft,
+  updatePendingMailDraft,
 } from "@/services/mail/pending-draft";
 
 export type PrepareMailDraftResult = {
@@ -51,11 +55,21 @@ export async function prepareMailDraft(input: {
     where: { organizationId: input.organizationId, status: "connected" },
     orderBy: { updatedAt: "desc" },
   });
+  const preferred = await preferredMailAccount(input.organizationId);
+  const suggested =
+    (preferred && accounts.find((item) => item.id === preferred.id)) || accounts[0] || null;
 
   const pending = await loadPendingMailDraft(input.organizationId);
-  const accountChoice = await resolveAccountChoice(input.userRequest, accounts);
+  const wantsOtherAccounts = /\b(?:andere konten|alle konten|welches konto|welche konten)\b/i.test(
+    input.userRequest,
+  );
   const freshDraft =
     detectMailIntent(input.userRequest).kind === "draft" && !looksLikeAccountPick(input.userRequest);
+  const accountChoice = resolveAccountChoice(input.userRequest, accounts, {
+    pending,
+    suggested,
+    allowAffirmative: Boolean(pending) && !freshDraft,
+  });
   const continuing = Boolean(pending && accountChoice && !freshDraft);
   const mergedRequest = continuing
     ? mergePendingRequest(pending!.userRequest, accountChoice!.emailAddress)
@@ -73,10 +87,41 @@ export async function prepareMailDraft(input: {
         waitingApproval: false,
       };
     }
-    const again = formatAccountQuestion(accounts);
+
+    // Folgenotiz zum gleichen Auftrag merken, dann erneut kurz nach Absender fragen.
+    if (looksLikePendingMailFollowUp(input.userRequest) && !wantsOtherAccounts) {
+      const addition = input.userRequest.trim();
+      const nextRequest = `${pending.userRequest.trim()} ${addition}`.trim();
+      const nextSpec = parseMailDraftSpec(nextRequest);
+      await updatePendingMailDraft(input.organizationId, {
+        userRequest: nextRequest,
+        to: nextSpec.to ?? pending.to,
+        subject: nextSpec.subject ?? pending.subject,
+        bodyHint: nextSpec.bodyHint ?? pending.bodyHint,
+        suggestedFrom: pending.suggestedFrom ?? suggested?.emailAddress ?? null,
+      });
+      return {
+        ok: false,
+        reply: formatAccountQuestion({
+          accounts,
+          suggested: suggestedAccount(accounts, pending.suggestedFrom ?? suggested?.emailAddress),
+          rememberedBrief: summarizeBrief(nextRequest),
+        }),
+        communicationId: null,
+        needsAccount: true,
+        waitingApproval: false,
+      };
+    }
+
     return {
       ok: false,
-      reply: again,
+      reply: formatAccountQuestion({
+        accounts,
+        suggested: wantsOtherAccounts
+          ? null
+          : suggestedAccount(accounts, pending.suggestedFrom ?? suggested?.emailAddress),
+        rememberedBrief: summarizeBrief(pending.userRequest),
+      }),
       communicationId: null,
       needsAccount: true,
       waitingApproval: false,
@@ -113,10 +158,15 @@ export async function prepareMailDraft(input: {
       organizationId: input.organizationId,
       userRequest: mergedRequest,
       spec,
+      suggestedFrom: suggested?.emailAddress ?? null,
     });
     return {
       ok: false,
-      reply: formatAccountQuestion(accounts),
+      reply: formatAccountQuestion({
+        accounts,
+        suggested,
+        rememberedBrief: summarizeBrief(mergedRequest),
+      }),
       communicationId: null,
       needsAccount: true,
       waitingApproval: false,
@@ -149,29 +199,60 @@ export async function prepareMailDraft(input: {
   });
 }
 
-async function resolveAccountChoice(
+function resolveAccountChoice(
   userRequest: string,
   accounts: Array<{ id: string; emailAddress: string; displayName: string | null }>,
+  options?: {
+    pending?: { suggestedFrom: string | null } | null;
+    suggested?: { id: string; emailAddress: string; displayName: string | null } | null;
+    allowAffirmative?: boolean;
+  },
 ) {
   const email = extractAccountChoice(userRequest);
   if (email) {
     return accounts.find((item) => item.emailAddress.toLowerCase() === email) ?? null;
   }
-  const numbered = userRequest.trim().match(/^(?:konto|absender)?\s*(\d{1,2})\.?$/i);
+  const numbered = userRequest.trim().match(/^(?:konto|absender|nummer)?\s*(\d{1,2})\.?$/i);
   if (numbered) {
     const index = Number(numbered[1]) - 1;
     return accounts[index] ?? null;
+  }
+  if (/^(die erste|erstes|dieses|dieses konto|das konto|von dort)\.?$/i.test(userRequest.trim())) {
+    const suggestedEmail = options?.pending?.suggestedFrom ?? options?.suggested?.emailAddress;
+    return suggestedAccount(accounts, suggestedEmail) ?? options?.suggested ?? accounts[0] ?? null;
+  }
+  if (options?.allowAffirmative && looksLikeAccountAffirmative(userRequest)) {
+    const suggestedEmail = options.pending?.suggestedFrom ?? options.suggested?.emailAddress;
+    return suggestedAccount(accounts, suggestedEmail) ?? options.suggested ?? accounts[0] ?? null;
   }
   const lowered = userRequest.trim().toLowerCase();
   if (lowered.length >= 3) {
     const byName = accounts.filter((item) => {
       const name = item.displayName?.toLowerCase() ?? "";
       const address = item.emailAddress.toLowerCase();
-      return name === lowered || address.startsWith(lowered) || name.includes(lowered);
+      return (
+        name === lowered ||
+        address === lowered ||
+        address.startsWith(lowered) ||
+        address.includes(lowered) ||
+        name.includes(lowered)
+      );
     });
     if (byName.length === 1) return byName[0];
   }
   return null;
+}
+
+function suggestedAccount(
+  accounts: Array<{ id: string; emailAddress: string; displayName: string | null }>,
+  email?: string | null,
+) {
+  if (!email) return null;
+  return accounts.find((item) => item.emailAddress.toLowerCase() === email.toLowerCase()) ?? null;
+}
+
+function summarizeBrief(userRequest: string): string {
+  return userRequest.replace(/\s+/g, " ").trim().slice(0, 180);
 }
 
 function mergePendingRequest(original: string, fromEmail: string): string {

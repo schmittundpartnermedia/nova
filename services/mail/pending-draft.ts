@@ -7,6 +7,7 @@ export type PendingMailDraft = {
   to: string | null;
   subject: string | null;
   bodyHint: string | null;
+  suggestedFrom: string | null;
   createdAt: string;
 };
 
@@ -16,6 +17,7 @@ export async function savePendingMailDraft(input: {
   organizationId: string;
   userRequest: string;
   spec: MailDraftSpec;
+  suggestedFrom?: string | null;
 }) {
   assertOrganizationId(input.organizationId);
   await clearPendingMailDraft(input.organizationId);
@@ -24,6 +26,7 @@ export async function savePendingMailDraft(input: {
     to: input.spec.to,
     subject: input.spec.subject,
     bodyHint: input.spec.bodyHint,
+    suggestedFrom: input.suggestedFrom ?? input.spec.from,
     createdAt: new Date().toISOString(),
   };
   return prisma.communication.create({
@@ -57,10 +60,40 @@ export async function loadPendingMailDraft(organizationId: string): Promise<Pend
   try {
     const parsed = JSON.parse(row.body.slice(MARKER.length)) as PendingMailDraft;
     if (!parsed?.userRequest) return null;
-    return parsed;
+    return {
+      ...parsed,
+      suggestedFrom: parsed.suggestedFrom ?? null,
+    };
   } catch {
     return null;
   }
+}
+
+export async function updatePendingMailDraft(
+  organizationId: string,
+  patch: Partial<Pick<PendingMailDraft, "userRequest" | "to" | "subject" | "bodyHint" | "suggestedFrom">>,
+) {
+  assertOrganizationId(organizationId);
+  const current = await loadPendingMailDraft(organizationId);
+  if (!current) return null;
+  const next: PendingMailDraft = {
+    ...current,
+    ...patch,
+    createdAt: current.createdAt,
+  };
+  await clearPendingMailDraft(organizationId);
+  return prisma.communication.create({
+    data: {
+      organizationId,
+      channel: "email",
+      direction: "outbound",
+      subject: next.subject || "(wartet auf Absender)",
+      body: `${MARKER}${JSON.stringify(next)}`,
+      status: "awaiting_sender",
+      deliveryStatus: "AWAITING_SENDER",
+      isMock: false,
+    },
+  });
 }
 
 export async function clearPendingMailDraft(organizationId: string) {
@@ -78,4 +111,23 @@ export async function clearPendingMailDraft(organizationId: string) {
 
 export async function hasPendingMailDraft(organizationId: string): Promise<boolean> {
   return Boolean(await loadPendingMailDraft(organizationId));
+}
+
+export async function preferredMailAccount(organizationId: string) {
+  assertOrganizationId(organizationId);
+  const recent = await prisma.communication.findFirst({
+    where: {
+      organizationId,
+      channel: "email",
+      direction: "outbound",
+      mailAccountId: { not: null },
+      deliveryStatus: { in: ["VERIFIED", "WAITING_FOR_APPROVAL", "SENDING", "PREPARED"] },
+      status: { notIn: ["awaiting_sender"] },
+    },
+    orderBy: { updatedAt: "desc" },
+  });
+  if (!recent?.mailAccountId) return null;
+  return prisma.mailAccount.findFirst({
+    where: { id: recent.mailAccountId, organizationId, status: "connected" },
+  });
 }
