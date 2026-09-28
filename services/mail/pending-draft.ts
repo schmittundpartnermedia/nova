@@ -115,6 +115,7 @@ export async function hasPendingMailDraft(organizationId: string): Promise<boole
 
 export async function preferredMailAccount(organizationId: string) {
   assertOrganizationId(organizationId);
+  const { isSteerableMailAddress } = await import("@/lib/mail/steerable");
   const recent = await prisma.communication.findFirst({
     where: {
       organizationId,
@@ -126,8 +127,18 @@ export async function preferredMailAccount(organizationId: string) {
     },
     orderBy: { updatedAt: "desc" },
   });
-  if (!recent?.mailAccountId) return null;
+  if (recent?.mailAccountId) {
+    const account = await prisma.mailAccount.findFirst({
+      where: { id: recent.mailAccountId, organizationId, status: "connected" },
+    });
+    if (account && isSteerableMailAddress(account.emailAddress)) return account;
+  }
   return prisma.mailAccount.findFirst({
-    where: { id: recent.mailAccountId, organizationId, status: "connected" },
+    where: {
+      organizationId,
+      status: "connected",
+      emailAddress: { in: (await import("@/lib/mail/steerable")).steerableMailAddresses() },
+    },
+    orderBy: { updatedAt: "desc" },
   });
 }

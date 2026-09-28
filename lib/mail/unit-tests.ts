@@ -27,6 +27,7 @@ import {
   replyDraftScript,
   threadKey,
 } from "@/lib/mail/apple";
+import { filterSteerableMailAccounts, isSteerableMailAddress } from "@/lib/mail/steerable";
 
 export function runMailUnitTests(): string[] {
   const failures: string[] = [];
@@ -120,6 +121,22 @@ export function runMailUnitTests(): string[] {
     assert.equal(detectMailIntent("Ändere den Entwurf.").kind, "draft");
     assert.equal(detectMailIntent("Ja, senden.").kind, "send-confirm");
     assert.equal(detectMailIntent("Wie spät ist es?").kind, "none");
+  });
+
+  check("steerable mail allowlist", () => {
+    assert.equal(isSteerableMailAddress("joachim@rankpilot.de"), true);
+    assert.equal(isSteerableMailAddress("info@elevum.io"), true);
+    assert.equal(isSteerableMailAddress("sspmedia@icloud.com"), false);
+    assert.equal(isSteerableMailAddress("info@rankpilot.de"), false);
+    const filtered = filterSteerableMailAccounts([
+      { emailAddress: "sspmedia@icloud.com" },
+      { emailAddress: "joachim@rankpilot.de" },
+      { emailAddress: "info@elevum.io" },
+    ]);
+    assert.deepEqual(
+      filtered.map((item) => item.emailAddress),
+      ["joachim@rankpilot.de", "info@elevum.io"],
+    );
   });
 
   check("draft spec parses account body and approval text", () => {

@@ -6,11 +6,13 @@ import { refreshMailAccessToken } from "@/services/mail/oauth";
 
 export async function listMailAccounts(organizationId: string) {
   assertOrganizationId(organizationId);
+  const { filterSteerableMailAccounts } = await import("@/lib/mail/steerable");
   const rows = await prisma.mailAccount.findMany({
     where: { organizationId },
     orderBy: { createdAt: "asc" },
   });
-  return rows.map(publicAccount);
+  // Steuern (Entwurf/Versand): nur erlaubte Konten. Sync anderer Apple-Konten bleibt separat.
+  return filterSteerableMailAccounts(rows).map(publicAccount);
 }
 
 export function publicAccount(account: {

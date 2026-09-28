@@ -11,31 +11,26 @@ Komplette Kette in NOVA.app: Verstehen → Rückfragen → ActiveWork → Ausfü
 | ActiveWork-Fundament | TEIL — live in NOVA.app |
 | Kalender Slot-Kette | TEIL — Real-App API / Voice-API grün |
 | Tickets / Projekte / Kontakte | TEIL — ActiveWork |
-| Mail Absender→Entwurf→Freigabe→Abschluss | TEIL — Ablehnen/Freigeben schließt ActiveWork; Sent-Verify bei Apple/iCloud noch flaky |
-| Coding Path-Slot | TEIL — Pfad-Slot Smoke grün; Cursor-Lauf bewusst nicht im Smoke |
-| Computer Mehrschritt | TEIL — TextEdit + Screenshot-Kette Smoke |
-| Wissen Import Pfad→Einlesen | TEIL — ActiveWork + Smoke + Real-App |
-| Recherche ActiveWork + Verify | TEIL — Evidence mit Connector |
-| Watch-Scan | TEIL — Real-App / Voice-API grün |
-| Stimme Session→ActiveWork→TTS-Text | TEIL — verify + Smoke |
-| Stimme inputMode=voice Real-App | TEIL — API-Stichprobe grün |
+| Mail Absender→Entwurf→Freigabe→Send | TEIL — steuert nur `info@elevum.io` + `joachim@rankpilot.de`; Freigabe→Send Smoke grün |
+| Coding Path-Slot | TEIL — Pfad-Slot Smoke grün |
+| Computer Mehrschritt | TEIL — TextEdit + Screenshot Smoke |
+| Wissen / Recherche / Watch | TEIL — ActiveWork + Real-App |
+| Stimme Session + Voice-API | TEIL — verify + API-Stichprobe |
 | Stopp bricht ActiveWork ab | TEIL — Real-App API grün |
 | Stimme Live-Mic Hardware | OFFEN — manuell am Gerät |
-| Vision 100% | NOCH NICHT — Rest: Live-Mic Hardware, Apple Sent-Ordner-Verify hart, Coding Cursor-E2E |
+| Vision 100% | NOCH NICHT — Rest: Live-Mic Hardware, Coding Cursor-E2E |
 
-## Real-App Stichproben
+## Mail-Steuerung
 
-### Text / Kalender / Watch
-1. Termin anlegen → Wann → Titel → Evidence  
-2. Was steht an? → Watch Evidence  
-3. Unterlagen einlesen → Pfadfrage  
-4. Stopp → ActiveWork abgebrochen  
+NOVA darf nur diese Absender steuern (Entwurf + Versand):
 
-### Voice-API (`inputMode: voice`)
-1. Termin-Kette über Whisper-Meta  
-2. Watch-Scan  
+- `info@elevum.io`
+- `joachim@rankpilot.de`
 
-### Mail-Freigabe
-1. Entwurf → waiting_approval + ApprovalCard/„freigeben“/„ablehnen“  
-2. ActiveWork wird nach Entscheidung geschlossen (Evidence)  
-3. Echtes Sent-Verify in Mail.app ggf. noch verzögert/fehlschlagend  
+Override optional: `NOVA_MAIL_STEERABLE=…`
+
+## Stichprobe Mail (2026-09-28)
+
+1. Entwurf von `joachim@rankpilot.de` → Freigabe  
+2. Ablehnen → nichts versendet, ActiveWork zu  
+3. Erneut Freigeben → `1 E-Mail(s) sind raus.` (Selbsttest)  

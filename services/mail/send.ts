@@ -3,6 +3,7 @@ import { assertOrganizationId } from "@/services/tenant";
 import { getMailProvider } from "@/connectors/registry";
 import { auditMail } from "@/services/mail/audit";
 import { createMailFollowUp } from "@/services/mail/followup";
+import { isSteerableMailAddress } from "@/lib/mail/steerable";
 import type { MailProvider, MailSendResult } from "@/types/connectors";
 
 export async function deliverApprovedDraft(input: {
@@ -23,6 +24,29 @@ export async function deliverApprovedDraft(input: {
   if (!input.approved) {
     return { ok: false, executed: false, mock: false, status: "WAITING_FOR_APPROVAL", reason: "Versand wartet auf Freigabe." };
   }
+
+  const fromAccount = draft.mailAccountId
+    ? await prisma.mailAccount.findFirst({
+        where: { id: draft.mailAccountId, organizationId: input.organizationId },
+      })
+    : null;
+  if (!fromAccount || !isSteerableMailAddress(fromAccount.emailAddress)) {
+    await prisma.communication.update({ where: { id: draft.id }, data: { deliveryStatus: "FAILED", status: "failed" } });
+    await auditMail({
+      organizationId: input.organizationId,
+      action: "SEND_FAILED",
+      status: "FAILED",
+      detail: "Absender nicht freigegeben",
+    });
+    return {
+      ok: false,
+      executed: false,
+      mock: false,
+      status: "FAILED",
+      reason: "NOVA versendet nur von info@elevum.io oder joachim@rankpilot.de.",
+    };
+  }
+
   const to = draft.contact?.email?.trim();
   const headerTo = to || input.fallbackTo?.trim() || recipientFromBody(draft);
   if (!headerTo) {

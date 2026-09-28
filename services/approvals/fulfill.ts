@@ -180,9 +180,10 @@ export async function executeDecidedApproval(input: {
   }
   const message = sent
     ? `${sent} E-Mail(s) sind raus.`
-    : mailConnected
-      ? "Freigegeben, aber der Versand ist fehlgeschlagen. Es wurde nichts als gesendet markiert."
-      : "Freigegeben, aber es ist kein Mailkonto verbunden. Es wurde nichts versendet.";
+    : reasons.filter(Boolean).join(" ") ||
+      (mailConnected
+        ? "Freigegeben, aber der Versand ist fehlgeschlagen. Es wurde nichts als gesendet markiert."
+        : "Freigegeben, aber Mail.app-Steuerung ist gerade nicht verfügbar. Es wurde nichts versendet.");
   await closeLinkedActiveWork({
     organizationId: input.organizationId,
     approvalId: input.approval.id,

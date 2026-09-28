@@ -24,6 +24,7 @@ import {
   savePendingMailDraft,
   updatePendingMailDraft,
 } from "@/services/mail/pending-draft";
+import { filterSteerableMailAccounts, isSteerableMailAddress } from "@/lib/mail/steerable";
 
 export type PrepareMailDraftResult = {
   ok: boolean;
@@ -51,13 +52,27 @@ export async function prepareMailDraft(input: {
     return reviseOpenDraft(input);
   }
 
-  const accounts = await prisma.mailAccount.findMany({
-    where: { organizationId: input.organizationId, status: "connected" },
-    orderBy: { updatedAt: "desc" },
-  });
+  const accounts = filterSteerableMailAccounts(
+    await prisma.mailAccount.findMany({
+      where: { organizationId: input.organizationId, status: "connected" },
+      orderBy: { updatedAt: "desc" },
+    }),
+  );
+  if (!accounts.length) {
+    return {
+      ok: false,
+      reply:
+        "Für Entwurf und Versand steuert NOVA nur `info@elevum.io` und `joachim@rankpilot.de`. Keines dieser Konten ist verbunden.",
+      communicationId: null,
+    };
+  }
   const preferred = await preferredMailAccount(input.organizationId);
   const suggested =
-    (preferred && accounts.find((item) => item.id === preferred.id)) || accounts[0] || null;
+    (preferred &&
+      isSteerableMailAddress(preferred.emailAddress) &&
+      accounts.find((item) => item.id === preferred.id)) ||
+    accounts[0] ||
+    null;
 
   const pending = await loadPendingMailDraft(input.organizationId);
   const wantsOtherAccounts = /\b(?:andere konten|alle konten|welches konto|welche konten)\b/i.test(

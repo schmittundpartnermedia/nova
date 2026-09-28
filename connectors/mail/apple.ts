@@ -4,6 +4,7 @@ import path from "node:path";
 import { prisma } from "@/lib/prisma";
 import { BaseMailProvider } from "@/connectors/mail/base";
 import { openMailIfClosed, readMailAutomationState, runMailAppleScript } from "@/services/mail/apple-events";
+import { isSteerableMailAddress } from "@/lib/mail/steerable";
 import {
   appleIdentityToken,
   appleRefFromCapabilities,
@@ -419,9 +420,13 @@ export class AppleMailProvider extends BaseMailProvider {
   }
 
   async send(input: MailSendInput): Promise<MailSendResult> {
+    await openMailIfClosed();
     const context = input.accountId ? await accountContext(input.organizationId, input.accountId) : null;
     if (!context || context.account.emailAddress.endsWith("@apple-mail.local")) {
       return failed("Kein Apple-Mail-Konto für den Versand.");
+    }
+    if (!isSteerableMailAddress(context.account.emailAddress)) {
+      return failed("NOVA versendet nur von info@elevum.io oder joachim@rankpilot.de.");
     }
     const sent = await runMailAppleScript(
       newSendScript({ sender: context.account.emailAddress, to: input.to, subject: input.subject, body: input.body }),
