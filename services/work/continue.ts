@@ -138,8 +138,9 @@ async function executeReadyWork(input: {
     const base = composeMailBrief(input.work);
     const accountUtterance =
       looksLikeAccountPick(input.userRequest) || looksLikeAccountAffirmative(input.userRequest);
+    // Absender vorne anhängen, damit er nicht in „Inhalt:“ rutscht.
     const brief =
-      !input.work.slots.from && accountUtterance ? `${base} ${input.userRequest}`.trim() : base;
+      !input.work.slots.from && accountUtterance ? `${input.userRequest}. ${base}`.trim() : base;
     const draft = await prepareMailDraft({
       organizationId: input.organizationId,
       userRequest: brief,
