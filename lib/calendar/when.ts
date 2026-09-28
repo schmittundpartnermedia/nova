@@ -16,6 +16,10 @@ function parseClock(text: string): { hours: number; minutes: number } {
   if (umColon) {
     return { hours: Math.min(23, Number(umColon[1])), minutes: Math.min(59, Number(umColon[2])) };
   }
+  const umUhr = text.match(/\bum\s+(\d{1,2})\s*uhr\b/i);
+  if (umUhr) {
+    return { hours: Math.min(23, Number(umUhr[1])), minutes: 0 };
+  }
   const colon = text.match(/\b(\d{1,2}):(\d{2})\b/);
   if (colon) {
     return { hours: Math.min(23, Number(colon[1])), minutes: Math.min(59, Number(colon[2])) };
@@ -52,8 +56,10 @@ export function parseWhen(text: string, now = new Date()): ParsedWhen | null {
   }
 
   const day = new Date(now);
-  if (/\bübermorgen\b/i.test(value)) day.setDate(day.getDate() + 2);
-  else if (/\bmorgen\b/i.test(value)) day.setDate(day.getDate() + 1);
+  // Kein \\b vor Umlauten: in JS ist \\b nur ASCII, „übermorgen“ würde sonst nie matchen.
+  if (/(^|[^A-Za-z0-9_])übermorgen(?![A-Za-z0-9_])/i.test(value) || /\buebermorgen\b/i.test(value)) {
+    day.setDate(day.getDate() + 2);
+  } else if (/\bmorgen\b/i.test(value)) day.setDate(day.getDate() + 1);
   else if (/\bheute\b/i.test(value)) {
     /* same day */
   } else {
@@ -80,6 +86,7 @@ export function guessTitle(text: string): string {
     .trim()
     .replace(/^(?:an|für|fuer|namens|mit)\s*:?\s+/i, "")
     .replace(/\s+an[.!?]*$/i, "")
+    .replace(/^an$/i, "")
     .replace(/[.!?]+$/g, "")
     .replace(/^[\s:–—-]+/, "")
     .trim();

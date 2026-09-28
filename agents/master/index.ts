@@ -889,9 +889,11 @@ export async function runMaster(input: {
   if (dialog.kind !== "social" && detectCalendarIntent(input.userRequest)) {
     const { parseWhen, guessTitle } = await import("@/lib/calendar/when");
     const lower = input.userRequest.toLowerCase();
+    const isCreate = /\b(anleg|erstell|trag|leg(?:e)?\b[\s\S]{0,40}\ban\b|neuen?\s+termin)\w*/i.test(lower);
     const isList =
-      /\b(list|übersicht|was steht|welche termine|zeige termine|stehen an)\b/i.test(lower) ||
-      (/\btermine?\b/i.test(lower) && !/\banleg|erstell|trag/i.test(lower));
+      !isCreate &&
+      (/\b(list|übersicht|was steht|welche termine|zeige termine|stehen an)\b/i.test(lower) ||
+        (/\btermine?\b/i.test(lower) && !/\banleg|erstell|trag|leg(?:e)?/i.test(lower)));
     const isCancel = /\b(absag|lösch|stornier)\b/i.test(lower);
     if (!isList && !isCancel) {
       const { startActiveWorkFromIntent } = await import("@/services/work/continue");

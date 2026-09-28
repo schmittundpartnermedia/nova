@@ -190,7 +190,7 @@ export async function setActiveWorkStatus(input: {
 
 export async function cancelOpenActiveWorks(organizationId: string, evidence?: string) {
   assertOrganizationId(organizationId);
-  await prisma.activeWork.updateMany({
+  const result = await prisma.activeWork.updateMany({
     where: { organizationId, status: { in: OPEN } },
     data: {
       status: "cancelled",
@@ -198,6 +198,7 @@ export async function cancelOpenActiveWorks(organizationId: string, evidence?: s
       completedAt: new Date(),
     },
   });
+  return result.count;
 }
 
 export function summarizeActiveWork(work: ActiveWorkRecord): string {

@@ -186,10 +186,13 @@ export async function actOnSituation(input: {
   }
 
   if (input.decision.kind === "cancel-active") {
+    const { cancelOpenActiveWorks } = await import("@/services/work/active");
+    const workCount = await cancelOpenActiveWorks(input.organizationId, "Vom Benutzer abgebrochen.");
     const cancelled = await cancelComputerWork(input.organizationId);
     await pauseAbandonedJobs();
+    const total = cancelled.count + workCount;
     const reply =
-      cancelled.count > 0
+      total > 0
         ? "Ich habe den laufenden Auftrag abgebrochen. Es startet nichts Neues."
         : "Es läuft nichts, das ich abbrechen müsste.";
     return { reply, statusMessage: "Abbruch geprüft.", orb: "DONE" };
