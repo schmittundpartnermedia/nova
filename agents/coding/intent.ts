@@ -9,7 +9,7 @@ const FIX_RE =
   /(?:prüf(?:e|en)?|check(?:e|en)?).*(?:fehler|bugs?|lint|typecheck|build)|beheb(?:e|en)?\s+(?:die\s+)?fehler|fix(?:e|en)?\s+(?:die\s+)?(?:fehler|bugs?)|reparier/i;
 
 const IMPLEMENT_RE =
-  /lass\s+cursor|cursor\s+das\s+umsetz|implementier|änder(?:e|n)?\s+.*(?:startseite|website|seite|code|hero)|setz(?:e|en)?\s+.*(?:um|in\s+cursor)|coding[-\s]?auftrag/i;
+  /lass\s+cursor|cursor\s+das\s+umsetz|implementier|änder(?:e|n)?\s+.*(?:startseite|website|seite|code|hero)|setz(?:e|en)?\s+.*(?:um|in\s+cursor)|coding[-\s]?auftrag|(?:schreib(?:e|en)?|leg(?:e|en)?|erstell(?:e|en)?|anleg(?:e|en)?).{0,80}(?:datei|file|\.txt|\.md|\.ts|\.tsx|\.js|\.json)|(?:datei|file).{0,40}(?:anleg|erstell|schreib)/i;
 
 const PROJECT_HINTS = [
   { key: "rankpilot", re: /rank\s*pilot/i },

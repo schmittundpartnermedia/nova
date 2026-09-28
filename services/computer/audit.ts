@@ -150,8 +150,17 @@ export async function findResumableComputerJob(
     orderBy: { startedAt: "desc" },
   });
   if (!job) return null;
-  const plan = parseComputerPlan(job.plan);
-  if (!plan || plan.cursor >= plan.steps.length) return null;
+  const plan = parseComputerPlan(job.plan) ?? { steps: [], cursor: 0 };
+  // WAITING_FOR_HUMAN / INTERRUPTED / FAILED müssen auch ohne offene Plan-Schritte fortsetzbar sein.
+  if (
+    plan.steps.length > 0 &&
+    plan.cursor >= plan.steps.length &&
+    job.status !== "WAITING_FOR_HUMAN" &&
+    job.status !== "INTERRUPTED" &&
+    job.status !== "FAILED"
+  ) {
+    return null;
+  }
   return { job, plan };
 }
 

@@ -562,6 +562,17 @@ export async function runComputerAgent(input: {
         continue;
       }
 
+      // App starten zählt auch ohne Fokus-Schritt als Erfolg.
+      if (
+        !result.success &&
+        intent.kind === "open_app" &&
+        step.tool === "application" &&
+        String((step.payload as { action?: string }).action) === "focus" &&
+        actions.some((item) => item.action === "launch" && item.success)
+      ) {
+        continue;
+      }
+
       if (!result.success && intent.kind !== "cursor_ask") {
         await saveComputerPlan({
           organizationId: input.organizationId,
@@ -738,6 +749,13 @@ function userReply(
   status: ComputerJobStatus,
   permissionNotes: string[],
 ): string {
+  if (intent.kind === "open_app") {
+    const launch = actions.find((item) => item.action === "launch");
+    const name = launch?.target?.trim() || "Die App";
+    if (launch?.success) {
+      return status === "VERIFIED" ? `${name} ist geöffnet.` : `${name} ist geöffnet.`;
+    }
+  }
   if (status !== "VERIFIED") {
     const lastError = [...actions].reverse().find((item) => !item.success)?.error?.message;
     return `Ich habe die Computeraufgabe nicht als erledigt markiert.${lastError ? ` Grund: ${lastError}` : ""} ${permissionNotes.find((note) => /benötigt/i.test(note)) ?? ""}`.trim();

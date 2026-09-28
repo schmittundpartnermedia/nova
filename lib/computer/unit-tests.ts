@@ -1,4 +1,7 @@
 import assert from "node:assert/strict";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
 import { classifyComputerAction, classifyShellCommand } from "@/lib/computer/risk";
 import { detectHardBlock, isHardBlockedPath } from "@/lib/computer/hard-blocks";
 import { isInjectionAttempt, wrapExternalContent } from "@/lib/computer/injection";
@@ -15,6 +18,8 @@ import {
   parseCursorCliOutput,
   looksLikeAgentCli,
   isElectronGuiHelp,
+  sanitizeWorkspaceAgentCliConfig,
+  detectAgentCliConfigError,
 } from "@/lib/computer/cursor-cli";
 import { browserActionSchema, filesystemActionSchema, shellActionSchema } from "@/lib/computer/schemas";
 import { CAPABILITY_IDS } from "@/lib/computer/types";
@@ -284,6 +289,12 @@ export function runComputerUnitTests(): string[] {
     assert.equal(detectCodingIntent("Erstelle eine kleine Testseite mit Überschrift, Text und Button.").kind, "website_build");
     assert.equal(detectCodingIntent("NOVA, frag Cursor, ob im Projekt TypeScript-Fehler vorhanden sind.").kind, "none");
     assert.equal(detectCodingIntent("NOVA stop").kind, "cancel");
+    assert.equal(
+      detectCodingIntent(
+        "Im Ordner /Volumes/My Book 24/NOVA/.nova/coding-sandbox lege eine Datei marker-app.txt an mit Inhalt genau: app-ok.",
+      ).kind,
+      "implement",
+    );
   });
 
   check("cursor cli argv and output", () => {
@@ -314,6 +325,24 @@ export function runComputerUnitTests(): string[] {
     const parsed = parseCursorCliOutput('{"session_id":"abc","result":"done"}');
     assert.equal(parsed.sessionId, "abc");
     assert.equal(parsed.text, "done");
+    const bad = parseCursorCliOutput(
+      "",
+      "Invalid project config at /tmp/x/.cursor/cli.json: schema validation failed. Unrecognized key(s) in object: 'statusLine'",
+    );
+    assert.equal(Boolean(bad.error), true);
+    assert.equal(Boolean(detectAgentCliConfigError("", bad.error ?? "")), true);
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "nova-cli-sanitize-"));
+    fs.mkdirSync(path.join(dir, ".cursor"), { recursive: true });
+    fs.writeFileSync(
+      path.join(dir, ".cursor", "cli.json"),
+      JSON.stringify({ statusLine: { type: "command", command: "true" }, version: 1 }),
+    );
+    const cleaned = sanitizeWorkspaceAgentCliConfig(dir);
+    assert.equal(cleaned.changed, true);
+    assert.deepEqual(cleaned.removed, ["statusLine"]);
+    const after = JSON.parse(fs.readFileSync(path.join(dir, ".cursor", "cli.json"), "utf8")) as Record<string, unknown>;
+    assert.equal("statusLine" in after, false);
+    assert.equal(after.version, 1);
   });
 
   check("upload secrets blocked", () => {

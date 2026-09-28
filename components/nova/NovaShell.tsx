@@ -401,15 +401,24 @@ export function NovaShell() {
             flush(accumulated);
             if (nextState === "WAITING_FOR_APPROVAL") {
               setOrbState("WAITING_FOR_APPROVAL");
+            } else if (nextState === "ERROR") {
+              setOrbState("ERROR");
             }
           } else {
             if (sessionActiveRef.current) {
               notifyNovaIdle();
-              setOrbState(nextState === "WAITING_FOR_APPROVAL" ? "WAITING_FOR_APPROVAL" : "LISTENING");
-              setStatus("Zuhören");
+              if (nextState === "WAITING_FOR_APPROVAL") {
+                setOrbState("WAITING_FOR_APPROVAL");
+              } else if (nextState === "ERROR") {
+                setOrbState("ERROR");
+              } else {
+                setOrbState("LISTENING");
+                setStatus("Zuhören");
+              }
             } else {
               setOrbState(nextState);
               if (nextState === "DONE") goIdleSoon(1800);
+              if (nextState === "ERROR") goIdleSoon(4200);
             }
           }
           if (textTurn || commOpenRef.current) {

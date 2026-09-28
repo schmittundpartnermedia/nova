@@ -63,6 +63,10 @@ export async function prepareMailDraft(input: {
   const explicitFrom = input.userRequest.match(/\b(?:von|absender)\s+([A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,})/i)?.[1] ?? null;
   const explicitSubject = input.userRequest.match(/\bBetreff\s*[:\-]?\s*([^\n.]+)/i)?.[1]?.trim() || null;
   if (explicitTo) {
+    const defaultAccount = await prisma.mailAccount.findFirst({
+      where: { organizationId: input.organizationId, provider: "apple-mail", status: "connected" },
+      orderBy: { updatedAt: "desc" },
+    });
     const account = explicitFrom
       ? await prisma.mailAccount.findFirst({
           where: {
@@ -71,11 +75,19 @@ export async function prepareMailDraft(input: {
             status: "connected",
           },
         })
-      : null;
+      : defaultAccount;
     if (explicitFrom && !account) {
       return {
         ok: false,
         reply: `Das Absenderkonto ${explicitFrom} ist nicht verbunden. Es wurde nichts vorbereitet und nichts versendet.`,
+        communicationId: null as string | null,
+      };
+    }
+    if (!account) {
+      return {
+        ok: false,
+        reply:
+          "Kein Apple-Mail-Konto ist verbunden. Bitte einmal „Apple Mail verbinden“ in NOVA freigeben (Systemeinstellungen → Datenschutz → Automation → Mail), danach erneut den Entwurf anfordern. Es wurde nichts versendet.",
         communicationId: null as string | null,
       };
     }

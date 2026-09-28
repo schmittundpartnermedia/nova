@@ -426,21 +426,52 @@ func runAppleScript(_ source: String) -> [String: Any] {
 }
 
 func launchApp(_ name: String) -> [String: Any] {
-    let appURL =
-        NSWorkspace.shared.urlForApplication(withBundleIdentifier: name)
-        ?? URL(fileURLWithPath: "/Applications/\(name).app")
-    guard FileManager.default.fileExists(atPath: appURL.path) else {
-        return ["ok": false, "error": "app_not_found", "name": name]
+    let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+    let candidates: [URL] = [
+        NSWorkspace.shared.urlForApplication(withBundleIdentifier: trimmed),
+        URL(fileURLWithPath: "/System/Applications/\(trimmed).app"),
+        URL(fileURLWithPath: "/Applications/\(trimmed).app"),
+        URL(fileURLWithPath: "/System/Applications/Utilities/\(trimmed).app"),
+        URL(fileURLWithPath: "/Applications/Utilities/\(trimmed).app"),
+    ].compactMap { $0 }
+
+    let appURL = candidates.first(where: { FileManager.default.fileExists(atPath: $0.path) })
+        ?? NSWorkspace.shared.urlForApplication(toOpen: URL(fileURLWithPath: "/"))
+    // Prefer explicit name lookup via LaunchServices when path guesses fail.
+    let resolved: URL? = {
+        if let appURL, FileManager.default.fileExists(atPath: appURL.path), appURL.path.hasSuffix(".app") {
+            return appURL
+        }
+        let task = Process()
+        task.executableURL = URL(fileURLWithPath: "/usr/bin/osascript")
+        task.arguments = ["-e", "POSIX path of (path to application \"\(trimmed)\")"]
+        let pipe = Pipe()
+        task.standardOutput = pipe
+        task.standardError = Pipe()
+        do {
+            try task.run()
+            task.waitUntilExit()
+        } catch {
+            return nil
+        }
+        let data = pipe.fileHandleForReading.readDataToEndOfFile()
+        let path = String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        guard !path.isEmpty else { return nil }
+        return URL(fileURLWithPath: path)
+    }()
+
+    guard let target = resolved, FileManager.default.fileExists(atPath: target.path) else {
+        return ["ok": false, "error": "app_not_found", "name": trimmed]
     }
     let configuration = NSWorkspace.OpenConfiguration()
     var launchError: String?
     let sem = DispatchSemaphore(value: 0)
-    NSWorkspace.shared.openApplication(at: appURL, configuration: configuration) { _, error in
+    NSWorkspace.shared.openApplication(at: target, configuration: configuration) { _, error in
         launchError = error?.localizedDescription
         sem.signal()
     }
     _ = sem.wait(timeout: .now() + 6)
-    return ["ok": launchError == nil, "name": name, "error": launchError ?? ""]
+    return ["ok": launchError == nil, "name": trimmed, "path": target.path, "error": launchError ?? ""]
 }
 
 func focusApp(_ name: String) -> [String: Any] {

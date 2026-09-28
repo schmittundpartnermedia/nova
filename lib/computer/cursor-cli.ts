@@ -132,12 +132,53 @@ export function buildCursorPrompt(input: {
     .join("\n");
 }
 
+/** Agent CLI akzeptiert kein IDE-`statusLine` in `.cursor/cli.json`. */
+const AGENT_CLI_BLOCKED_KEYS = new Set(["statusLine"]);
+
+export function sanitizeWorkspaceAgentCliConfig(workspace: string): {
+  path: string | null;
+  changed: boolean;
+  removed: string[];
+} {
+  const configPath = path.join(/* turbopackIgnore: true */ workspace, ".cursor", "cli.json");
+  if (!fs.existsSync(configPath)) return { path: null, changed: false, removed: [] };
+  try {
+    const raw = fs.readFileSync(configPath, "utf8");
+    const parsed = JSON.parse(raw) as unknown;
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+      return { path: configPath, changed: false, removed: [] };
+    }
+    const record = parsed as Record<string, unknown>;
+    const removed = Object.keys(record).filter((key) => AGENT_CLI_BLOCKED_KEYS.has(key));
+    if (!removed.length) return { path: configPath, changed: false, removed: [] };
+    for (const key of removed) delete record[key];
+    const next = `${JSON.stringify(record, null, 2)}\n`;
+    if (next.trim() === "{}" || Object.keys(record).length === 0) {
+      fs.unlinkSync(configPath);
+    } else {
+      fs.writeFileSync(configPath, next, "utf8");
+    }
+    return { path: configPath, changed: true, removed };
+  } catch {
+    return { path: configPath, changed: false, removed: [] };
+  }
+}
+
+export function detectAgentCliConfigError(stdout: string, stderr = ""): string | undefined {
+  const text = `${stdout}\n${stderr}`;
+  if (/Unrecognized key\(s\) in object:\s*'statusLine'/i.test(text) || /Invalid project config.*cli\.json/i.test(text)) {
+    return "Workspace-.cursor/cli.json enthält Keys, die die Agent CLI nicht akzeptiert (z. B. statusLine).";
+  }
+  return undefined;
+}
+
 export function parseCursorCliOutput(stdout: string, stderr = ""): {
   text: string;
   sessionId?: string;
   error?: string;
 } {
   const raw = stdout.trim() || stderr.trim();
+  const configError = detectAgentCliConfigError(stdout, stderr);
   const jsonCandidate = extractJsonObject(raw);
   if (jsonCandidate) {
     const sessionId = firstString(jsonCandidate, [
@@ -153,13 +194,14 @@ export function parseCursorCliOutput(stdout: string, stderr = ""): {
       (typeof jsonCandidate.result === "string" ? jsonCandidate.result : "") ||
       raw;
     const error =
-      jsonCandidate.is_error === true || jsonCandidate.isError === true
+      configError ||
+      (jsonCandidate.is_error === true || jsonCandidate.isError === true
         ? firstString(jsonCandidate, ["error", "message"]) || "Cursor-Lauf fehlgeschlagen."
-        : undefined;
+        : undefined);
     return { text: String(text).slice(0, 20_000), sessionId, error };
   }
   const sessionId = raw.match(/\b(?:session|chat)[_-]?id[:\s"]+([a-zA-Z0-9_-]+)/i)?.[1];
-  return { text: raw.slice(0, 20_000), sessionId };
+  return { text: raw.slice(0, 20_000), sessionId, error: configError };
 }
 
 export function parseCreateChatId(stdout: string, stderr = ""): string | undefined {

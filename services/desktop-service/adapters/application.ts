@@ -67,10 +67,31 @@ export async function executeApplicationAction(input: {
       case "launch":
       case "focus": {
         const name = input.payload.name;
+        // Prefer `open -a` for launch: no Automation TCC, works for System apps like TextEdit.
+        if (input.payload.action === "launch") {
+          const opened = await runArgv({
+            argv: ["open", "-a", name],
+            cwd: process.cwd(),
+            timeoutMs: 8000,
+          });
+          if (opened.code === 0) {
+            return createActionResult({
+              tool: "application",
+              action: "launch",
+              startedAt,
+              success: true,
+              riskLevel: "READ_ONLY",
+              approvalRequired: false,
+              target: name,
+              result: { via: "open -a", code: 0 },
+              verification: { verified: true, method: "open -a" },
+            });
+          }
+        }
         const helper = await invokeNativeHelper({ cmd: `app.${input.payload.action}`, app: name });
         if (!helper.ok) {
           const fallback = await runArgv({
-            argv: ["open", "-a", name],
+            argv: input.payload.action === "focus" ? ["open", "-a", name] : ["open", "-a", name],
             cwd: process.cwd(),
             timeoutMs: 8000,
           });

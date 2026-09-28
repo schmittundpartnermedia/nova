@@ -81,7 +81,7 @@ async function findExisting(organizationId: string, hint: string | undefined, na
     include: { project: true },
     orderBy: { updatedAt: "desc" },
   });
-  if (context?.localPath && fs.existsSync(context.localPath)) {
+  if (context?.localPath && fs.existsSync(context.localPath) && !isEphemeralCodingPath(context.localPath)) {
     return {
       name: context.project.name,
       projectId: context.projectId,
@@ -97,7 +97,7 @@ async function findExisting(organizationId: string, hint: string | undefined, na
   });
   if (project) {
     const related = await prisma.projectContext.findUnique({ where: { projectId: project.id } });
-    if (related?.localPath && fs.existsSync(related.localPath)) {
+    if (related?.localPath && fs.existsSync(related.localPath) && !isEphemeralCodingPath(related.localPath)) {
       return { name: project.name, projectId: project.id, localPath: related.localPath, created: false, source: "project" };
     }
   }
@@ -106,17 +106,61 @@ async function findExisting(organizationId: string, hint: string | undefined, na
   if (fromFs) {
     return { name, localPath: fromFs, created: false, source: "filesystem" };
   }
+
+  const sandbox = defaultCodingSandbox();
+  if (sandbox) {
+    return {
+      name: path.basename(sandbox),
+      localPath: sandbox,
+      created: false,
+      source: "filesystem",
+    };
+  }
   return null;
+}
+
+function isEphemeralCodingPath(localPath: string): boolean {
+  const base = path.basename(localPath);
+  return (
+    /^dev-e2e-/i.test(base) ||
+    /^nova-dev-e2e-/i.test(base) ||
+    localPath.includes(`${path.sep}.nova${path.sep}dev-e2e-`) ||
+    localPath.startsWith("/var/folders/") ||
+    localPath.startsWith("/tmp/")
+  );
+}
+
+function defaultCodingSandbox(): string | null {
+  const dir = path.join(/* turbopackIgnore: true */ process.cwd(), ".nova", "coding-sandbox");
+  try {
+    fs.mkdirSync(dir, { recursive: true });
+    return dir;
+  } catch {
+    return null;
+  }
 }
 
 function extractExplicitPath(request: string): string | undefined {
   const match = request.match(
     /(?:^|[\s"'`])(\/(?:tmp|var\/folders|private\/var\/folders|Users|Volumes|home)\/[^\s"'`]+)/,
   );
-  const candidate = match?.[1];
+  const candidate = match?.[1]?.replace(/[.,;:!?]+$/, "");
   if (!candidate) return undefined;
   const resolved = path.resolve(candidate);
-  if (fs.existsSync(resolved)) return resolved;
+  if (fs.existsSync(resolved)) {
+    try {
+      return fs.statSync(resolved).isDirectory() ? resolved : path.dirname(resolved);
+    } catch {
+      return resolved;
+    }
+  }
+  const base = path.basename(resolved);
+  const looksLikeFile = /\.[A-Za-z0-9]{1,8}$/.test(base);
+  if (!looksLikeFile) return undefined;
+  const parent = path.dirname(resolved);
+  if (parent !== resolved && fs.existsSync(parent) && fs.statSync(parent).isDirectory()) {
+    return parent;
+  }
   return undefined;
 }
 

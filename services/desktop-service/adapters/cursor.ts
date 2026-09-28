@@ -9,11 +9,13 @@ import {
   buildAgentCliArgv,
   buildCursorPrompt,
   defaultCursorTimeoutMs,
+  detectAgentCliConfigError,
   isElectronGuiHelp,
   looksLikeAgentCli,
   parseCreateChatId,
   parseCursorAuth,
   parseCursorCliOutput,
+  sanitizeWorkspaceAgentCliConfig,
   wellKnownAgentBins,
   wellKnownCursorEditorBins,
 } from "@/lib/computer/cursor-cli";
@@ -227,6 +229,9 @@ export async function executeCursorAction(input: {
     });
   }
 
+  // IDE-Statusline in .cursor/cli.json bricht die Agent CLI ab — vor dem Lauf bereinigen.
+  sanitizeWorkspaceAgentCliConfig(resolved.resolved);
+
   if (input.payload.action === "createSession") {
     const argv =
       discovery.kind === "cursor-bin" ? ["agent", "create-chat"] : ["create-chat"];
@@ -324,7 +329,21 @@ export async function executeCursorAction(input: {
         metadata: { status: "UNAUTHENTICATED", bin: discovery.bin, version: discovery.version },
       });
     }
-    const success = result.code === 0 && !result.cancelled && parsed.text.trim().length > 0 && !parsed.error;
+    const configError = parsed.error || detectAgentCliConfigError(result.stdout, result.stderr);
+    if (configError && /cli\.json|statusLine/i.test(configError)) {
+      sanitizeWorkspaceAgentCliConfig(resolved.resolved);
+      return failedResult({
+        tool: "cursor",
+        action: input.payload.action,
+        startedAt,
+        riskLevel: risk.risk,
+        code: "cursor_workspace_config",
+        message: `${configError} Bitte denselben Auftrag noch einmal starten.`,
+        target: resolved.resolved,
+      });
+    }
+    const success =
+      result.code === 0 && !result.cancelled && parsed.text.trim().length > 0 && !parsed.error && !configError;
     return createActionResult({
       tool: "cursor",
       action: input.payload.action,

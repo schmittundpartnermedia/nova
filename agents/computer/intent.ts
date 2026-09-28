@@ -69,8 +69,10 @@ export function detectComputerIntent(userRequest: string): ComputerIntent {
   }
 
   if (
-    /\böffne\b/i.test(lower) &&
-    /\b(finder|terminal|textedit|mail|kalender|safari|chrome|cursor|notizen|notes|systemeinstellungen|rechner|calculator)\b/i.test(lower)
+    /(?:^|[^a-z0-9äöüß])öffne(?:[^a-z0-9äöüß]|$)/i.test(lower) &&
+    /(?:^|[^a-z0-9äöüß])(finder|terminal|textedit|mail|kalender|safari|chrome|cursor|notizen|notes|systemeinstellungen|rechner|calculator)(?:[^a-z0-9äöüß]|$)/i.test(
+      lower,
+    )
   ) {
     return { kind: "open_app", userCommissioned: true, statusMessage: "App wird geöffnet" };
   }
