@@ -11,19 +11,18 @@ NOVA.app
     → CHECKING_VOLUME
     → CHECKING_RUNTIME
     → Application Service  (Next.js auf 127.0.0.1:3100, Health: /api/nova/ready)
-    → Desktop Service      (127.0.0.1:47821 /health)
     → Worker               (Heartbeat `.nova/worker.heartbeat`, überlebt das Schließen des Fensters)
-    → Native Helper        (bestehendes signiertes Helper-Bundle)
+    → Native Helper        (Prüfung: Helper antwortet auf `automation.mail`)
   → NOVA UI                (bestehende Oberfläche, kein neues Frontend)
 ```
 
 NOVA.app startet nach einem Mac-Neustart ohne Terminal. Die Runtime kommt aus `NOVANodeBin` (`/usr/local/bin/node`), nicht aus einer Login-Shell. Liegt das Projekt auf einem externen Volume, wartet der Supervisor auf Mount und Lesbarkeit, statt blind zu schlafen.
 
-Der Helper bleibt ein eigenes Bundle unter:
+Der Native Helper ist ein eigenes Bundle unter:
 
 `services/desktop-service/native/bin/NOVA Desktop Helper.app`
 
-Er wird nicht in NOVA.app verschoben, damit bestehende TCC-Einträge (Screen Recording, Accessibility) erhalten bleiben.
+Er wird von der TypeScript-Seite aus `services/desktop-service/native/main.swift` gebaut, nicht von NOVA.app. Er dient nur Apple Mail und kennt drei Kommandos: Mail starten (`app.launch`), Automation-Status für Mail abfragen (`automation.mail`) und AppleScript ausführen (`applescript.run`). Keine Bildschirmaufnahme, keine Bedienungshilfen, keine Maus-/Tastatur-Eingabe.
 
 ## Entwicklung vs. Production
 
@@ -70,7 +69,6 @@ Lokal, ohne Secrets:
 
 - `.nova/logs/launcher.log`
 - `.nova/logs/nova-web.log`
-- `.nova/logs/desktop-service.log`
 - `.nova/logs/worker.log`
 
 Startfehler nennen den Supervisor-Zustand, PID, Executable, cwd und den letzten Logausschnitt. Secrets werden redigiert.
@@ -79,4 +77,4 @@ Startfehler nennen den Supervisor-Zustand, PID, Executable, cwd und den letzten 
 
 NOVA.app beendet nur Prozesse, die diese Session selbst gestartet hat. Bereits laufende gesunde Dienste werden wiederverwendet und beim Quit nicht angefasst.
 
-Das Schließen des NOVA-Fensters beendet die App nicht. Application Service, Desktop Service und Worker laufen weiter, damit freigegebene Jobs nicht am offenen Fenster hängen. Ein explizites Beenden fährt die selbst gestarteten Prozesse herunter.
+Das Schließen des NOVA-Fensters beendet die App nicht. Application Service und Worker laufen weiter, damit freigegebene Jobs nicht am offenen Fenster hängen. Ein explizites Beenden fährt die selbst gestarteten Prozesse herunter.

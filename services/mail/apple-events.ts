@@ -1,4 +1,4 @@
-import { ensureNativeHelper, invokeNativeHelper } from "@/lib/computer/capabilities";
+import { ensureNativeHelper, invokeNativeHelper } from "@/lib/native/helper";
 import { assertMailScriptSafe, type MailAutomationState } from "@/lib/mail/apple";
 
 let cached: { at: number; state: MailAutomationState } | null = null;

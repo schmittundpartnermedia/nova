@@ -23,15 +23,40 @@ Prüfung Phase 1 gegen den Auftrag – **Urteil: aufbauen, nicht neu.**
 - Nicht fertig: Löschliste nur teilweise abgearbeitet – übrig u. a. 7× `agents/*/intent.ts` samt Agenten, `lib/*/intent.ts` (Regex), `lib/computer/` (16 Dateien), `services/computer/`, Seitenleisten `NovaSidebar`/`NovaContextPanel`, `three` in `package.json`, alte Doku unter `docs/`. Kein Mock-Regressionstest für den Kopf.
 - Regelverstoß: 823650d ist Phase 2 (Mail-Werkzeuge im Kopf), begonnen vor der Phase-1-Abnahme. Wird zurückgenommen (`git revert`), der Code bleibt in der Historie für Phase 2.
 
+**29.09.2026, nachmittags – Phase 1 zu Ende gebaut (Claude Code), Abnahme durch Joachim steht aus.**
+
+Was jetzt real im Code steht (nachgewiesen wie angegeben):
+- Kopf: nur OpenAI (`providers/ai/head.ts`), Modell `gpt-6-astra` (Default, Override über `AiProviderConfig` role „master"). Mock-, Anthropic- und Local-Anbieter gelöscht; es gibt **keinen** Ersatzanbieter mehr – vorher fiel NOVA bei OpenAI-Ausfall still auf einen Regex-Mock zurück.
+- Werkzeuge im Kopf: nur `gedaechtnis_lesen` (zählt nicht als ausgeführt) und `gedaechtnis_schreiben`.
+- Schleife: max. 8 Werkzeugrunden; wenn erschöpft, sagt NOVA das, statt „Erledigt." zu behaupten.
+- Modellnamen gegen `models.list` des Accounts geprüft (29.09.): `gpt-6-astra`, `gpt-4o-mini-transcribe`, `whisper-1`, `gpt-4o-mini-tts` existieren.
+- Gelöscht (per Erreichbarkeitsanalyse ab den Einstiegspunkten, ~240 Dateien): alle Agenten außer `agents/master`, alle `agents/*/intent.ts`, `lib/{chatgpt,development,research,review,mail}/intent.ts`, `lib/computer/`, `services/computer/`, Node-Desktop-Service samt Adaptern (Browser, AX, Screen, Shell, Cursor), Worker-Handler `computer/coding/knowledge/planner/development.run`, Seitenleisten, Kontextpanel, Archiv, Upload/Import, Freigabe-Karte, Watch-Banner, Avatar-Lippensync in der Stimme, `three`, `playwright`, Avatar-Assets, alte Doku unter `docs/`, 16 tote npm-Skripte, `.nova/phase0-*`/`abnahme-*`.
+- Swift-Helfer (`services/desktop-service/native/main.swift`): nur noch `app.launch`, `automation.mail`, `applescript.run`; AX/CGEvent/Screen-Capture entfernt, neu gebaut und signiert (Binary enthält keine AX/CGEvent-Symbole mehr). Launcher startet keinen Desktop-Service mehr, alter Pfad „My Book 24" entfernt.
+- Oberfläche: Orb, Gesprächszeile, Eingabe, PTT, Sprachausgabe. Keine Schnellaktionen mehr.
+- Phase 2 (823650d) zurückgenommen, liegt in der Historie.
+
+Nachweise dieser Sitzung:
+- `npx tsc --noEmit` grün, `npx eslint .` ohne Befund, `npx next build` grün, `npm run macos:build` → `macos/build/NOVA.app` gebaut und signiert (nicht gestartet).
+- `npm run test:kopf`: 8/8 bestanden (geskriptetes Modell, kein Netz, temporärer `NOVA_HOME`).
+- `npm run nachweis:phase1`: vier Abnahmesätze gegen die echte API bestanden → `docs/nachweis-phase1-kopf.txt`. Läuft direkt über `runHeadLoop`, **nicht** über App, Datenbank-Verlauf oder Mikrofon.
+
+Nicht geprüft / offen:
+- Nichts davon lief in NOVA.app. PTT, Sprachausgabe und der Verlauf über die Datenbank sind nur im Code gelesen, nicht ausgeführt.
+- `~/Nova/gedaechtnis/firma.md` enthält den Abnahmesatz schon (aus Cursors Tests). Damit Schritt 4 der Abnahme etwas beweist, vorher leeren.
+- Der Helfer wurde neu signiert (gleiche Identity, gleicher Identifier). macOS kann die Automations-Freigabe für Mail trotzdem neu abfragen.
+- Mail-Schicht bewusst nicht angefasst (Phase 2): `services/mail/sync.ts` zieht noch Wissens-/Retrieval-/Embedding-Maschinerie nach (`services/knowledge`, `lib/retrieval`, `lib/memory`), darüber hängt `lib/dialog/intent.ts` (Regex) an `lib/memory/policy.ts`. Beim ersten Kontakt in Phase 2 entscheiden. Alte Mail-Dialogpfade (`services/mail/draft.ts`, `answer.ts`, `actions.ts`) sind gelöscht; Cursors Phase-2-Stand davon liegt in 823650d.
+- Cursor-CLI-Anbindung (`agents/coding`, `lib/computer/cursor-cli.ts`) gelöscht; für Phase 5 aus der Historie vor diesem Commit holbar.
+- DB-Zeilen `AiProviderConfig` für simple/sensitive/fallback bleiben liegen, werden nicht mehr gelesen.
+
 ## Dran
 
-**Phase 1** gilt als offen, bis Joachim den Abnahmepunkt aus `docs/AUFTRAG.md` in NOVA.app bestätigt hat („Merk dir …" / „Was passt zu uns?" / „Und warum die?" / Neustart / „Was suchen wir nochmal?"). Phase 2 wird nicht begonnen, bevor das steht – auch wenn Cursor schon damit angefangen hat.
+**Phase 1 – Abnahme durch Joachim in NOVA.app.** Vorher `~/Nova/gedaechtnis/firma.md` leeren, dann `macos/build/NOVA.app` öffnen und per Taste (rechte Option) sprechen:
+1. „Merk dir: unsere Firma ist rankpilot, wir machen Lokal-SEO, wir suchen Sponsoren aus dem Handwerk in Baden-Württemberg."
+2. „Was für Sponsoren passen zu uns?"
+3. „Und warum die?"
+4. App beenden, neu starten, „Was suchen wir nochmal?"
 
-Nächste Schritte in dieser Reihenfolge:
-1. Alles Lokale committen und pushen (auch Branches).
-2. Claude prüft Cursors Phase-1-Arbeit gegen den Auftrag: aufbauen oder sauber neu.
-3. Phase 1 fertig bauen, `npm run macos:build`, Joachim nimmt ab.
-4. Diese Datei aktualisieren, dann Phase 2.
+Phase 2 beginnt erst nach dieser Bestätigung, in einem neuen Chat.
 
 ## Was Joachim liefert (siehe Auftrag, Anhang)
 

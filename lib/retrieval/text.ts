@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { redactSecrets, looksLikeSecret } from "@/lib/computer/redaction";
+import { redactSecrets, looksLikeSecret } from "@/lib/mail/redaction";
 
 const LOW_VALUE =
   /^(ok(ay)?|ja|nein|danke|thanks|thx|bitte|hmm+|lol|hi|hallo|hey|sure|cool|super|genau|gerne\.?|alles\s+klar)\.?$/i;

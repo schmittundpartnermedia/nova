@@ -101,11 +101,6 @@ enum ProcessControl {
         return lower.contains("next") && (lower.contains("dev") || lower.contains("start") || lower.contains("next-server") || lower.contains("/bin/next"))
     }
 
-    static func looksLikeDesktop(_ command: String) -> Bool {
-        let lower = command.lowercased()
-        return lower.contains("desktop-service") || (lower.contains("tsx") && lower.contains("desktop"))
-    }
-
     static func looksLikeWorker(_ command: String) -> Bool {
         let lower = command.lowercased()
         return lower.contains("services/worker") || (lower.contains("tsx") && lower.contains("worker/index"))

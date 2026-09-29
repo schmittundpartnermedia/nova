@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { assertOrganizationId } from "@/services/tenant";
-import { redactSecrets } from "@/lib/computer/redaction";
+import { redactSecrets } from "@/lib/mail/redaction";
 import { recordActivity } from "@/services/archive";
 
 export const MAIL_AUDIT_ACTIONS = [

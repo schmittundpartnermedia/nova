@@ -10,8 +10,6 @@ import {
   recoverExpiredLeases,
   withExternalEffect,
 } from "@/services/worker/queue";
-import { executeCodingWork, executeComputerWork, executeKnowledgeWork, executePlannerWork } from "@/services/jobs/owned-run";
-import { runDevelopmentWork } from "@/services/development/run";
 import { pauseAbandonedJobs } from "@/services/jobs/recover";
 import { mailSendWorkHandler } from "@/services/mail/send-work";
 
@@ -32,13 +30,6 @@ export function registerWorkHandler(kind: string, handler: WorkHandler) {
 
 registerWorkHandler("system.ping", async () => ({ ok: true, note: "pong" }));
 
-registerWorkHandler("review.wait", async () => ({ ok: true, retry: false, note: "bleibt in Prüfung" }));
-
-registerWorkHandler("development.run", runDevelopmentWork);
-registerWorkHandler("computer.run", executeComputerWork);
-registerWorkHandler("coding.run", executeCodingWork);
-registerWorkHandler("knowledge.run", executeKnowledgeWork);
-registerWorkHandler("planner.run", executePlannerWork);
 registerWorkHandler("mail.send", mailSendWorkHandler);
 
 export async function tickWorker(workerId: string, now = new Date()) {
@@ -48,13 +39,6 @@ export async function tickWorker(workerId: string, now = new Date()) {
   const leased = await leaseDueWork(workerId, now);
   for (const item of leased) {
     await markWorkRunning(item.id, item.organizationId, workerId);
-    if (item.kind === "review.wait") {
-      await prisma.workItem.updateMany({
-        where: { id: item.id, organizationId: item.organizationId },
-        data: { status: "waiting_review", lockedBy: null, lockedUntil: null },
-      });
-      continue;
-    }
     const handler = handlers.get(item.kind);
     if (!handler) {
       await failWorkItem({

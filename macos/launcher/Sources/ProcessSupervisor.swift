@@ -7,10 +7,8 @@ final class ProcessSupervisor {
     private let log: LogWriter
     private(set) var state: SupervisorState = .idle
     private var ownedWeb: SpawnedProcess?
-    private var ownedDesktop: SpawnedProcess?
     private var ownedWorker: SpawnedProcess?
     private var reusedWeb = false
-    private var reusedDesktop = false
     private var reusedWorker = false
     private var cancelled = false
     private let lock = NSLock()
@@ -52,12 +50,6 @@ final class ProcessSupervisor {
             try transition(.waitingApplicationHealth, progress, "Application Service Health")
             try waitForApplicationHealth()
 
-            try transition(.startingDesktopService, progress, "Desktop Service starten")
-            try ensureDesktop()
-
-            try transition(.waitingDesktopHealth, progress, "Desktop Service Health")
-            try waitForDesktopHealth()
-
             try transition(.startingWorker, progress, "Worker starten")
             try ensureWorker()
 
@@ -87,7 +79,6 @@ final class ProcessSupervisor {
 
     func reopenOrRepair(progress: (String) -> Void) throws {
         if case .success = HealthMonitor.isApplicationHealthy(config: config),
-           case .success = HealthMonitor.isDesktopHealthy(config: config, token: HealthMonitor.readDesktopToken(config: config)),
            workerHealthy()
         {
             log.info("Bestehende gesunde Dienste wiederverwendet")
@@ -96,7 +87,6 @@ final class ProcessSupervisor {
         progress("Abgestürzte Dienste neu starten")
         try restartMissingOwnedOrStart()
         try waitForApplicationHealth()
-        try waitForDesktopHealth()
         try waitForWorkerHealth()
         try waitForHelper()
         persistSession()
@@ -106,10 +96,8 @@ final class ProcessSupervisor {
         setState(.shuttingDown)
         lock.lock()
         let web = ownedWeb
-        let desktop = ownedDesktop
         let worker = ownedWorker
         ownedWeb = nil
-        ownedDesktop = nil
         ownedWorker = nil
         lock.unlock()
 
@@ -118,12 +106,6 @@ final class ProcessSupervisor {
             ProcessControl.stopOwned(web)
         } else {
             log.info("Web-Dienst wird nicht beendet, weil er nicht von dieser Session stammt")
-        }
-        if let desktop {
-            log.info("Beende von NOVA.app gestarteten Desktop Service", fields: ["pid": String(desktop.pid)])
-            ProcessControl.stopOwned(desktop)
-        } else {
-            log.info("Desktop Service wird nicht beendet, weil er nicht von dieser Session stammt")
         }
         if let worker {
             log.info("Beende von NOVA.app gestarteten Worker", fields: ["pid": String(worker.pid)])
@@ -134,7 +116,6 @@ final class ProcessSupervisor {
         try? FileManager.default.removeItem(at: config.launcherPidFile)
         try? FileManager.default.removeItem(at: config.sessionFile)
         if web != nil { try? FileManager.default.removeItem(at: config.webPidFile) }
-        if desktop != nil { try? FileManager.default.removeItem(at: config.desktopPidFile) }
         if worker != nil { try? FileManager.default.removeItem(at: config.workerPidFile) }
         log.info("Shutdown abgeschlossen")
     }
@@ -224,7 +205,6 @@ final class ProcessSupervisor {
 
     private func cleanStalePidFiles() {
         ProcessControl.removeIfStale(pidFile: config.webPidFile, expected: ProcessControl.looksLikeNovaWeb)
-        ProcessControl.removeIfStale(pidFile: config.desktopPidFile, expected: ProcessControl.looksLikeDesktop)
         ProcessControl.removeIfStale(pidFile: config.workerPidFile, expected: ProcessControl.looksLikeWorker)
         ProcessControl.removeIfStale(pidFile: config.launcherPidFile)
         ProcessControl.writePidFile(config.launcherPidFile, pid: getpid())
@@ -256,36 +236,6 @@ final class ProcessSupervisor {
             "pid": String(spawned.pid),
             "port": String(config.webPort),
             "mode": config.mode.rawValue,
-            "executable": config.nodeBin.path,
-            "cwd": config.projectRoot.path,
-        ])
-    }
-
-    private func ensureDesktop() throws {
-        try claimDesktopPort()
-        persistBoundPorts()
-        if case .success = HealthMonitor.isDesktopHealthy(config: config, token: HealthMonitor.readDesktopToken(config: config)) {
-            reusedDesktop = true
-            log.info("Desktop Service läuft bereits und bleibt unangetastet", fields: [
-                "port": String(config.desktopPort),
-            ])
-            return
-        }
-        let spawned = try ProcessControl.spawn(
-            executable: config.nodeBin,
-            arguments: [config.tsxBin.path, "services/desktop-service/index.ts"],
-            cwd: config.projectRoot,
-            env: childEnvironment(),
-            logFile: config.desktopLogFile
-        )
-        lock.lock()
-        ownedDesktop = spawned
-        reusedDesktop = false
-        lock.unlock()
-        ProcessControl.writePidFile(config.desktopPidFile, pid: spawned.pid)
-        log.info("Desktop Service gestartet", fields: [
-            "pid": String(spawned.pid),
-            "port": String(config.desktopPort),
             "executable": config.nodeBin.path,
             "cwd": config.projectRoot.path,
         ])
@@ -367,29 +317,6 @@ final class ProcessSupervisor {
         config.webPort = chosen
     }
 
-    private func claimDesktopPort() throws {
-        if case .success = HealthMonitor.isDesktopHealthy(config: config, token: HealthMonitor.readDesktopToken(config: config)) {
-            return
-        }
-        if let last = readBoundPort(config.desktopPortFile), last != config.desktopPort {
-            var probe = config
-            probe.desktopPort = last
-            if case .success = HealthMonitor.isDesktopHealthy(config: probe, token: HealthMonitor.readDesktopToken(config: probe)) {
-                config.desktopPort = last
-                return
-            }
-        }
-        let listening = ProcessControl.listeningTcpPorts()
-        if listening[config.desktopPort] == nil {
-            return
-        }
-        let chosen = try firstFreePort(in: config.desktopPortRange, preferred: config.preferredDesktopPort, label: "Desktop-Service")
-        if chosen != config.preferredDesktopPort {
-            log.warn("Port \(config.preferredDesktopPort) ist belegt. Desktop Service weicht auf \(chosen) aus, ohne den anderen Prozess zu beenden.")
-        }
-        config.desktopPort = chosen
-    }
-
     private func findHealthyNovaWebPort() -> Int? {
         var ordered: [Int] = []
         if let last = readBoundPort(config.webPortFile) {
@@ -438,7 +365,6 @@ final class ProcessSupervisor {
 
     private func persistBoundPorts() {
         try? String(config.webPort).write(to: config.webPortFile, atomically: true, encoding: .utf8)
-        try? String(config.desktopPort).write(to: config.desktopPortFile, atomically: true, encoding: .utf8)
     }
 
     private func restartMissingOwnedOrStart() throws {
@@ -447,12 +373,6 @@ final class ProcessSupervisor {
                 ownedWeb = nil
             }
             try ensureWeb()
-        }
-        if case .failure = HealthMonitor.isDesktopHealthy(config: config, token: HealthMonitor.readDesktopToken(config: config)) {
-            if let desktop = ownedDesktop, !ProcessControl.isAlive(desktop.pid) {
-                ownedDesktop = nil
-            }
-            try ensureDesktop()
         }
         if !workerHealthy() {
             if let worker = ownedWorker, !ProcessControl.isAlive(worker.pid) {
@@ -476,26 +396,6 @@ final class ProcessSupervisor {
                     log.warn("Port \(config.webPort) antwortet, Listener ist aber nicht der gestartete NOVA-Prozess")
                 }
                 log.info("Application Service bereit", fields: diagnosticFields())
-                return
-            case .failure(let error):
-                last = error
-            }
-            Thread.sleep(forTimeInterval: 0.35)
-        }
-        throw last
-    }
-
-    private func waitForDesktopHealth() throws {
-        let deadline = Date().addingTimeInterval(60)
-        var last: LaunchError = .health("Desktop Service nicht bereit.")
-        while Date() < deadline {
-            try throwIfCancelled()
-            if let crash = crashedOwned(ownedDesktop, name: "Desktop Service", logFile: config.desktopLogFile) {
-                throw crash
-            }
-            switch HealthMonitor.isDesktopHealthy(config: config, token: HealthMonitor.readDesktopToken(config: config)) {
-            case .success:
-                log.info("Desktop Service bereit", fields: diagnosticFields())
                 return
             case .failure(let error):
                 last = error
@@ -545,9 +445,7 @@ final class ProcessSupervisor {
 
     private func failureContext() -> String {
         let webAlive = ownedWeb.map { ProcessControl.isAlive($0.pid) } ?? false
-        let desktopAlive = ownedDesktop.map { ProcessControl.isAlive($0.pid) } ?? false
         let webListen = HealthMonitor.tcpIsOpen(host: config.webHost, port: config.webPort)
-        let desktopListen = HealthMonitor.tcpIsOpen(host: config.desktopHost, port: config.desktopPort)
         let webTail = SecretRedactor.redact(ProcessControl.tailFile(config.webLogFile, maxBytes: 1200))
         var lines = [
             "Zustand: \(state.rawValue)",
@@ -555,8 +453,6 @@ final class ProcessSupervisor {
             "Node: \(config.nodeBin.path)",
             "Application PID: \(ownedWeb.map { String($0.pid) } ?? "—") \(webAlive ? "läuft" : "nicht aktiv")",
             "Port \(config.webPort): \(webListen ? "offen" : "geschlossen")",
-            "Desktop PID: \(ownedDesktop.map { String($0.pid) } ?? "—") \(desktopAlive ? "läuft" : "nicht aktiv")",
-            "Port \(config.desktopPort): \(desktopListen ? "offen" : "geschlossen")",
         ]
         if !webTail.isEmpty {
             lines.append("nova-web.log:\n\(webTail)")
@@ -604,10 +500,7 @@ final class ProcessSupervisor {
         env["HOSTNAME"] = config.webHost
         env["NOVA_WEB_HOST"] = config.webHost
         env["NOVA_WEB_PORT"] = String(config.webPort)
-        env["NOVA_DESKTOP_HOST"] = config.desktopHost
-        env["NOVA_DESKTOP_PORT"] = String(config.desktopPort)
         env["NEXT_TELEMETRY_DISABLED"] = "1"
-        env.removeValue(forKey: "NOVA_DESKTOP_TOKEN")
         for (key, value) in EnvFile.parse(url: config.envFile) {
             env[key] = value
         }
@@ -624,8 +517,6 @@ final class ProcessSupervisor {
             "projectRoot": config.projectRoot.path,
             "webHost": config.webHost,
             "webPort": config.webPort,
-            "desktopHost": config.desktopHost,
-            "desktopPort": config.desktopPort,
             "resolvedAt": ISO8601DateFormatter().string(from: Date()),
         ]
         if let data = try? JSONSerialization.data(withJSONObject: payload, options: [.prettyPrinted]) {
@@ -642,14 +533,11 @@ final class ProcessSupervisor {
             "node": config.nodeBin.path,
             "cwd": config.projectRoot.path,
             "webPort": config.webPort,
-            "desktopPort": config.desktopPort,
             "owned": [
                 "web": jsonPid(ownedWeb),
-                "desktop": jsonPid(ownedDesktop),
             ],
             "reused": [
                 "web": reusedWeb,
-                "desktop": reusedDesktop,
             ],
         ]
         if let data = try? JSONSerialization.data(withJSONObject: payload, options: [.prettyPrinted]) {
@@ -665,15 +553,10 @@ final class ProcessSupervisor {
             "cwd": config.projectRoot.path,
             "node": config.nodeBin.path,
             "webPort": String(config.webPort),
-            "desktopPort": String(config.desktopPort),
         ]
         if let web = ownedWeb {
             fields["webPid"] = String(web.pid)
             fields["webAlive"] = ProcessControl.isAlive(web.pid) ? "true" : "false"
-        }
-        if let desktop = ownedDesktop {
-            fields["desktopPid"] = String(desktop.pid)
-            fields["desktopAlive"] = ProcessControl.isAlive(desktop.pid) ? "true" : "false"
         }
         for (key, value) in extra {
             fields[key] = value

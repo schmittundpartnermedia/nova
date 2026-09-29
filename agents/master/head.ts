@@ -1,6 +1,6 @@
 import { gedaechtnisSystemBlock } from "@/lib/gedaechtnis/store";
 import { executeTool, listTools } from "@/services/tools/registry";
-import type { AIProvider, HeadInputMessage, HeadToolSpec, HeadTurnOutput } from "@/types/ai";
+import type { HeadProvider, HeadInputMessage, HeadToolSpec, HeadTurnOutput } from "@/types/ai";
 
 const MAX_TOOL_ROUNDS = 8;
 
@@ -38,16 +38,12 @@ function buildInstructions(): string {
 }
 
 export async function runHeadLoop(input: {
-  provider: AIProvider;
+  provider: HeadProvider;
   model: string;
   history: Array<{ role: "user" | "assistant"; content: string }>;
   userRequest: string;
   onStatus?: (message: string) => void;
 }): Promise<HeadLoopResult> {
-  if (!input.provider.headTurn) {
-    throw new Error("Dieser KI-Anbieter unterstützt keinen Kopf mit Werkzeugen (headTurn).");
-  }
-
   const instructions = buildInstructions();
   const tools = toolSpecs();
   const conversation: HeadInputMessage[] = [
@@ -57,7 +53,7 @@ export async function runHeadLoop(input: {
 
   let previousResponseId: string | undefined;
   let pendingInput: HeadInputMessage[] = conversation;
-  let last: HeadTurnOutput | null = null;
+  let last: HeadTurnOutput | undefined;
   const toolsExecuted: Array<{ name: string; executed: boolean }> = [];
   let toolRounds = 0;
 
@@ -94,16 +90,18 @@ export async function runHeadLoop(input: {
     pendingInput = outputs;
   }
 
-  const reply =
-    last?.text?.trim() ||
-    (toolsExecuted.some((t) => t.executed)
-      ? "Erledigt."
-      : "Ich konnte gerade keine Antwort erzeugen.");
+  if (!last) {
+    throw new Error("Der Kopf hat keine Antwort geliefert.");
+  }
+  const unfinished = last.toolCalls.length > 0;
+  const reply = unfinished
+    ? `Ich bin nach ${MAX_TOOL_ROUNDS} Werkzeugschritten nicht zu einem Ergebnis gekommen. Sag mir bitte genauer, was du brauchst.`
+    : last.text.trim() || "Darauf habe ich gerade keine Antwort.";
 
   return {
     reply,
-    model: last?.model ?? input.model,
-    providerId: last?.provider ?? input.provider.id,
+    model: last.model,
+    providerId: last.provider,
     toolRounds,
     toolsExecuted,
   };

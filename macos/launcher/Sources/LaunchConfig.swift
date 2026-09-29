@@ -18,8 +18,6 @@ enum SupervisorState: String {
     case checkingRuntime
     case startingApplicationService
     case waitingApplicationHealth
-    case startingDesktopService
-    case waitingDesktopHealth
     case startingWorker
     case waitingWorkerHealth
     case checkingNativeHelper
@@ -37,9 +35,6 @@ struct LaunchConfig {
     let webHost: String
     let preferredWebPort: Int
     var webPort: Int
-    let desktopHost: String
-    let preferredDesktopPort: Int
-    var desktopPort: Int
     let nodeBin: URL
     let nextBin: URL
     let tsxBin: URL
@@ -58,20 +53,8 @@ struct LaunchConfig {
         URL(string: "http://\(webHost):\(webPort)/api/nova/ready")!
     }
 
-    var desktopHealthURL: URL {
-        URL(string: "http://\(desktopHost):\(desktopPort)/health")!
-    }
-
-    var desktopTokenFile: URL {
-        novaDir.appendingPathComponent("desktop-token")
-    }
-
     var webPidFile: URL {
         novaDir.appendingPathComponent("nova-web.pid")
-    }
-
-    var desktopPidFile: URL {
-        novaDir.appendingPathComponent("desktop-service.pid")
     }
 
     var workerPidFile: URL {
@@ -98,16 +81,8 @@ struct LaunchConfig {
         novaDir.appendingPathComponent("web-port")
     }
 
-    var desktopPortFile: URL {
-        novaDir.appendingPathComponent("desktop-port")
-    }
-
     var webPortRange: ClosedRange<Int> {
         Self.portRange(preferred: preferredWebPort, span: 100)
-    }
-
-    var desktopPortRange: ClosedRange<Int> {
-        Self.portRange(preferred: preferredDesktopPort, span: 20)
     }
 
     var launcherLogFile: URL {
@@ -116,10 +91,6 @@ struct LaunchConfig {
 
     var webLogFile: URL {
         logDir.appendingPathComponent("nova-web.log")
-    }
-
-    var desktopLogFile: URL {
-        logDir.appendingPathComponent("desktop-service.log")
     }
 
     var workerLogFile: URL {
@@ -141,9 +112,7 @@ struct LaunchConfig {
         let mode = LaunchMode(rawValue: string(plist["NOVALaunchMode"], fallback: "development")) ?? .development
         let uiMode = UIMode(rawValue: string(plist["NOVAUIMode"], fallback: "webview")) ?? .webview
         let webHost = string(plist["NOVAWebHost"], fallback: "127.0.0.1")
-        let desktopHost = string(plist["NOVADesktopHost"], fallback: "127.0.0.1")
         let preferredWebPort = int(plist["NOVAWebPort"], fallback: 3100)
-        let preferredDesktopPort = int(plist["NOVADesktopPort"], fallback: 47821)
         let startAtLogin = bool(plist["NOVAStartAtLogin"], fallback: false)
 
         let projectRoot = try resolveProjectRoot(plist: plist)
@@ -165,9 +134,6 @@ struct LaunchConfig {
             webHost: webHost,
             preferredWebPort: preferredWebPort,
             webPort: preferredWebPort,
-            desktopHost: desktopHost,
-            preferredDesktopPort: preferredDesktopPort,
-            desktopPort: preferredDesktopPort,
             nodeBin: nodeBin,
             nextBin: nextBin,
             tsxBin: tsxBin,
@@ -195,7 +161,6 @@ struct LaunchConfig {
                 : URL(fileURLWithPath: string(plist["NOVAProjectRoot"], fallback: ""), isDirectory: true),
             Bundle.main.bundleURL.deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent(),
             URL(fileURLWithPath: "/Volumes/ELEVUM/Projekte/joachim/NOVA", isDirectory: true),
-            URL(fileURLWithPath: "/Volumes/My Book 24/NOVA", isDirectory: true),
         ].compactMap { $0 }
 
         for candidate in candidates {

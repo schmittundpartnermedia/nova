@@ -11,7 +11,7 @@ import { gedaechtnisDir } from "@/lib/gedaechtnis/paths";
 import { runHeadLoop } from "@/agents/master/head";
 import { OpenAIProvider } from "@/providers/ai/openai";
 import { hasOpenAIApiKey } from "@/lib/secrets";
-import { DEFAULT_MODELS_BY_ROLE } from "@/providers/ai/models";
+import { HEAD_MODEL } from "@/providers/ai/models";
 
 function loadEnv() {
   const file = path.join(process.cwd(), ".env");
@@ -66,7 +66,7 @@ async function main() {
   }
 
   const provider = new OpenAIProvider();
-  const model = DEFAULT_MODELS_BY_ROLE.master;
+  const model = HEAD_MODEL;
   log(`Modell: ${model}`);
   log(`Tool-Calling: Responses API (headTurn)`);
 

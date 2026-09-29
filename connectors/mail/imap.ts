@@ -4,7 +4,7 @@ import { simpleParser } from "mailparser";
 import { BaseMailProvider } from "@/connectors/mail/base";
 import { loadAccountSecret } from "@/services/mail/accounts";
 import { mailboxTransport } from "@/services/mail/oauth";
-import { redactSecrets } from "@/lib/computer/redaction";
+import { redactSecrets } from "@/lib/mail/redaction";
 import type { MailProviderMessage, MailSendInput, MailSendResult } from "@/types/connectors";
 import type { MailSecret } from "@/services/mail/credentials";
 

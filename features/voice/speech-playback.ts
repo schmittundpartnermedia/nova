@@ -2,15 +2,10 @@
 
 import { prepareTextForSpeech } from "@/services/voice/prepare-text";
 import { nextUnspokenChunks } from "@/services/voice/chunk-text";
-import { HeuristicFacialProvider } from "@/providers/facial/heuristic";
-import type { NovaFacialFrame } from "@/types/avatar";
-import type { SpeechViseme } from "@/types/voice";
 
 export type SpeechPlaybackListener = {
   onStart?: () => void;
   onEnd?: () => void;
-  onFacialFrame?: (frame: NovaFacialFrame) => void;
-  onEnergy?: (input: { viseme: SpeechViseme; intensity: number }) => void;
   onError?: (message: string) => void;
 };
 
@@ -42,22 +37,8 @@ export class SpeechPlaybackController {
   private expectingMore = true;
   private started = false;
   private source: AudioBufferSourceNode | null = null;
-  private analyser: AnalyserNode | null = null;
   private gain: GainNode | null = null;
-  private facial = new HeuristicFacialProvider();
   private listener: SpeechPlaybackListener = {};
-  private chunkOriginMs = 0;
-  private chunkStartedAt = 0;
-
-  constructor() {
-    this.facial.setListener((frame) => {
-      this.listener.onFacialFrame?.(frame);
-      this.listener.onEnergy?.({
-        viseme: this.facial.currentViseme,
-        intensity: this.facial.currentIntensity,
-      });
-    });
-  }
 
   setListener(listener: SpeechPlaybackListener) {
     this.listener = listener;
@@ -71,20 +52,6 @@ export class SpeechPlaybackController {
     return this.playing || this.queue.length > 0;
   }
 
-  getAudioTimeMs(): number {
-    if (!this.playing || !this.chunkStartedAt) return this.chunkOriginMs;
-    try {
-      const ctx = getContext();
-      return this.chunkOriginMs + Math.max(0, (ctx.currentTime - this.chunkStartedAt) * 1000);
-    } catch {
-      return this.chunkOriginMs;
-    }
-  }
-
-  loadFacialFrames(_frames: NovaFacialFrame[]) {
-    // Avatar-Timeline entfernt (Phase 1). Lip-Sync läuft nur noch über die Heuristik.
-  }
-
   resetStream() {
     this.stopInternal(false);
     this.session += 1;
@@ -93,7 +60,6 @@ export class SpeechPlaybackController {
     this.stopped = false;
     this.expectingMore = true;
     this.started = false;
-    this.chunkOriginMs = 0;
     void this.unlock();
   }
 
@@ -133,7 +99,6 @@ export class SpeechPlaybackController {
 
   dispose() {
     this.stop();
-    this.facial.dispose();
   }
 
   private stopInternal(markStopped: boolean) {
@@ -146,9 +111,6 @@ export class SpeechPlaybackController {
     }
     this.queue = [];
     this.stopGraph();
-    this.facial.stopLive();
-    
-    
   }
 
   private enqueue(text: string) {
@@ -231,21 +193,13 @@ export class SpeechPlaybackController {
     this.drop(item.id);
 
     const source = ctx.createBufferSource();
-    const analyser = ctx.createAnalyser();
     const gain = ctx.createGain();
-    analyser.fftSize = 1024;
-    analyser.smoothingTimeConstant = 0.38;
     source.buffer = buffer;
-    source.connect(analyser);
-    analyser.connect(gain);
+    source.connect(gain);
     gain.connect(ctx.destination);
 
     this.source = source;
-    this.analyser = analyser;
     this.gain = gain;
-    this.chunkStartedAt = ctx.currentTime;
-    
-    this.facial.startLive(analyser, () => this.getAudioTimeMs());
     if (!this.started) {
       this.started = true;
       this.listener.onStart?.();
@@ -253,10 +207,8 @@ export class SpeechPlaybackController {
 
     source.onended = () => {
       if (item.session !== this.session) return;
-      this.chunkOriginMs += buffer.duration * 1000;
       this.cleanupGraph();
       this.playing = false;
-      this.facial.stopLive();
       if (this.stopped) return;
       if (this.queue.some((entry) => entry.buffer) || this.queue.length > 0) {
         void this.kick();
@@ -270,9 +222,7 @@ export class SpeechPlaybackController {
 
   private notifyIfIdle() {
     if (this.stopped || this.playing || this.queue.length > 0 || this.expectingMore) return;
-    
     this.started = false;
-    this.chunkOriginMs = 0;
     this.listener.onEnd?.();
   }
 
@@ -292,19 +242,12 @@ export class SpeechPlaybackController {
       // ignore
     }
     try {
-      this.analyser?.disconnect();
-    } catch {
-      // ignore
-    }
-    try {
       this.gain?.disconnect();
     } catch {
       // ignore
     }
     this.source = null;
-    this.analyser = null;
     this.gain = null;
   }
 }
 
-export type { SpeechViseme, NovaFacialFrame };

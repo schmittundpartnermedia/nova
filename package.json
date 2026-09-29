@@ -12,25 +12,11 @@
     "db:migrate": "prisma migrate dev",
     "db:seed": "tsx prisma/seed.ts",
     "db:reset": "prisma migrate reset --force",
-    "verify": "tsx scripts/verify-demo.ts",
-    "verify:voice": "tsx scripts/verify-voice.ts",
-    "verify:voice-session": "tsx scripts/verify-voice-session.ts",
-    "verify:conversation": "tsx scripts/verify-conversation.ts",
-    "verify:coding": "tsx scripts/verify-coding.ts",
-    "verify:research": "tsx scripts/verify-research.ts",
-    "verify:knowledge": "tsx scripts/verify-knowledge.ts",
-    "verify:chatgpt": "tsx scripts/verify-chatgpt.ts",
-    "verify:retrieval": "tsx scripts/verify-retrieval.ts",
-    "verify:mail": "tsx scripts/verify-mail.ts",
-    "verify:apple-mail": "tsx scripts/verify-apple-mail.ts",
-    "import:chatgpt": "tsx scripts/import-chatgpt.ts",
-    "playwright:install": "PLAYWRIGHT_BROWSERS_PATH=.nova/ms-playwright playwright install chromium",
-    "desktop-service": "tsx services/desktop-service/index.ts",
     "worker": "tsx services/worker/index.ts",
-    "verify:workspace": "tsx scripts/verify-workspace.ts",
-    "verify:development": "tsx scripts/verify-development.ts",
     "macos:build": "bash macos/launcher/scripts/build.sh",
-    "verify:launcher": "bash scripts/verify-launcher-startup.sh"
+    "verify:launcher": "bash scripts/verify-launcher-startup.sh",
+    "nachweis:phase1": "tsx scripts/nachweis-phase1-kopf.ts",
+    "test:kopf": "tsx scripts/test-kopf.ts"
   },
   "dependencies": {
     "@prisma/client": "^6.16.3",
@@ -39,10 +25,8 @@
     "next": "16.3.5",
     "nodemailer": "^10.0.10",
     "openai": "^7.20.0",
-    "playwright": "^1.63.0",
     "react": "19.2.8",
     "react-dom": "19.2.8",
-    "three": "^0.186.0",
     "zod": "^4.6.5"
   },
   "devDependencies": {
@@ -52,7 +36,6 @@
     "@types/nodemailer": "^8.0.2",
     "@types/react": "^19",
     "@types/react-dom": "^19",
-    "@types/three": "^0.186.0",
     "eslint": "^9",
     "eslint-config-next": "16.3.5",
     "prisma": "^6.16.3",
@@ -60,7 +43,7 @@
     "tsx": "^4.23.15",
     "typescript": "^5"
   },
-  "description": "NOVA \u2013 pers\u00f6nlicher KI-Business-Assistent",
+  "description": "NOVA – persönlicher KI-Business-Assistent",
   "prisma": {
     "seed": "tsx prisma/seed.ts"
   }

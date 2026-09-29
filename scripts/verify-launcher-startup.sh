@@ -8,7 +8,6 @@ PROJECT="$ROOT"
 LOG_DIR="$PROJECT/.nova/logs"
 PREFERRED_WEB_PORT=3100
 READY_URL=""
-DESKTOP_URL="http://127.0.0.1:47821/health"
 FAKE_PROJECT="/tmp/nova-fake-project-$$"
 
 fail() {
@@ -25,7 +24,7 @@ nova_pids() {
 }
 
 owned_node_pids() {
-  pgrep -f "$PROJECT/node_modules/next/dist/bin/next|$PROJECT/services/desktop-service/index.ts" 2>/dev/null || true
+  pgrep -f "$PROJECT/node_modules/next/dist/bin/next|$PROJECT/services/worker/index.ts" 2>/dev/null || true
 }
 
 stop_nova() {
@@ -100,25 +99,6 @@ wait_ready() {
   done
 }
 
-wait_desktop() {
-  local timeout="${1:-60}"
-  local started token port
-  started="$(date +%s)"
-  while true; do
-    token="$(tr -d '[:space:]' < "$PROJECT/.nova/desktop-token" 2>/dev/null || true)"
-    port="$(tr -d '[:space:]' < "$PROJECT/.nova/desktop-port" 2>/dev/null || true)"
-    port="${port:-47821}"
-    DESKTOP_URL="http://127.0.0.1:${port}/health"
-    if [[ -n "$token" ]] && curl -fsS --max-time 5 -H "Authorization: Bearer $token" "$DESKTOP_URL" 2>/dev/null | grep -q '"ok":true'; then
-      return 0
-    fi
-    if (( "$(date +%s)" - started >= timeout )); then
-      return 1
-    fi
-    sleep 0.5
-  done
-}
-
 assert_no_owned_processes() {
   local leftover
   leftover="$(printf '%s\n%s\n' "$(nova_pids)" "$(owned_node_pids)" | sed '/^$/d')"
@@ -144,13 +124,13 @@ start_nova_minimal_env() {
 
 echo "== NOVA Launcher Startup Verify =="
 [[ -x "$BIN" ]] || fail "NOVA Binary fehlt: $BIN"
-[[ -d "/Volumes/My Book 24/NOVA" ]] || fail "Projekt-Volume ist nicht verfügbar"
+[[ -d "$PROJECT" ]] || fail "Projektordner $PROJECT ist nicht verfügbar"
 [[ -x /usr/local/bin/node ]] || fail "Gepinnte Runtime /usr/local/bin/node fehlt"
 /usr/local/bin/node -v >/dev/null || fail "Gepinnte Runtime antwortet nicht"
 
 echo
 echo "-- TEST H: Volume / Runtime Availability --"
-ok "Volume /Volumes/My Book 24 ist gemountet"
+ok "Projektordner $PROJECT ist vorhanden"
 ok "Projekt $PROJECT ist lesbar"
 ok "Runtime /usr/local/bin/node ist ausführbar"
 
@@ -161,8 +141,7 @@ sleep 1
 assert_no_owned_processes
 start_nova_app
 wait_ready 90 || fail "Application Service /api/nova/ready nicht erreichbar"
-wait_desktop 60 || fail "Desktop Service /health nicht erreichbar"
-ok "NOVA.app hat Application- und Desktop-Service gestartet"
+ok "NOVA.app hat den Application Service gestartet"
 
 echo
 echo "-- TEST B: Clean Shutdown --"
@@ -175,7 +154,6 @@ echo
 echo "-- TEST C: Erneuter Start --"
 start_nova_app
 wait_ready 90 || fail "Zweiter Start: Application Service nicht bereit"
-wait_desktop 60 || fail "Zweiter Start: Desktop Service nicht bereit"
 ok "NOVA startet nach dem Beenden erneut"
 
 echo
@@ -236,7 +214,6 @@ echo
 echo "-- TEST E: Start nach Fehler --"
 start_nova_app
 wait_ready 90 || fail "Start nach Fehler: Application Service nicht bereit"
-wait_desktop 60 || fail "Start nach Fehler: Desktop Service nicht bereit"
 ok "NOVA startet nach einem Fehler erneut"
 
 echo
@@ -245,7 +222,6 @@ stop_nova
 sleep 1
 start_nova_app
 wait_ready 90 || fail "Minimal-Environment: Application Service nicht bereit"
-wait_desktop 60 || fail "Minimal-Environment: Desktop Service nicht bereit"
 if ! grep -q '"path":"/usr/local/bin:/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin"' "$LOG_DIR/launcher.log" \
   && ! grep -q '"path":"\\/usr\\/local\\/bin:\\/usr\\/local\\/bin:\\/opt\\/homebrew\\/bin:\\/usr\\/bin:\\/bin:\\/usr\\/sbin:\\/sbin"' "$LOG_DIR/launcher.log"; then
   fail "Child-PATH ist nicht deterministisch"

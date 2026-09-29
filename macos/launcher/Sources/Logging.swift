@@ -9,7 +9,7 @@ enum SecretRedactor {
             #"github_pat_[a-zA-Z0-9_]{20,}"#,
             #"xox[baprs]-[a-zA-Z0-9-]{10,}"#,
             #"AKIA[0-9A-Z]{16}"#,
-            #"(?:OPENAI|ANTHROPIC|AWS_SECRET_ACCESS|STRIPE|DATABASE|NOVA_DESKTOP)_?(?:API_)?KEY\s*[:=]\s*\S+"#,
+            #"(?:OPENAI|ANTHROPIC|AWS_SECRET_ACCESS|STRIPE|DATABASE)_?(?:API_)?KEY\s*[:=]\s*\S+"#,
             #"(?:api[_-]?key|secret|password|token|passwd)\s*[:=]\s*["']?[^"'\s]{8,}"#,
             #"Bearer\s+[A-Za-z0-9._\-+=/]{12,}"#,
         ]

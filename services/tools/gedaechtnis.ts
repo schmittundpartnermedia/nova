@@ -26,7 +26,7 @@ export const gedaechtnisLesenTool: NovaToolDefinition = {
     try {
       const datei = parseGedaechtnisDatei(args.datei);
       const inhalt = lesenGedaechtnis(datei);
-      return { ok: true, executed: true, data: { datei, inhalt } };
+      return { ok: true, executed: false, data: { datei, inhalt } };
     } catch (error) {
       return {
         ok: false,

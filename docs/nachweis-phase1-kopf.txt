@@ -1,8 +1,8 @@
-NOVA Phase-1-Nachweis Kopf/Gedächtnis – 2026-09-28T23:59:16.250Z
+NOVA Phase-1-Nachweis Kopf/Gedächtnis – 2026-09-29T14:04:39.044Z
 Host: MinivonJoachim
 NOVA_HOME override: (keine, nutzt ~/Nova)
-Test-NOVA_HOME: /var/folders/5b/fhh5g_7928996fmny_h9ns040000gn/T/nova-phase1-1DcJNe
-Gedächtnis-Ordner: /var/folders/5b/fhh5g_7928996fmny_h9ns040000gn/T/nova-phase1-1DcJNe/gedaechtnis
+Test-NOVA_HOME: /var/folders/5b/fhh5g_7928996fmny_h9ns040000gn/T/nova-phase1-M8SAB1
+Gedächtnis-Ordner: /var/folders/5b/fhh5g_7928996fmny_h9ns040000gn/T/nova-phase1-M8SAB1/gedaechtnis
 Dateien: firma.md, kunden.md, projekte.md
 Modell: gpt-6-astra
 Tool-Calling: Responses API (headTurn)
@@ -14,33 +14,35 @@ reply: Gemerkt: Eure Firma heißt **rankpilot**, ihr macht **Lokal-SEO** und suc
 firma.md nach Turn 1:
 # Firma
 
-- Unsere Firma heißt rankpilot. Wir machen Lokal-SEO. Wir suchen Sponsoren aus dem Handwerk in Baden-Württemberg.
+- Die Firma heißt rankpilot. Das Angebot ist Lokal-SEO. Gesucht werden Sponsoren aus dem Handwerk in Baden-Württemberg.
 
 
 — Turn 2 (aus Gedächtnis) —
 toolsExecuted: []
-reply: Zu rankpilot passen vor allem **regional aktive Handwerksbetriebe in Baden-Württemberg**, die vor Ort besser gefunden werden möchten:
+reply: Zu **rankpilot** passen vor allem Handwerksbetriebe in Baden-Württemberg, die lokal neue Kunden gewinnen wollen, zum Beispiel:
 
-- **Sanitär, Heizung und Klima** – lokale Suchanfragen wie „Heizungsbauer Stuttgart“ passen direkt zu eurem Angebot.
-- **Elektriker und Solarteure** – besonders Betriebe, die in mehreren umliegenden Orten Kunden gewinnen wollen.
-- **Dachdecker, Maler und Stuckateure** – für sie können lokale Sichtbarkeit und Google-Bewertungen wichtig sein.
-- **Schreiner und Metallbauer** – etwa Betriebe mit regionalem Einzugsgebiet und individuellen Angeboten.
+- **Sanitär-, Heizungs- und Klimabetriebe**
+- **Elektriker und Solarteure**
+- **Dachdecker, Maler und Stuckateure**
+- **Schreiner sowie Fenster- und Türenbauer**
 
-Das wären allerdings auch passende **Kunden** für euch. **Was sollen die Betriebe konkret sponsern – ein Event, ein Projekt oder etwas anderes?**
+Der Bezug zu Lokal-SEO ist klar: Diese Betriebe profitieren davon, bei Google vor Ort besser gefunden zu werden.
+
+**Als Kunden passen sie damit gut. Ob sie auch als Sponsoren passen, hängt davon ab, was ihr ihnen bietet: Was genau sollen sie sponsern?**
 
 — Turn 3 (Bezug auf vorherige Antwort) —
-reply: Weil diese Betriebe **regional Kunden gewinnen** – genau dabei hilft euer Lokal-SEO:
+reply: Weil bei diesen Gewerken **lokale Auffindbarkeit direkt zu Aufträgen führen kann**:
 
-- **SHK und Elektriker:** Kunden suchen häufig einen Anbieter in der Nähe, teils bei akutem Bedarf.
-- **Solarteure und Dachdecker:** Einzelne Aufträge können einen hohen Wert haben. Zusätzliche lokale Anfragen können deshalb attraktiv sein.
-- **Maler, Stuckateure, Schreiner und Metallbauer:** Lokale Auffindbarkeit, Bewertungen und Referenzen können die Auswahl beeinflussen.
+- **Kunden suchen vor Ort:** etwa „Elektriker Stuttgart“ oder „Dachdecker Karlsruhe“.
+- **Manche Aufträge haben einen hohen Wert:** Bei einer Heizung, Solaranlage oder Dachsanierung kann schon ein zusätzlicher Auftrag viel ausmachen.
+- **Das Einzugsgebiet ist regional:** Das passt zu eurem Fokus auf Baden-Württemberg.
 
-**Das macht sie zunächst zu passenden Kunden, nicht automatisch zu Sponsoren.** Als Sponsoren passen sie, wenn ihr ihnen eine relevante regionale Zielgruppe oder eine andere konkrete Gegenleistung bietet. Was wollt ihr sponsern lassen?
+Das macht sie vor allem zu passenden **Lokal-SEO-Kunden**. Für **Sponsoring** reicht das allein nicht: Dafür müssten sie durch euch etwa Reichweite bei ihrer Zielgruppe oder regionale Bekanntheit gewinnen. Was würdet ihr ihnen als Gegenleistung bieten?
 
 — Turn 4 (Neustart, nur Dateien) —
 firma.md noch da: true
 toolsExecuted: []
-reply: Wir suchen Sponsoren aus dem Handwerk in Baden-Württemberg für rankpilot.
+reply: Wir suchen für rankpilot Sponsoren aus dem Handwerk in Baden-Württemberg. Unser Angebot ist Lokal-SEO.
 
 ERGEBNIS: Phase-1-Kopf-Nachweis bestanden (API, ohne Mikrofon).
 App-Abnahme durch Nutzer in NOVA.app steht noch aus (PTT).

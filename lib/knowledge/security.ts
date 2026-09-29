@@ -1,10 +1,10 @@
 import { createHash } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
-import { isHardBlockedPath } from "@/lib/computer/hard-blocks";
-import { isInjectionAttempt, wrapExternalContent } from "@/lib/computer/injection";
-import { resolveWorkspacePath } from "@/lib/computer/paths";
-import { looksLikeSecret, redactSecrets, shouldRedactFilePath } from "@/lib/computer/redaction";
+import { isHardBlockedPath } from "@/lib/workspace/hard-blocks";
+import { isInjectionAttempt, wrapExternalContent } from "@/lib/research/injection";
+import { resolveWorkspacePath } from "@/lib/workspace/paths";
+import { looksLikeSecret, redactSecrets, shouldRedactFilePath } from "@/lib/mail/redaction";
 import type { KnowledgeSourceType } from "@/types/knowledge";
 
 export const KNOWLEDGE_LIMITS = {

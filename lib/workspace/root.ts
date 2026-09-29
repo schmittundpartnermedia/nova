@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
-import { configuredExternalVolumeNames, volumeMountPath } from "@/lib/computer/volumes";
+import { configuredExternalVolumeNames, volumeMountPath } from "@/lib/workspace/volumes";
 import type { WorkspaceAvailability, WorkspaceRootStatus } from "@/types/workspace";
 
 export type ProbeFacts = {

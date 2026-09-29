@@ -1,4 +1,4 @@
-import { wrapExternalContent } from "@/lib/computer/injection";
+import { wrapExternalContent } from "@/lib/research/injection";
 import { extractHtmlContent, looksLikeJsShell } from "@/lib/research/html";
 import { RESEARCH_LIMITS } from "@/lib/research/limits";
 import { canonicalizeUrl, domainOf, isFetchUrlAllowed } from "@/lib/research/url";

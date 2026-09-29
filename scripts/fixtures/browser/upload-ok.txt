@@ -1,1 +1,0 @@
-NOVA upload fixture – harmlos und für den Browser-Test freigegeben.

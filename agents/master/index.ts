@@ -3,7 +3,7 @@ import { createJob, updateJobStatus } from "@/services/jobs";
 import { getVisibleContextWindow } from "@/services/conversation";
 import { ensureGedaechtnis } from "@/lib/gedaechtnis/store";
 import { bootstrapTools } from "@/services/tools/registry";
-import { resolveAIProvider } from "@/providers/ai/registry";
+import { resolveHead } from "@/providers/ai/head";
 import { publicErrorMessage } from "@/lib/secrets";
 import type { ProviderMode } from "@/types/ai";
 import type { OrbState } from "@/types";
@@ -11,7 +11,7 @@ import { DIALOG_HISTORY_SIZE } from "@/types/conversation";
 
 export type MasterEvent =
   | { type: "status"; orbState: OrbState; statusMessage: string }
-  | { type: "provider"; providerMode: ProviderMode; providerId: string; model: string; fallback: boolean }
+  | { type: "provider"; providerMode: ProviderMode; providerId: string; model: string }
   | { type: "delta"; delta: string };
 
 export type MasterRunResult = {
@@ -20,26 +20,10 @@ export type MasterRunResult = {
   orbState: OrbState;
   statusMessage: string;
   reply: string;
-  approvalId?: string;
-  actionType?: string;
-  humanRequired?: string | null;
-  mock: boolean;
   providerMode: ProviderMode;
   providerId: string;
   model: string;
-  needsFile?: "chatgpt-export";
-  replyStored?: boolean;
 };
-
-function providerModeOf(input: {
-  providerId: string;
-  fallback: boolean;
-}): ProviderMode {
-  if (input.fallback) return "fallback";
-  if (input.providerId === "openai") return "openai";
-  if (input.providerId === "mock") return "mock";
-  return "error";
-}
 
 /**
  * Nova-Kopf (Phase 1): Gesprächsverlauf + Dauergedächtnis + Tool-Calling.
@@ -73,18 +57,8 @@ export async function runMaster(input: {
   }
 
   try {
-    const { provider, decision } = await resolveAIProvider(input.organizationId, "master");
-    const providerMode = providerModeOf({
-      providerId: decision.providerId,
-      fallback: decision.fallback,
-    });
-    emit({
-      type: "provider",
-      providerMode,
-      providerId: decision.providerId,
-      model: decision.model,
-      fallback: decision.fallback,
-    });
+    const { provider, model } = await resolveHead(input.organizationId);
+    emit({ type: "provider", providerMode: "openai", providerId: provider.id, model });
 
     let history: Array<{ role: "user" | "assistant"; content: string }> = [];
     if (input.conversationId) {
@@ -105,7 +79,7 @@ export async function runMaster(input: {
 
     const head = await runHeadLoop({
       provider,
-      model: decision.model,
+      model,
       history,
       userRequest: input.userRequest,
       onStatus: (statusMessage) => {
@@ -127,8 +101,7 @@ export async function runMaster(input: {
       orbState: "DONE",
       statusMessage: "Fertig",
       reply: head.reply,
-      mock: decision.providerId === "mock",
-      providerMode,
+      providerMode: "openai",
       providerId: head.providerId,
       model: head.model,
     };
@@ -144,7 +117,6 @@ export async function runMaster(input: {
       orbState: "ERROR",
       statusMessage: message,
       reply: message,
-      mock: false,
       providerMode: "error",
       providerId: "error",
       model: "none",

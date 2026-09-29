@@ -19,6 +19,6 @@
 	<key>LSUIElement</key>
 	<true/>
 	<key>NSAppleEventsUsageDescription</key>
-	<string>NOVA steuert lokale Apps über AppleScript, wenn du das ausdrücklich verlangst.</string>
+	<string>NOVA liest und sendet Mails über Apple Mail (AppleScript), wenn du das freigibst.</string>
 </dict>
 </plist>

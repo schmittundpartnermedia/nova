@@ -114,46 +114,14 @@ enum HealthMonitor {
         return .failure(.health("Application Service antwortet auf \(config.webHealthURL.path) mit HTTP \(response.status ?? -1)."))
     }
 
-    static func isDesktopHealthy(config: LaunchConfig, token: String?) -> Result<Void, LaunchError> {
-        if !tcpIsOpen(host: config.desktopHost, port: config.desktopPort) {
-            return .failure(.health("Desktop Service hört noch nicht auf \(config.desktopHost):\(config.desktopPort)."))
-        }
-        var headers: [String: String] = [:]
-        if let token, !token.isEmpty {
-            headers["Authorization"] = "Bearer \(token)"
-        }
-        let response = httpGet(config.desktopHealthURL, headers: headers, timeout: 8)
-        if let error = response.error {
-            return .failure(.health("Desktop-Health fehlgeschlagen: \(error)"))
-        }
-        if response.status == 401 {
-            return .failure(.health("Desktop Service läuft, aber das lokale Token passt nicht."))
-        }
-        if let status = response.status,
-           (200...399).contains(status),
-           response.body.contains("\"ok\":true") || response.body.contains("nova-desktop")
-        {
-            return .success(())
-        }
-        if let status = response.status, (200...399).contains(status) {
-            return .success(())
-        }
-        return .failure(.health("Desktop Service antwortet mit HTTP \(response.status ?? -1)."))
-    }
-
-    static func readDesktopToken(config: LaunchConfig) -> String? {
-        guard let raw = try? String(contentsOf: config.desktopTokenFile, encoding: .utf8) else { return nil }
-        let token = raw.trimmingCharacters(in: .whitespacesAndNewlines)
-        return token.count >= 24 ? token : nil
-    }
-
     static func helperResponds(config: LaunchConfig) -> Result<Void, LaunchError> {
         guard FileManager.default.isExecutableFile(atPath: config.helperBin.path) else {
             return .failure(.dependency("Native Helper fehlt oder ist nicht ausführbar: \(config.helperBin.path)"))
         }
         let process = Process()
         process.executableURL = config.helperBin
-        process.arguments = ["{\"cmd\":\"permissions\"}"]
+        // Nur-Lese-Abfrage des Mail-Automation-Status: löst keinen Dialog aus und startet Mail nicht.
+        process.arguments = ["{\"cmd\":\"automation.mail\"}"]
         process.currentDirectoryURL = config.projectRoot
         let pipe = Pipe()
         process.standardOutput = pipe
@@ -170,13 +138,13 @@ enum HealthMonitor {
         }
         if process.isRunning {
             process.terminate()
-            return .failure(.health("Native Helper hat nicht rechtzeitig auf den Capability-Check geantwortet."))
+            return .failure(.health("Native Helper hat nicht rechtzeitig auf den Mail-Automation-Check geantwortet."))
         }
         let data = pipe.fileHandleForReading.readDataToEndOfFile()
         let body = String(data: data, encoding: .utf8) ?? ""
-        if body.contains("\"ok\":true") || body.contains("accessibility") {
+        if body.contains("\"ok\":true") {
             return .success(())
         }
-        return .failure(.health("Native Helper antwortete unerwartet auf den Capability-Check."))
+        return .failure(.health("Native Helper antwortete unerwartet auf den Mail-Automation-Check."))
     }
 }

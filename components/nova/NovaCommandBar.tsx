@@ -3,13 +3,6 @@
 import { useState } from "react";
 import type { VoiceSessionState } from "@/features/voice/session-types";
 
-const QUICK_ACTIONS = [
-  { id: "research", label: "Recherchieren", prefix: "Recherchiere: " },
-  { id: "task", label: "Aufgabe erstellen", prefix: "Erstelle eine Aufgabe: " },
-  { id: "mail", label: "E-Mail schreiben", prefix: "Schreibe eine E-Mail: " },
-  { id: "idea", label: "Idee", prefix: "Idee: " },
-] as const;
-
 export function NovaCommandBar({
   disabled,
   listening,
@@ -30,7 +23,6 @@ export function NovaCommandBar({
   onToggleVoice,
   onDraftChange,
   onComposeStart,
-  onUpload,
 }: {
   disabled: boolean;
   listening: boolean;
@@ -50,7 +42,6 @@ export function NovaCommandBar({
   onToggleVoice: () => void;
   onDraftChange?: (value: string) => void;
   onComposeStart?: () => void;
-  onUpload?: () => void;
 }) {
   const [value, setValue] = useState("");
   const shown = sessionActive ? dictation : value;
@@ -103,27 +94,6 @@ export function NovaCommandBar({
         autoComplete="off"
       />
       <div className="nova-command-row">
-        <button
-          type="button"
-          className="nova-chip nova-upload-btn"
-          onClick={onUpload}
-          title="Dateien hochladen"
-          aria-label="Dateien hochladen"
-        >
-          Dateien
-        </button>
-        {QUICK_ACTIONS.map((action) => (
-          <button
-            key={action.id}
-            type="button"
-            className="nova-chip"
-            onClick={() => {
-              setValue((current) => (current.startsWith(action.prefix) ? current : `${action.prefix}${current}`));
-            }}
-          >
-            {action.label}
-          </button>
-        ))}
         {speaking ? (
           <button type="button" className="nova-chip stop" onClick={onStopSpeech} aria-label="Stopp">
             Stop

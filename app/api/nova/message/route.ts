@@ -108,15 +108,9 @@ export async function POST(request: Request) {
             orbState: result.orbState,
             statusMessage: result.statusMessage,
             reply: result.reply,
-            replyStored: result.replyStored === true,
-            approvalId: result.approvalId,
-            actionType: result.actionType ?? null,
-            mock: result.mock,
             providerMode: result.providerMode,
             providerId: result.providerId,
             model: result.model,
-            needsFile: result.needsFile ?? null,
-            humanRequired: result.humanRequired ?? null,
           };
         } catch (error) {
           await failJobsLeftByFailedRequest(tenant.organizationId, startedAt).catch(() => undefined);
@@ -131,7 +125,7 @@ export async function POST(request: Request) {
           });
         }
 
-        if (resultReply && !resultPayload?.replyStored) {
+        if (resultReply) {
           const assistantMessage = await appendMessage({
             organizationId: tenant.organizationId,
             conversationId: conversation.id,

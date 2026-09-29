@@ -1,95 +1,38 @@
 # NOVA
 
-Persönlicher KI-Business-Assistent. Lokal. Eigenständig.
+Sprach-Oberfläche mit Gedächtnis auf dem Mac. Auftrag und Phasen: [docs/AUFTRAG.md](docs/AUFTRAG.md). Aktueller Stand: [docs/STAND.md](docs/STAND.md).
 
-NOVA ist nicht rankPilot und nicht SURI. NOVA ist ein eigener Assistent für den Geschäftsalltag.
+## Was der Code heute tut (Phase 1)
 
-Die Oberfläche besteht praktisch nur aus NOVA: einem ruhigen Orb, einer Eingabezeile, einem Mikrofon und einem dezenten Archiv.
+- **Kopf** (`agents/master/`): Ein OpenAI-Modell (Responses API, Tool-Calling) bekommt pro Anfrage den Satz, bis zu 15 vorherige Nachrichten der aktiven Conversation (Fenster von 16 inkl. der aktuellen) und das Dauergedächtnis. Es entscheidet selbst, ob es ein Werkzeug aufruft. Kein Ersatzanbieter: Ist OpenAI nicht erreichbar, meldet NOVA den Fehler.
+- **Werkzeuge** (`services/tools/`): nur `gedaechtnis_lesen` und `gedaechtnis_schreiben`.
+- **Dauergedächtnis**: `~/Nova/gedaechtnis/firma.md`, `kunden.md`, `projekte.md` (Ordner per `NOVA_HOME` verschiebbar).
+- **Oberfläche**: Orb, Gesprächszeile, Eingabe, Push-to-Talk (rechte Option-Taste im Launcher), Sprachausgabe.
+- **Hintergrund-Läufer** (`services/worker/`): Queue mit Handlern `system.ping` und `mail.send`.
+- **Apple Mail**: Anbindung über den Swift-Helfer (`services/desktop-service/native/main.swift`, Befehle `app.launch`, `automation.mail`, `applescript.run`). Der Kopf hat in Phase 1 keinen Zugriff darauf.
 
-## Voraussetzungen
-
-- Node.js 20+
-- npm
-
-## Installation
+## Einrichten
 
 ```bash
-cd "/Volumes/My Book 24/NOVA"
-cp .env.example .env
+cp .env.example .env   # OPENAI_API_KEY eintragen
 npm install
-npx prisma migrate dev --name init
+npx prisma migrate dev
 npx prisma db seed
 ```
 
-## Start
-
-Lokale macOS-App (ein Klick, ohne Terminal):
+## Starten
 
 ```bash
-npm run macos:build
-open "macos/build/NOVA.app"
+npm run macos:build    # baut macos/build/NOVA.app
 ```
 
-Details, Icon-Pfad und Production-Modus: [macos/README.md](macos/README.md)
+Details zum Launcher: [macos/README.md](macos/README.md). Ohne App: `npm run dev` → http://127.0.0.1:3100.
 
-Oder weiterhin manuell:
+## Prüfen
 
 ```bash
-npm run dev
+npm run typecheck
+npm run lint
+npm run test:kopf         # Kopf-Schleife mit geskriptetem Modell, ohne Netz, ohne App
+npm run nachweis:phase1   # echter API-Nachweis der vier Abnahmesätze (braucht OPENAI_API_KEY, nutzt temporären NOVA_HOME)
 ```
-
-Dann im Browser: [http://localhost:3100](http://localhost:3100)
-
-Seedance und andere Next-Apps können `3000` behalten. NOVA nutzt `3100` und weicht im Bereich `3100–3199` aus, wenn der Port belegt ist.
-
-## Demo (V1)
-
-In das Eingabefeld:
-
-```text
-Finde 10 potenzielle Sponsoren und bereite die Ansprache vor.
-```
-
-NOVA erzeugt intern einen Job, Mock-Unternehmen, Mock-Kontakte, Mail-Entwürfe, eine Freigabeanfrage, Memory und Archiv-Einträge.
-
-Es findet **keine** echte Recherche statt. Es wird **keine** E-Mail versendet.
-
-## Wichtige Befehle
-
-```bash
-npm run dev          # Entwicklungsserver
-npm run typecheck    # TypeScript
-npm run lint         # ESLint
-npm run build        # Produktionsbuild
-npm run verify       # Demo- und Persistenzprüfung
-npx prisma studio    # Datenbank ansehen
-npm run verify:knowledge # Knowledge-Pipeline
-npm run verify:chatgpt # ChatGPT-Export-Import
-npm run verify:voice # Voice-Pipeline
-npm run verify:avatar # 3D Avatar Engine
-npm run validate:avatar # Production GLB Acceptance (erwartet derzeit FINAL_AVATAR_MISSING)
-npm run verify:conversation # Conversation Archive, Memory-Quelle, Tenant Isolation
-```
-
-## Dokumentation
-
-- [Architektur](docs/ARCHITECTURE.md)
-- [Avatar Engine](docs/AVATAR_ENGINE.md)
-- [NOVA 3D Asset Spec](docs/NOVA_3D_ASSET_SPEC.md)
-- [NOVA Final Character Pipeline](docs/NOVA_FINAL_CHARACTER_PIPELINE.md)
-- [Agenten](docs/AGENTS.md)
-- [Memory](docs/MEMORY.md)
-- [AI Provider](docs/AI-PROVIDERS.md)
-- [Connectoren](docs/CONNECTORS.md)
-- [ChatGPT Bridge](docs/CHATGPT-BRIDGE.md)
-- [Archiv](docs/ARCHIVE.md)
-- [Security](docs/SECURITY.md)
-
-## V1-Grenzen
-
-- AI: `OpenAIProvider` (Mock bleibt Fallback/Tests)
-- Recherche: kein echter Search Connector; keine erfundenen Live-Treffer
-- Mail/Kalender/Drive: nur Interfaces + Mocks
-- Spracheingabe: Mikrofon → kurze Pause → HTTP-Transkription (`gpt-4o-mini-transcribe` / Whisper) → Antwort + Archiv
-- Sprachausgabe: OpenAI `gpt-4o-mini-tts`, lokal ein- und ausschaltbar
-- Multi-Tenant: technisch vorbereitet, in der UI unsichtbar

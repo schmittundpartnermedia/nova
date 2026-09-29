@@ -1,5 +1,5 @@
-import { isInjectionAttempt, wrapExternalContent } from "@/lib/computer/injection";
-import { redactSecrets } from "@/lib/computer/redaction";
+import { isInjectionAttempt, wrapExternalContent } from "@/lib/research/injection";
+import { redactSecrets } from "@/lib/mail/redaction";
 
 const MAIL_INJECTION = [
   /ignore previous instructions/i,
