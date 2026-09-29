@@ -1,13 +1,16 @@
-import { runHeadLoop } from "@/agents/master/head";
+import { runHeadLoop, verlaufsInhalt } from "@/agents/master/head";
 import { createJob, updateJobStatus } from "@/services/jobs";
 import { getVisibleContextWindow } from "@/services/conversation";
 import { ensureGedaechtnis } from "@/lib/gedaechtnis/store";
 import { bootstrapTools } from "@/services/tools/registry";
 import { resolveHead } from "@/providers/ai/head";
+import { AppleMailPostfach } from "@/connectors/mail/apple";
 import { publicErrorMessage } from "@/lib/secrets";
 import type { ProviderMode } from "@/types/ai";
 import type { OrbState } from "@/types";
 import { DIALOG_HISTORY_SIZE } from "@/types/conversation";
+
+const postfach = new AppleMailPostfach();
 
 export type MasterEvent =
   | { type: "status"; orbState: OrbState; statusMessage: string }
@@ -20,13 +23,15 @@ export type MasterRunResult = {
   orbState: OrbState;
   statusMessage: string;
   reply: string;
+  /** Werkzeugprotokoll dieser Antwort; wird mit der Assistenten-Nachricht gespeichert. */
+  werkzeugNotiz?: string;
   providerMode: ProviderMode;
   providerId: string;
   model: string;
 };
 
 /**
- * Nova-Kopf (Phase 1): Gesprächsverlauf + Dauergedächtnis + Tool-Calling.
+ * Nova-Kopf: Gesprächsverlauf + Dauergedächtnis + Tool-Calling.
  * Keine Regex-Verteilung, kein ActiveWork, keine Spezialagenten.
  */
 export async function runMaster(input: {
@@ -73,7 +78,10 @@ export async function runMaster(input: {
         .filter((m) => m.id !== input.sourceMessageId)
         .map((m) => ({
           role: m.role as "user" | "assistant",
-          content: m.content,
+          content:
+            m.role === "assistant"
+              ? verlaufsInhalt(m.content, typeof m.metadata?.werkzeuge === "string" ? m.metadata.werkzeuge : undefined)
+              : m.content,
         }));
     }
 
@@ -82,6 +90,7 @@ export async function runMaster(input: {
       model,
       history,
       userRequest: input.userRequest,
+      context: { organizationId: input.organizationId, jobId: job.id, postfach },
       onStatus: (statusMessage) => {
         emit({ type: "status", orbState: "WORKING", statusMessage });
       },
@@ -95,12 +104,14 @@ export async function runMaster(input: {
       completedAt: new Date(),
     });
 
+    const gesendet = head.toolsExecuted.some((tool) => tool.name === "mail_senden" && tool.executed);
     return {
       jobId: job.id,
       status: "completed",
       orbState: "DONE",
-      statusMessage: "Fertig",
+      statusMessage: gesendet ? "Mail gesendet" : "Fertig",
       reply: head.reply,
+      werkzeugNotiz: head.werkzeugNotiz,
       providerMode: "openai",
       providerId: head.providerId,
       model: head.model,

@@ -1,7 +1,9 @@
-import { deliverApprovedDraft } from "@/services/mail/send";
-import { authorizeExternalAction } from "@/services/approvals";
-import { prisma } from "@/lib/prisma";
+import { AppleMailPostfach } from "@/connectors/mail/apple";
+import { sendeEntwurf } from "@/services/mail/entwuerfe";
 
+const postfach = new AppleMailPostfach();
+
+/** Worker-Handler „mail.send“: versendet einen Entwurf; ohne Dauerfreigabe wird nichts gesendet. */
 export async function mailSendWorkHandler(item: {
   id: string;
   organizationId: string;
@@ -10,53 +12,17 @@ export async function mailSendWorkHandler(item: {
   payload: Record<string, unknown>;
   attempts: number;
 }): Promise<{ ok: boolean; retry?: boolean; note?: string }> {
-  const communicationId = String(item.payload.communicationId ?? "");
-  if (!communicationId) {
-    return { ok: false, retry: false, note: "mail.send ohne communicationId." };
+  const entwurfId = String(item.payload.entwurfId ?? "");
+  if (!entwurfId) {
+    return { ok: false, retry: false, note: "mail.send ohne entwurfId." };
   }
-
-  const draft = await prisma.communication.findFirst({
-    where: { id: communicationId, organizationId: item.organizationId },
-    include: { contact: true },
-  });
-  if (!draft) {
-    return { ok: false, retry: false, note: "Entwurf nicht gefunden." };
-  }
-
-  const recipient = draft.contact?.email ?? undefined;
-  const auth = await authorizeExternalAction({
+  const result = await sendeEntwurf({
     organizationId: item.organizationId,
-    actionType: "mail.send",
-    description: `Versand: ${draft.subject}`,
+    entwurfId,
+    postfach,
     jobId: item.jobId ?? undefined,
-    payload: { communicationId },
-    riskLevel: "external",
-    requiresApproval: true,
-    conditions: recipient?.includes("@") ? { recipientDomain: recipient.split("@").pop() } : undefined,
   });
-
-  if (auth.decision === "need_approval") {
-    return { ok: false, retry: false, note: `Freigabe nötig (${auth.approvalId}).` };
-  }
-  if (auth.decision === "deny_hard") {
-    return { ok: false, retry: false, note: auth.reason };
-  }
-
-  const sent = await deliverApprovedDraft({
-    organizationId: item.organizationId,
-    communicationId,
-    approved: true,
-  });
-
-  if (sent.status === "VERIFIED" && sent.executed) {
-    return { ok: true, note: "Mail versendet und in Gesendet geprüft." };
-  }
-  if (sent.status === "WAITING_FOR_APPROVAL") {
-    return { ok: false, retry: false, note: sent.reason ?? "Wartet auf Freigabe." };
-  }
-  return {
-    ok: false,
-    retry: sent.status === "FAILED" ? false : true,
-    note: sent.reason ?? `Versandstatus ${sent.status}`,
-  };
-};
+  if (result.status === "gesendet") return { ok: true, note: result.grund };
+  if (result.status === "freigabe_noetig") return { ok: false, retry: false, note: `Freigabe nötig (${result.freigabeId}): ${result.grund}` };
+  return { ok: false, retry: false, note: result.grund };
+}

@@ -1,12 +1,7 @@
 export type MailAutomationState = "granted" | "denied" | "required" | "unavailable";
 
-export type AppleCursor = { mode: "apple"; knownIds: string[] };
-
 const RECORD = String.fromCharCode(30);
 const FIELD = String.fromCharCode(31);
-const ATTACHMENT = String.fromCharCode(29);
-const ATTACHMENT_FIELD = String.fromCharCode(28);
-
 const SCRIPT_HELPER = `
 on novaClean(rawText)
   set t to rawText as text
@@ -97,21 +92,6 @@ export function parseDetail(raw: string): { fields: string[]; body: string } {
   return { fields: raw.slice(0, index).split(FIELD), body: raw.slice(index + 1) };
 }
 
-export function parseAttachments(raw: string): Array<{ name: string; mime: string; size: number; id: string; downloaded: boolean }> {
-  if (!raw.trim()) return [];
-  return raw
-    .split(ATTACHMENT)
-    .map((item) => item.split(ATTACHMENT_FIELD))
-    .filter((parts) => parts[0]?.trim())
-    .map((parts) => ({
-      name: parts[0] ?? "anhang",
-      mime: parts[1] || "application/octet-stream",
-      size: Number(parts[2] ?? 0) || 0,
-      id: parts[3] || parts[0] || "anhang",
-      downloaded: parts[4] === "true" || parts[4] === "1",
-    }));
-}
-
 export function parseMailAddress(raw: string): { name?: string; email: string } {
   const text = raw.trim();
   const wrapped = text.match(/^(.*)<([^>]+)>$/);
@@ -122,81 +102,6 @@ export function parseMailAddress(raw: string): { name?: string; email: string } 
   const email = text.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i)?.[0];
   if (email) return { email, name: text === email ? undefined : text.replace(email, "").trim() || undefined };
   return { email: "" };
-}
-
-export function accountEmail(address: string, appleId: string): string {
-  const email = address.trim().toLowerCase();
-  if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return email;
-  return `account-${appleId.toLowerCase().replace(/[^a-z0-9]+/g, "").slice(0, 24) || "unknown"}@apple-mail.local`;
-}
-
-export function appleRefFromCapabilities(raw: string): string | null {
-  try {
-    const parsed = JSON.parse(raw) as unknown;
-    if (!Array.isArray(parsed)) return null;
-    const hit = parsed.map(String).find((item) => item.startsWith("apple-ref:"));
-    return hit ? hit.slice("apple-ref:".length) : null;
-  } catch {
-    return null;
-  }
-}
-
-export function visibleCapabilities(raw: string): string[] {
-  try {
-    const parsed = JSON.parse(raw) as unknown;
-    if (!Array.isArray(parsed)) return [];
-    return parsed.map(String).filter((item) => !item.startsWith("apple-ref:"));
-  } catch {
-    return [];
-  }
-}
-
-export type FolderRole = "inbox" | "sent" | "drafts" | "archive" | "spam" | "trash" | "other";
-
-export function folderRole(name: string): FolderRole {
-  const value = name.trim().toLowerCase();
-  if (value === "inbox" || value === "posteingang" || value === "eingang") return "inbox";
-  if (/sent|gesendet|gesendete/.test(value)) return "sent";
-  if (/draft|entwurf|entwuerfe/.test(value)) return "drafts";
-  if (/archive|archiv|alle nachrichten/.test(value)) return "archive";
-  if (/junk|spam|werbung/.test(value)) return "spam";
-  if (/trash|deleted|papierkorb|geloescht|gelöscht/.test(value)) return "trash";
-  return "other";
-}
-
-export function threadKey(input: { messageId: string; inReplyTo?: string; references?: string; appleId: string }): {
-  key: string;
-  basis: "references" | "in-reply-to" | "message-id";
-} {
-  const refs = (input.references ?? "")
-    .split(/\s+/)
-    .map((item) => item.trim())
-    .filter((item) => item.startsWith("<") || item.includes("@"));
-  if (refs[0]) return { key: refs[0], basis: "references" };
-  const reply = (input.inReplyTo ?? "").trim();
-  if (reply) return { key: reply, basis: "in-reply-to" };
-  const messageId = input.messageId.trim();
-  if (messageId) return { key: messageId, basis: "message-id" };
-  return { key: `apple:${input.appleId}`, basis: "message-id" };
-}
-
-export function parseAppleCursor(raw?: string | null): AppleCursor {
-  if (!raw) return { mode: "apple", knownIds: [] };
-  try {
-    const parsed = JSON.parse(raw) as { mode?: string; knownIds?: unknown };
-    if (parsed.mode === "apple" && Array.isArray(parsed.knownIds)) {
-      return { mode: "apple", knownIds: parsed.knownIds.map(String).filter(Boolean).slice(-500) };
-    }
-  } catch {
-    return { mode: "apple", knownIds: [] };
-  }
-  return { mode: "apple", knownIds: [] };
-}
-
-export function mergeAppleCursor(raw: string | null | undefined, ids: string[]): string {
-  const current = parseAppleCursor(raw);
-  const knownIds = [...new Set([...current.knownIds, ...ids.filter(Boolean)])].slice(-500);
-  return JSON.stringify({ mode: "apple" as const, knownIds });
 }
 
 export function localStampToIso(stamp: string): string | undefined {
@@ -218,49 +123,12 @@ export function deliveryFromVerification(scriptAccepted: boolean, foundInSent: b
   return scriptAccepted && foundInSent ? "VERIFIED" : "FAILED";
 }
 
-export function mailMutationPolicy(action: "read" | "search" | "analyze" | "draft" | "mark-read" | "archive" | "send"): {
-  autonomous: boolean;
-  approvalRequired: boolean;
-} {
-  if (action === "send" || action === "archive") return { autonomous: false, approvalRequired: true };
-  return { autonomous: true, approvalRequired: false };
-}
-
 function quoted(value: string): string {
   return `"${escapeAppleScript(value)}"`;
 }
 
 function idClause(id: string): string {
   return /^\d+$/.test(id) ? id : quoted(id);
-}
-
-export function appleIdentityToken(id: string): string {
-  const trimmed = id.trim();
-  return trimmed ? `apple-id:${trimmed}` : "";
-}
-
-export function mergeAppleIdentityHeaders(
-  headers: Record<string, string>,
-  ids: string[],
-  presence: "present" | "missing",
-): Record<string, string> {
-  const tokens = new Set(
-    (headers["x-nova-apple-ids"] ?? "")
-      .split(",")
-      .map((item) => item.trim())
-      .filter((item) => item.startsWith("apple-id:")),
-  );
-  for (const id of ids) {
-    const token = appleIdentityToken(id);
-    if (token) tokens.add(token);
-  }
-  const current = [...ids].reverse().find((id) => id.trim()) ?? headers["x-nova-apple-id"] ?? "";
-  return {
-    ...headers,
-    "x-nova-apple-id": current,
-    "x-nova-apple-ids": [...tokens].slice(-8).join(","),
-    "x-nova-presence": presence,
-  };
 }
 
 function messageResolver(mailbox: string, messageId: string, internetMessageId = ""): string {
@@ -316,71 +184,6 @@ tell application "Mail"
       if enabled of a is true then set flag to "1"
     end try
     set out to out & (id of a as text) & sep & my novaClean(name of a) & sep & my novaClean(addr) & sep & flag & rec
-  end repeat
-  return out
-end tell`;
-}
-
-export function mailboxListScript(accountId: string): string {
-  return `${SCRIPT_HELPER}
-tell application "Mail"
-  set sep to character id 31
-  set rec to character id 30
-  set out to ""
-  set a to first account whose id is ${quoted(accountId)}
-  repeat with b in mailboxes of a
-    set unreadN to 0
-    try
-      set unreadN to unread count of b
-    end try
-    set out to out & my novaClean(name of b) & sep & (unreadN as text) & rec
-  end repeat
-  return out
-end tell`;
-}
-
-export function inboxMetadataScript(accountId: string, limit: number): string {
-  const take = Math.min(Math.max(limit, 1), 8);
-  return `${SCRIPT_HELPER}
-tell application "Mail"
-  set sep to character id 31
-  set rec to character id 30
-  set out to ""
-  set a to first account whose id is ${quoted(accountId)}
-  try
-    if exists mailbox "INBOX" of a then
-      set box to mailbox "INBOX" of a
-      set total to count of messages of box
-      set takeN to ${take}
-      if total < takeN then set takeN to total
-      repeat with i from 1 to takeN
-        set m to message i of box
-        set mid to ""
-        try
-          set mid to message id of m
-        end try
-        set out to out & (id of m as text) & sep & my novaClean(name of box) & sep & my novaClean(sender of m) & sep & my novaClean(subject of m) & sep & my novaStamp(date received of m) & sep & (read status of m as text) & sep & my novaClean(mid) & rec
-      end repeat
-    end if
-  end try
-  set unified to count of messages of inbox
-  set scan to 20
-  if unified < scan then set scan to unified
-  set seen to 0
-  repeat with i from 1 to scan
-    if seen ≥ ${take} then exit repeat
-    try
-      set m to message i of inbox
-      set owner to id of account of mailbox of m as text
-      if owner is ${quoted(accountId)} then
-        set mid to ""
-        try
-          set mid to message id of m
-        end try
-        set out to out & (id of m as text) & sep & my novaClean(name of mailbox of m) & sep & my novaClean(sender of m) & sep & my novaClean(subject of m) & sep & my novaStamp(date received of m) & sep & (read status of m as text) & sep & my novaClean(mid) & rec
-        set seen to seen + 1
-      end if
-    end try
   end repeat
   return out
 end tell`;
@@ -476,113 +279,6 @@ tell application "Mail"
 end tell`;
 }
 
-export function searchInboxScript(accountId: string, term: string): string {
-  const needle = term.replace(/[%*_]/g, " ").trim().slice(0, 80);
-  return `${SCRIPT_HELPER}
-tell application "Mail"
-  set sep to character id 31
-  set rec to character id 30
-  set out to ""
-  set a to first account whose id is ${quoted(accountId)}
-  set seen to 0
-  repeat with b in mailboxes of a
-    if seen ≥ 3 then exit repeat
-    try
-      set hits to messages of b whose subject contains ${quoted(needle)}
-      set takeN to count of hits
-      if takeN > 3 then set takeN to 3
-      repeat with i from 1 to takeN
-        if seen ≥ 3 then exit repeat
-        set m to item i of hits
-        set mid to ""
-        try
-          set mid to message id of m
-        end try
-        set out to out & (id of m as text) & sep & my novaClean(name of b) & sep & my novaClean(sender of m) & sep & my novaClean(subject of m) & sep & my novaStamp(date received of m) & sep & (read status of m as text) & sep & my novaClean(mid) & rec
-        set seen to seen + 1
-      end repeat
-    end try
-  end repeat
-  return out
-end tell`;
-}
-
-export function outgoingDraftScript(input: { accountEmail: string; to: string; subject: string; body: string }): string {
-  return `${SCRIPT_HELPER}
-tell application "Mail"
-  set msg to make new outgoing message with properties {subject:${quoted(input.subject)}, content:${quoted(input.body)}, visible:false, sender:${quoted(input.accountEmail)}}
-  tell msg
-    make new to recipient at end of to recipients with properties {address:${quoted(input.to)}}
-  end tell
-  return id of msg as text
-end tell`;
-}
-
-export function replyDraftScript(input: {
-  accountId: string;
-  mailbox: string;
-  messageId: string;
-  body: string;
-  replyAll: boolean;
-  internetMessageId?: string;
-}): string {
-  return `${SCRIPT_HELPER}
-tell application "Mail"
-  set a to first account whose id is ${quoted(input.accountId)}
-  ${messageResolver(input.mailbox, input.messageId, input.internetMessageId)}
-  set theReply to reply m opening window false reply to all ${input.replyAll ? "true" : "false"}
-  set content of theReply to ${quoted(input.body)}
-  return id of theReply as text
-end tell`;
-}
-
-export function forwardDraftScript(input: {
-  accountId: string;
-  mailbox: string;
-  messageId: string;
-  to: string;
-  body: string;
-  internetMessageId?: string;
-}): string {
-  return `${SCRIPT_HELPER}
-tell application "Mail"
-  set a to first account whose id is ${quoted(input.accountId)}
-  ${messageResolver(input.mailbox, input.messageId, input.internetMessageId)}
-  set theForward to forward m opening window false
-  set content of theForward to ${quoted(input.body)}
-  tell theForward
-    make new to recipient at end of to recipients with properties {address:${quoted(input.to)}}
-  end tell
-  return id of theForward as text
-end tell`;
-}
-
-export function forwardSendScript(input: {
-  accountId: string;
-  mailbox: string;
-  messageId: string;
-  to: string;
-  body: string;
-  sender: string;
-  internetMessageId?: string;
-}): string {
-  return `${SCRIPT_HELPER}
-tell application "Mail"
-  set a to first account whose id is ${quoted(input.accountId)}
-  ${messageResolver(input.mailbox, input.messageId, input.internetMessageId)}
-  set theForward to forward m opening window false
-  set content of theForward to ${quoted(input.body)}
-  tell theForward
-    make new to recipient at end of to recipients with properties {address:${quoted(input.to)}}
-  end tell
-  try
-    set sender of theForward to ${quoted(input.sender)}
-  end try
-  set accepted to send theForward
-  return accepted as text
-end tell`;
-}
-
 export function replySendScript(input: {
   accountId: string;
   mailbox: string;
@@ -662,88 +358,43 @@ tell application "Mail"
 end tell`;
 }
 
-export function markReadScript(accountId: string, mailbox: string, messageId: string, internetMessageId = ""): string {
-  return `
-tell application "Mail"
-  set a to first account whose id is ${quoted(accountId)}
-  ${messageResolver(mailbox, messageId, internetMessageId)}
-  set read status of m to true
-  return (id of m as text) & character id 31 & novaMailbox
-end tell`;
-}
-
-export function archiveScript(accountId: string, mailbox: string, messageId: string, internetMessageId = ""): string {
-  return `
-tell application "Mail"
-  set a to first account whose id is ${quoted(accountId)}
-  set targetBox to missing value
-  repeat with b in mailboxes of a
-    set n to name of b
-    if n is "Archive" or n is "Archiv" or n is "Alle Nachrichten" then set targetBox to b
-  end repeat
-  if targetBox is missing value then return "missing-archive"
-  ${messageResolver(mailbox, messageId, internetMessageId)}
-  move m to targetBox
-  set novaMoved to ""
-  try
-    set novaMoved to id of m as text
-  end try
-  return novaMoved & character id 31 & (name of targetBox as text)
-end tell`;
-}
-
-export function discardOutgoingScript(outgoingId: string): string {
-  return `
-tell application "Mail"
-  set victim to missing value
-  repeat with msg in outgoing messages
-    if (id of msg as text) is ${quoted(outgoingId)} then set victim to contents of msg
-  end repeat
-  if victim is missing value then return "missing"
-  delete victim
-  return "ok"
-end tell`;
-}
-
-export function saveAttachmentScript(input: {
-  accountId: string;
-  mailbox: string;
-  messageId: string;
-  attachmentId: string;
-  destination: string;
-  internetMessageId?: string;
-}): string {
+/**
+ * Neueste Nachrichten aus dem gemeinsamen Posteingang aller Konten, neueste zuerst.
+ * Felder: id, Konto-id, Postfach, Absender, Betreff, Eingang, gelesen, Message-ID, Textanfang.
+ */
+export function neuesteNachrichtenScript(input: { anzahl: number; nurUngelesen: boolean }): string {
+  const take = Math.min(Math.max(Math.round(input.anzahl), 1), 15);
+  const scan = input.nurUngelesen ? 80 : take;
   return `${SCRIPT_HELPER}
 tell application "Mail"
-  set a to first account whose id is ${quoted(input.accountId)}
-  ${messageResolver(input.mailbox, input.messageId, input.internetMessageId)}
-  repeat with att in mail attachments of m
-    if (id of att as text) is ${quoted(input.attachmentId)} then
-      save att in POSIX file ${quoted(input.destination)}
-      return "ok"
-    end if
+  set sep to character id 31
+  set rec to character id 30
+  set out to ""
+  set total to count of messages of inbox
+  set scanN to ${scan}
+  if total < scanN then set scanN to total
+  set seen to 0
+  repeat with i from 1 to scanN
+    if seen ≥ ${take} then exit repeat
+    try
+      set m to message i of inbox
+      set isRead to read status of m
+      if ${input.nurUngelesen ? "isRead is false" : "true"} then
+        set mid to ""
+        try
+          set mid to message id of m
+        end try
+        set excerpt to ""
+        try
+          set bodyText to content of m as text
+          if (length of bodyText) > 400 then set bodyText to text 1 thru 400 of bodyText
+          set excerpt to bodyText
+        end try
+        set out to out & (id of m as text) & sep & (id of account of mailbox of m as text) & sep & my novaClean(name of mailbox of m) & sep & my novaClean(sender of m) & sep & my novaClean(subject of m) & sep & my novaStamp(date received of m) & sep & (isRead as text) & sep & my novaClean(mid) & sep & my novaClean(excerpt) & rec
+        set seen to seen + 1
+      end if
+    end try
   end repeat
-  return "missing"
+  return out
 end tell`;
-}
-
-export function outgoingCheckScript(outgoingId: string): string {
-  return `
-tell application "Mail"
-  repeat with msg in outgoing messages
-    if (id of msg as text) is ${quoted(outgoingId)} then
-      set n to count of to recipients of msg
-      set att to 0
-      try
-        set att to count of mail attachments of msg
-      end try
-      return (n as text) & ":" & (att as text)
-    end if
-  end repeat
-  return "missing"
-end tell`;
-}
-
-export function permissionProbeScript(): string {
-  return `tell application "Mail" to get count of accounts`;
 }

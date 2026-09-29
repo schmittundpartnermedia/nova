@@ -2,18 +2,13 @@ import { prisma } from "@/lib/prisma";
 import { assertOrganizationId } from "@/services/tenant";
 import type { ApprovalStatus } from "@/types";
 
-export const STANDING_ACTION_TYPES = ["mail.send.batch", "macos.ui.click"] as const;
+/** Aktionen, für die der Nutzer eine Dauerfreigabe erteilen kann. */
+export const STANDING_ACTION_TYPES = ["mail.send"] as const;
 
 export type StandingActionType = (typeof STANDING_ACTION_TYPES)[number];
 
 export function isStandingActionType(value: string): value is StandingActionType {
   return (STANDING_ACTION_TYPES as readonly string[]).includes(value);
-}
-
-export function standingActionLabel(actionType: string): string {
-  if (actionType === "mail.send.batch") return "Mails versenden";
-  if (actionType === "macos.ui.click") return "UI-Klicks auf dem Mac";
-  return actionType;
 }
 
 export async function createApprovalRequest(input: {
@@ -58,10 +53,7 @@ export async function decideApproval(input: {
   });
 }
 
-export async function findMatchingPolicy(input: {
-  organizationId: string;
-  actionType: string;
-}) {
+export async function findMatchingPolicy(input: { organizationId: string; actionType: string }) {
   assertOrganizationId(input.organizationId);
   return prisma.approvalPolicy.findFirst({
     where: {
@@ -69,70 +61,37 @@ export async function findMatchingPolicy(input: {
       actionType: input.actionType,
       revokedAt: null,
     },
+    orderBy: { createdAt: "desc" },
   });
 }
 
-export async function standingApprovalAllows(input: {
-  organizationId: string;
-  actionType: string;
-}): Promise<{ allowed: boolean; policyId?: string; reason: string }> {
-  const policy = await findMatchingPolicy(input);
-  if (!policy) {
-    return { allowed: false, reason: "Keine Dauerfreigabe." };
-  }
-  let maxPerDay = 0;
+function startOfToday(): Date {
+  const start = new Date();
+  start.setHours(0, 0, 0, 0);
+  return start;
+}
+
+/** Heute tatsächlich versendete Mails (im Ordner Gesendet bestätigt). */
+export async function mailsSentToday(organizationId: string): Promise<number> {
+  assertOrganizationId(organizationId);
+  return prisma.communication.count({
+    where: { organizationId, channel: "email", status: "sent", sentAt: { gte: startOfToday() } },
+  });
+}
+
+export function policyMaxPerDay(policy: { limits: string }): number {
   try {
     const limits = JSON.parse(policy.limits || "{}") as { maxPerDay?: number };
-    maxPerDay = Number(limits.maxPerDay ?? 0);
+    return Math.max(0, Number(limits.maxPerDay ?? 0) || 0);
   } catch {
-    maxPerDay = 0;
+    return 0;
   }
-  if (maxPerDay > 0) {
-    const start = new Date();
-    start.setHours(0, 0, 0, 0);
-    const used = await prisma.approvalRequest.count({
-      where: {
-        organizationId: input.organizationId,
-        actionType: input.actionType,
-        status: "approved",
-        approvedAt: { gte: start },
-      },
-    });
-    if (used >= maxPerDay) {
-      return { allowed: false, policyId: policy.id, reason: "Tageslimit der Dauerfreigabe ist erreicht." };
-    }
-  }
-  return { allowed: true, policyId: policy.id, reason: `Dauerfreigabe „${policy.name}“.` };
-}
-
-export async function consumeStandingApproval(input: {
-  organizationId: string;
-  actionType: string;
-  jobId?: string;
-  description: string;
-  payload?: Record<string, unknown>;
-}): Promise<{ allowed: boolean; policyId?: string; reason: string }> {
-  const standing = await standingApprovalAllows(input);
-  if (!standing.allowed || !standing.policyId) return standing;
-  await prisma.approvalRequest.create({
-    data: {
-      organizationId: input.organizationId,
-      jobId: input.jobId,
-      actionType: input.actionType,
-      description: input.description,
-      payload: JSON.stringify(input.payload ?? { standing: true, policyId: standing.policyId }),
-      status: "approved",
-      approvedAt: new Date(),
-    },
-  });
-  return standing;
 }
 
 export async function createStandingPolicy(input: {
   organizationId: string;
   name: string;
   actionType: string;
-  scope?: string;
   conditions?: Record<string, unknown>;
   limits?: Record<string, unknown>;
 }) {
@@ -146,61 +105,31 @@ export async function createStandingPolicy(input: {
   });
   const data = {
     name: input.name,
-    scope: input.scope ?? "organization",
+    scope: "organization",
     conditions: JSON.stringify(input.conditions ?? {}),
     limits: JSON.stringify(input.limits ?? {}),
     revokedAt: null,
   };
   if (existing) {
-    return prisma.approvalPolicy.update({
-      where: { id: existing.id },
-      data,
-    });
+    return prisma.approvalPolicy.update({ where: { id: existing.id }, data });
   }
   return prisma.approvalPolicy.create({
-    data: {
-      organizationId: input.organizationId,
-      actionType: input.actionType,
-      ...data,
-    },
+    data: { organizationId: input.organizationId, actionType: input.actionType, ...data },
   });
 }
 
-export async function listStandingPolicies(organizationId: string) {
-  assertOrganizationId(organizationId);
-  return prisma.approvalPolicy.findMany({
-    where: { organizationId, revokedAt: null },
-    orderBy: { createdAt: "desc" },
-  });
-}
-
-export async function revokeStandingPolicy(input: { organizationId: string; policyId: string }) {
+export async function revokeStandingPolicy(input: { organizationId: string; actionType: StandingActionType }) {
   assertOrganizationId(input.organizationId);
-  const existing = await prisma.approvalPolicy.findFirst({
-    where: { id: input.policyId, organizationId: input.organizationId, revokedAt: null },
-  });
-  if (!existing) {
-    throw new Error("Dauerfreigabe nicht gefunden.");
-  }
-  return prisma.approvalPolicy.update({
-    where: { id: existing.id },
+  const result = await prisma.approvalPolicy.updateMany({
+    where: { organizationId: input.organizationId, actionType: input.actionType, revokedAt: null },
     data: { revokedAt: new Date() },
   });
-}
-
-export async function listPendingApprovals(organizationId: string) {
-  assertOrganizationId(organizationId);
-  return prisma.approvalRequest.findMany({
-    where: { organizationId, status: "pending" },
-    orderBy: { createdAt: "desc" },
-  });
+  return result.count;
 }
 
 export {
   authorizeExternalAction,
   isIrreversibleAction,
-  riskLevelFromComputerRisk,
-  standingActionTypeFor,
   type AuthorizeExternalInput,
   type AuthorizeExternalResult,
   type ExternalRiskLevel,

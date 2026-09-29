@@ -8,11 +8,22 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { runHeadLoop } from "@/agents/master/head";
+import { runHeadLoop, verlaufsInhalt } from "@/agents/master/head";
 import { lesenGedaechtnis } from "@/lib/gedaechtnis/store";
 import { gedaechtnisDir } from "@/lib/gedaechtnis/paths";
 import { listTools } from "@/services/tools/registry";
 import type { HeadProvider, HeadTurnInput, HeadTurnOutput } from "@/types/ai";
+import type { ToolContext } from "@/services/tools/types";
+import type { Postfach } from "@/services/mail/postfach";
+
+/** Diese Tests fassen kein Postfach an; jeder Zugriff wäre ein Fehler. */
+const keinPostfach: Postfach = {
+  neueste: async () => { throw new Error("Test darf kein Postfach nutzen."); },
+  lesen: async () => { throw new Error("Test darf kein Postfach nutzen."); },
+  senden: async () => { throw new Error("Test darf kein Postfach nutzen."); },
+  antworten: async () => { throw new Error("Test darf kein Postfach nutzen."); },
+};
+const context: ToolContext = { organizationId: "test-org", postfach: keinPostfach };
 
 type Step = Omit<HeadTurnOutput, "model" | "provider" | "responseId">;
 
@@ -41,10 +52,20 @@ function test(name: string, fn: () => Promise<void>) {
   tests.push([name, fn]);
 }
 
-test("Werkzeugliste enthält in Phase 1 nur die Gedächtnis-Werkzeuge", async () => {
+test("Werkzeugliste: Gedächtnis (Phase 1), Mail und Vorlagen (Phase 2) – nichts sonst", async () => {
   assert.deepEqual(
     listTools().map((t) => t.name).sort(),
-    ["gedaechtnis_lesen", "gedaechtnis_schreiben"],
+    [
+      "freigabe_mail_dauer",
+      "gedaechtnis_lesen",
+      "gedaechtnis_schreiben",
+      "mail_antworten",
+      "mail_entwurf",
+      "mail_lesen",
+      "mail_senden",
+      "vorlage_fuellen",
+      "vorlage_liste",
+    ],
   );
 });
 
@@ -59,7 +80,7 @@ test("„Merk dir …“: Werkzeug schreibt in firma.md, Ergebnis geht an das Mo
     },
     { text: "Gemerkt.", toolCalls: [] },
   ]);
-  const result = await runHeadLoop({ provider: model, model: "m", history: [], userRequest: `Merk dir: ${fakt}` });
+  const result = await runHeadLoop({ provider: model, model: "m", history: [], userRequest: `Merk dir: ${fakt}`, context });
 
   assert.ok(lesenGedaechtnis("firma").includes(fakt), "firma.md enthält den Fakt nicht");
   assert.deepEqual(result.toolsExecuted, [{ name: "gedaechtnis_schreiben", executed: true }]);
@@ -77,7 +98,7 @@ test("„Merk dir …“: Werkzeug schreibt in firma.md, Ergebnis geht an das Mo
 
 test("Dauergedächtnis steht bei jeder Anfrage in den Anweisungen", async () => {
   const model = scripted([{ text: "Handwerk in BW.", toolCalls: [] }]);
-  await runHeadLoop({ provider: model, model: "m", history: [], userRequest: "Was suchen wir nochmal?" });
+  await runHeadLoop({ provider: model, model: "m", history: [], userRequest: "Was suchen wir nochmal?", context });
   const instructions = model.calls[0]!.instructions;
   assert.ok(instructions.includes("Baden-Württemberg"), "Gedächtnisinhalt fehlt in den Anweisungen");
   assert.ok(instructions.includes("### firma.md") && instructions.includes("### kunden.md") && instructions.includes("### projekte.md"));
@@ -89,7 +110,7 @@ test("Gesprächsverlauf geht vollständig und in Reihenfolge vor dem neuen Satz 
     { role: "assistant" as const, content: "Elektriker und Dachdecker aus BW." },
   ];
   const model = scripted([{ text: "Weil sie lokal Kunden gewinnen.", toolCalls: [] }]);
-  const result = await runHeadLoop({ provider: model, model: "m", history, userRequest: "Und warum die?" });
+  const result = await runHeadLoop({ provider: model, model: "m", history, userRequest: "Und warum die?", context });
   assert.deepEqual(model.calls[0]!.input, [...history, { role: "user", content: "Und warum die?" }]);
   assert.equal(model.calls[0]!.previousResponseId, undefined);
   assert.equal(result.reply, "Weil sie lokal Kunden gewinnen.");
@@ -97,11 +118,11 @@ test("Gesprächsverlauf geht vollständig und in Reihenfolge vor dem neuen Satz 
 
 test("Unbekanntes Werkzeug: Fehler geht ans Modell, nichts gilt als ausgeführt", async () => {
   const model = scripted([
-    { text: "", toolCalls: [{ callId: "x", name: "mail_senden", arguments: {} }] },
+    { text: "", toolCalls: [{ callId: "x", name: "kalender_eintragen", arguments: {} }] },
     { text: "Das kann ich noch nicht.", toolCalls: [] },
   ]);
-  const result = await runHeadLoop({ provider: model, model: "m", history: [], userRequest: "Schick die Mail." });
-  assert.deepEqual(result.toolsExecuted, [{ name: "mail_senden", executed: false }]);
+  const result = await runHeadLoop({ provider: model, model: "m", history: [], userRequest: "Trag den Termin ein.", context });
+  assert.deepEqual(result.toolsExecuted, [{ name: "kalender_eintragen", executed: false }]);
   const output = JSON.parse((model.calls[1]!.input[0] as { output: string }).output);
   assert.equal(output.ok, false);
   assert.match(output.error, /Unbekanntes Werkzeug/);
@@ -112,21 +133,36 @@ test("Lesen zählt nicht als ausgeführte Aktion", async () => {
     { text: "", toolCalls: [{ callId: "r", name: "gedaechtnis_lesen", arguments: { datei: "firma" } }] },
     { text: "Steht drin.", toolCalls: [] },
   ]);
-  const result = await runHeadLoop({ provider: model, model: "m", history: [], userRequest: "Lies firma." });
+  const result = await runHeadLoop({ provider: model, model: "m", history: [], userRequest: "Lies firma.", context });
   assert.deepEqual(result.toolsExecuted, [{ name: "gedaechtnis_lesen", executed: false }]);
+});
+
+test("Werkzeugprotokoll: Ergebnisse gehen in den Verlauf, lange Texte nicht", async () => {
+  const model = scripted([
+    { text: "", toolCalls: [{ callId: "r", name: "gedaechtnis_lesen", arguments: { datei: "firma" } }] },
+    { text: "Steht drin.", toolCalls: [] },
+  ]);
+  const result = await runHeadLoop({ provider: model, model: "m", history: [], userRequest: "Lies firma.", context });
+  assert.match(result.werkzeugNotiz, /^gedaechtnis_lesen: /);
+  assert.match(result.werkzeugNotiz, /"datei":"firma"/);
+  assert.ok(!result.werkzeugNotiz.includes("Baden-Württemberg"), "Dateiinhalt gehört nicht ins Protokoll");
+  const inhalt = verlaufsInhalt(result.reply, result.werkzeugNotiz);
+  assert.ok(inhalt.startsWith("Steht drin."));
+  assert.ok(inhalt.includes(result.werkzeugNotiz));
+  assert.equal(verlaufsInhalt("Nur Text.", ""), "Nur Text.");
 });
 
 test("Werkzeugrunden erschöpft: ehrliche Meldung statt „Erledigt“", async () => {
   const endlos: Step = { text: "", toolCalls: [{ callId: "r", name: "gedaechtnis_lesen", arguments: { datei: "firma" } }] };
   const model = scripted(Array.from({ length: 20 }, () => endlos));
-  const result = await runHeadLoop({ provider: model, model: "m", history: [], userRequest: "Mach irgendwas." });
+  const result = await runHeadLoop({ provider: model, model: "m", history: [], userRequest: "Mach irgendwas.", context });
   assert.match(result.reply, /nicht zu einem Ergebnis gekommen/);
   assert.equal(model.calls.length, 8);
 });
 
 test("Leere Modellantwort wird nicht als Erfolg ausgegeben", async () => {
   const model = scripted([{ text: "  ", toolCalls: [] }]);
-  const result = await runHeadLoop({ provider: model, model: "m", history: [], userRequest: "Hallo?" });
+  const result = await runHeadLoop({ provider: model, model: "m", history: [], userRequest: "Hallo?", context });
   assert.equal(result.reply, "Darauf habe ich gerade keine Antwort.");
 });
 

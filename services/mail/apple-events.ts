@@ -1,5 +1,6 @@
 import { ensureNativeHelper, invokeNativeHelper } from "@/lib/native/helper";
 import { assertMailScriptSafe, type MailAutomationState } from "@/lib/mail/apple";
+import { requestMailConsentFromNovaApp } from "@/services/mail/nova-consent";
 
 let cached: { at: number; state: MailAutomationState } | null = null;
 
@@ -33,6 +34,17 @@ export async function readMailAutomationState(): Promise<MailAutomationState> {
     state === "granted" || state === "denied" || state === "required" || state === "unavailable" ? state : "unavailable";
   cached = { at: Date.now(), state: resolved };
   return resolved;
+}
+
+/** Fragt die Automations-Freigabe über NOVA.app an (macOS-Dialog), wenn sie noch offen ist. */
+export async function promptMailAutomationAccess(): Promise<MailAutomationState> {
+  clearMailAutomationCache();
+  const before = await readMailAutomationState();
+  if (before === "granted" || before === "denied") return before;
+  const prompted = await requestMailConsentFromNovaApp();
+  clearMailAutomationCache();
+  if (prompted) return prompted;
+  return readMailAutomationState();
 }
 
 export async function runMailAppleScript(

@@ -16,14 +16,13 @@
     "macos:build": "bash macos/launcher/scripts/build.sh",
     "verify:launcher": "bash scripts/verify-launcher-startup.sh",
     "nachweis:phase1": "tsx scripts/nachweis-phase1-kopf.ts",
-    "test:kopf": "tsx scripts/test-kopf.ts"
+    "test:kopf": "tsx scripts/test-kopf.ts",
+    "test:mail": "tsx scripts/test-mail.ts",
+    "nachweis:phase2": "tsx scripts/nachweis-phase2-kopf.ts"
   },
   "dependencies": {
     "@prisma/client": "^6.16.3",
-    "imapflow": "^2.0.7",
-    "mailparser": "^3.9.28",
     "next": "16.3.5",
-    "nodemailer": "^10.0.10",
     "openai": "^7.20.0",
     "react": "19.2.8",
     "react-dom": "19.2.8",
@@ -31,9 +30,7 @@
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
-    "@types/mailparser": "^3.4.6",
     "@types/node": "^20",
-    "@types/nodemailer": "^8.0.2",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "eslint": "^9",

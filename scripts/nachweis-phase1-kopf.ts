@@ -12,6 +12,16 @@ import { runHeadLoop } from "@/agents/master/head";
 import { OpenAIProvider } from "@/providers/ai/openai";
 import { hasOpenAIApiKey } from "@/lib/secrets";
 import { HEAD_MODEL } from "@/providers/ai/models";
+import type { Postfach } from "@/services/mail/postfach";
+
+/** Der Phase-1-Nachweis braucht kein Postfach; ein Zugriff würde den Nachweis scheitern lassen. */
+const keinPostfach: Postfach = {
+  neueste: async () => { throw new Error("Nachweis Phase 1 nutzt kein Postfach."); },
+  lesen: async () => { throw new Error("Nachweis Phase 1 nutzt kein Postfach."); },
+  senden: async () => { throw new Error("Nachweis Phase 1 nutzt kein Postfach."); },
+  antworten: async () => { throw new Error("Nachweis Phase 1 nutzt kein Postfach."); },
+};
+const context = { organizationId: "nachweis-phase1", postfach: keinPostfach };
 
 function loadEnv() {
   const file = path.join(process.cwd(), ".env");
@@ -76,6 +86,7 @@ async function main() {
     provider,
     model,
     history,
+    context,
     userRequest:
       "Merk dir: unsere Firma ist rankpilot, wir machen Lokal-SEO, wir suchen Sponsoren aus dem Handwerk in Baden-Württemberg.",
   });
@@ -100,6 +111,7 @@ async function main() {
     provider,
     model,
     history,
+    context,
     userRequest: "Was für Sponsoren passen zu uns?",
   });
   log("");
@@ -116,6 +128,7 @@ async function main() {
     provider,
     model,
     history,
+    context,
     userRequest: "Und warum die?",
   });
   log("");
@@ -131,6 +144,7 @@ async function main() {
     provider,
     model,
     history: [],
+    context,
     userRequest: "Was suchen wir nochmal?",
   });
   log("");

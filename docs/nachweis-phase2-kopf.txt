@@ -1,0 +1,94 @@
+NOVA Phase-2-Nachweis Kopf/Mail – 2026-09-29T18:32:43.006Z
+Modell: gpt-6-astra (echte API). Postfach: Test-Postfach (kein Apple Mail). DB/NOVA_HOME: Wegwerf-Kopie.
+
+Joachim: Check meine Mails.
+Werkzeuge: [{"name":"mail_lesen","executed":false}]
+NOVA: Zwei Mails im Posteingang:
+
+- **Revolut Business, ungelesen:** Benötigt einen aktuellen Handelsregisterauszug für dein Geschäftskonto – bis Ende Oktober.
+- **Elektro Maier:** Thomas bedankt sich für dein Lokal-SEO-Angebot und schaut es sich an. Noch keine Zusage.
+  ✓ mail_lesen aufgerufen
+  ✓ Zusammenfassung nennt beide Absender
+
+Joachim: Antworte auf die von Revolut: wir melden uns nächste Woche.
+Werkzeuge: [{"name":"mail_antworten","executed":true}]
+NOVA: Entwurf angelegt, noch nicht gesendet.
+
+**Von:** joachim@rankpilot.de  
+**An:** business@revolut.com  
+**Betreff:** Re: Rückfrage zu Ihrem Geschäftskonto
+
+Guten Tag,
+
+wir melden uns nächste Woche bei Ihnen.
+
+Viele Grüße  
+Joachim
+  ✓ Antwort-Entwurf angelegt
+  ✓ Empfänger aus Originalmail
+  ✓ Entwurf bezieht sich auf die Revolut-Mail
+  ✓ Entwurf wird vorgelesen (Text in der Antwort)
+  ✓ nichts gesendet
+
+Joachim: Mach es kürzer.
+Werkzeuge: [{"name":"mail_antworten","executed":true}]
+NOVA: Entwurf gekürzt, nicht gesendet.
+
+**Von:** joachim@rankpilot.de  
+**An:** business@revolut.com  
+**Betreff:** Re: Rückfrage zu Ihrem Geschäftskonto
+
+Guten Tag,
+
+wir melden uns nächste Woche.
+
+Viele Grüße  
+Joachim
+  ✓ neuer Antwort-Entwurf
+  ✓ alter Entwurf ersetzt, genau einer aktuell
+  ✓ neuer Entwurf ist kürzer
+  ✓ nichts gesendet
+
+Joachim: Senden.
+Werkzeuge: [{"name":"mail_senden","executed":false}]
+NOVA: An business@revolut.com, Betreff „Re: Rückfrage zu Ihrem Geschäftskonto“ – senden?
+  ✓ ohne Dauerfreigabe: Rückfrage statt Versand
+
+Joachim: Ja.
+Werkzeuge: [{"name":"mail_senden","executed":true}]
+NOVA: Gesendet an business@revolut.com.
+  ✓ genau eine Antwort an das Postfach übergeben
+  ✓ der aktuelle Entwurf ist als gesendet markiert
+
+— Dauerfreigabe per Stimme —
+
+Joachim: Du darfst ab jetzt Mails senden, wenn ich ‚senden‘ sage.
+Werkzeuge: [{"name":"freigabe_mail_dauer","executed":true}]
+NOVA: Freigabe erteilt: Wenn du „senden“ sagst, sende ich ohne weitere Rückfrage. Tageslimit: 20 Mails.
+  ✓ Dauerfreigabe gespeichert
+  ✓ genau eine aktive Dauerfreigabe mail.send
+
+Joachim: Antworte Thomas Maier: danke, ich rufe ihn morgen an.
+Werkzeuge: [{"name":"mail_antworten","executed":true}]
+NOVA: Entwurf angelegt, noch nicht gesendet.
+
+**Von:** joachim@rankpilot.de  
+**An:** info@elektro-maier.de  
+**Betreff:** Re: Angebot Lokal-SEO
+
+Hallo Thomas,
+
+danke für deine Rückmeldung. Ich rufe dich morgen an.
+
+Viele Grüße  
+Joachim
+
+Joachim: Senden.
+Werkzeuge: [{"name":"mail_senden","executed":true}]
+NOVA: Gesendet an Thomas Maier, info@elektro-maier.de.
+  ✓ mit Dauerfreigabe: gesendet ohne Rückfrage
+  ✓ genau eine weitere Mail an das Postfach übergeben
+  ✓ an Elektro Maier
+
+ERGEBNIS: Phase-2-Kopf-Nachweis bestanden (echte API, Test-Postfach).
+Nicht geprüft: Apple Mail selbst (Lesen, Senden, Ordner Gesendet) – das prüft Joachim in NOVA.app.

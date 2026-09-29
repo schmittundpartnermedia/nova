@@ -464,6 +464,11 @@ model Communication {
   sentAt            DateTime? @map("sent_at")
   deliveryStatus    String    @default("PREPARED") @map("delivery_status")
   mailAccountId     String?   @map("mail_account_id")
+  /// Absender (steuerbares Apple-Mail-Konto) und Empfänger des Entwurfs.
+  fromAddress       String?   @map("from_address")
+  toAddress         String?   @map("to_address")
+  /// Bezug auf die beantwortete Nachricht in Apple Mail (opaker Verweis aus mail_lesen).
+  replyRef          String?   @map("reply_ref")
   mailThreadId      String?   @map("mail_thread_id")
   inReplyTo         String?   @map("in_reply_to")
   referencesHeader  String?   @map("references_header")

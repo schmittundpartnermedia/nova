@@ -48,15 +48,50 @@ Nicht geprüft / offen:
 - Cursor-CLI-Anbindung (`agents/coding`, `lib/computer/cursor-cli.ts`) gelöscht; für Phase 5 aus der Historie vor diesem Commit holbar.
 - DB-Zeilen `AiProviderConfig` für simple/sensitive/fallback bleiben liegen, werden nicht mehr gelesen.
 
+**29.09.2026, abends – Neustart der Daten, Phase 2 gebaut (Claude Code).**
+
+Auf Joachims Anweisung: `~/Nova/gedaechtnis/firma.md` geleert, das aktive Gespräch archiviert (nicht gelöscht; DB-Sicherung vorher im Scratchpad). Phase 2 begonnen, **obwohl die Abnahme von Phase 1 noch aussteht** – ausdrücklich von Joachim so angewiesen.
+
+Was jetzt real im Code steht:
+- Werkzeuge: `mail_lesen` (neueste / ungelesen / eine Nachricht), `mail_entwurf`, `mail_antworten`, `mail_senden`, `freigabe_mail_dauer`, `vorlage_liste`, `vorlage_fuellen`.
+- Apple Mail wird live gelesen (gemeinsamer Posteingang, ein AppleScript-Aufruf, max. 15 Mails). Der alte Sync von Mails in eine Wissensdatenbank samt Embeddings/Retrieval, IMAP/SMTP/OAuth und die letzte Regex-Datei (`lib/dialog/intent.ts`) sind gelöscht, ebenso `imapflow`, `mailparser`, `nodemailer`.
+- Entwürfe liegen in `communications` (neu: `from_address`, `to_address`, `reply_ref`; Migration `20260929180000_mail_phase2`). „Mach es kürzer“ legt einen neuen Entwurf an und setzt den alten auf `superseded`.
+- Senden (`services/mail/entwuerfe.ts`, ein Weg für Kopf und Worker): ohne Dauerfreigabe legt NOVA eine Freigabe an und fragt einmal; erst mit der Freigabe **dieses** Entwurfs geht die Mail raus. Gesendet = im Ordner „Gesendet“ des Absenderkontos gefunden.
+- Fehler aus dem Auftrag behoben: `authorizeExternalAction` verbraucht nichts mehr; das Tageslimit einer Dauerfreigabe zählt nur tatsächlich gesendete Mails. Dauerfreigabe gibt es nur noch für `mail.send`; die alte Klick-Freigabe ist weg. Alle alten Dauerfreigaben aus Cursors Tests sind widerrufen (Migration, nicht gelöscht).
+- Fest verdrahtete Mailtexte entfernt (`DEFAULT_OUTREACH_TEMPLATE`, Ersatzwerte wie „Ihnen“/„unserem Vorhaben“). Vorlagen kommen aus `~/Nova/vorlagen/*.md`; fehlende Platzhalter werden gemeldet.
+- Gesprächsverlauf trägt jetzt das Werkzeugprotokoll jeder Antwort (Entwurfs-ID, Freigabe-ID, Mail-Verweise). Ohne das wusste das Modell im nächsten Satz nicht, welcher Entwurf gemeint ist – gefunden durch den Nachweis.
+- Nebenbei: die Migration `mail_templates` war in der DB von Hand eingespielt, aber nie verbucht; als angewendet markiert, Schema und DB stimmen jetzt überein (`prisma migrate diff` leer).
+
+Nachweise:
+- `npx tsc --noEmit`, `npx eslint .`, `npx next build`, `npm run macos:build` grün.
+- `npm run test:kopf` 9/9, `npm run test:mail` 14/14 (Test-Postfach, Wegwerf-DB; echte DB unberührt). Zwei absichtlich eingebaute Fehler (Limit zählt Fehlversuche; Versand ohne Freigabe) wurden von den Tests erkannt.
+- `npm run nachweis:phase2` → `docs/nachweis-phase2-kopf.txt`: alle Abnahmesätze gegen die echte API bestanden, dazu Dauerfreigabe per Stimme. **Mit Test-Postfach, nicht mit Apple Mail.**
+
+Nicht geprüft / offen:
+- Nichts lief gegen Apple Mail oder in NOVA.app: Lesen, Antworten, Senden und die Bestätigung im Ordner „Gesendet“ sind nur im Code und mit Test-Postfach geprüft.
+- `~/Nova/vorlagen/` ist leer – Vorlagen liefert Joachim.
+- Antwortet NOVA auf eine Mail, die an ein nicht steuerbares Konto ging (z. B. iCloud), fragt sie nach dem Absender. Ob Apple Mail beim Antworten den gesetzten Absender übernimmt, ist nicht live geprüft.
+- `mail_accounts`-Zeilen in der DB werden nicht mehr gelesen (Konten kommen live aus Apple Mail).
+- Phase 1 ist weiterhin nicht abgenommen.
+
 ## Dran
 
-**Phase 1 – Abnahme durch Joachim in NOVA.app.** Vorher `~/Nova/gedaechtnis/firma.md` leeren, dann `macos/build/NOVA.app` öffnen und per Taste (rechte Option) sprechen:
+**Abnahme durch Joachim in NOVA.app – Phase 1 und Phase 2.** `macos/build/NOVA.app` öffnen, Taste halten (rechte Option), sprechen.
+
+Phase 1:
 1. „Merk dir: unsere Firma ist rankpilot, wir machen Lokal-SEO, wir suchen Sponsoren aus dem Handwerk in Baden-Württemberg."
 2. „Was für Sponsoren passen zu uns?"
 3. „Und warum die?"
 4. App beenden, neu starten, „Was suchen wir nochmal?"
 
-Phase 2 beginnt erst nach dieser Bestätigung, in einem neuen Chat.
+Phase 2 (Joachim startet den Mail-Test selbst; Apple Mail muss laufen, beim ersten Mal fragt macOS nach der Automations-Freigabe):
+1. „Check meine Mails."
+2. „Antworte auf die von X: wir melden uns nächste Woche."
+3. „Mach es kürzer."
+4. „Senden." → NOVA fragt einmal nach („An …, Betreff … – senden?") → „Ja." → Mail liegt in Apple Mail unter „Gesendet".
+   Optional vorher: „Du darfst ab jetzt Mails senden, wenn ich ‚senden‘ sage." → dann geht „Senden." ohne Rückfrage raus.
+
+Phase 3 beginnt erst nach Bestätigung beider Abnahmen.
 
 ## Was Joachim liefert (siehe Auftrag, Anhang)
 

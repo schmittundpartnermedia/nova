@@ -84,6 +84,7 @@ export async function POST(request: Request) {
 
         let assistantMessageId: string | undefined;
         let resultReply = "";
+        let werkzeugNotiz = "";
         let resultPayload: Record<string, unknown> | null = null;
 
         const startedAt = new Date();
@@ -99,6 +100,7 @@ export async function POST(request: Request) {
             },
           });
           resultReply = result.reply;
+          werkzeugNotiz = result.werkzeugNotiz ?? "";
           resultPayload = {
             type: "done",
             ok: result.orbState !== "ERROR",
@@ -134,7 +136,7 @@ export async function POST(request: Request) {
             inputMode: parsed.inputMode,
             status: resultPayload ? "final" : "error",
             visible: true,
-            metadata: { channel: "nova-ui" },
+            metadata: { channel: "nova-ui", ...(werkzeugNotiz ? { werkzeuge: werkzeugNotiz } : {}) },
           });
           assistantMessageId = assistantMessage.id;
         }
