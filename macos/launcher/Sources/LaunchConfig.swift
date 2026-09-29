@@ -194,6 +194,7 @@ struct LaunchConfig {
                 ? nil
                 : URL(fileURLWithPath: string(plist["NOVAProjectRoot"], fallback: ""), isDirectory: true),
             Bundle.main.bundleURL.deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent(),
+            URL(fileURLWithPath: "/Volumes/ELEVUM/Projekte/joachim/NOVA", isDirectory: true),
             URL(fileURLWithPath: "/Volumes/My Book 24/NOVA", isDirectory: true),
         ].compactMap { $0 }
 

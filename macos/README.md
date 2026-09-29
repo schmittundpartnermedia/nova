@@ -29,7 +29,7 @@ Er wird nicht in NOVA.app verschoben, damit bestehende TCC-Einträge (Screen Rec
 
 Aktuell startet der Launcher den Entwicklungsmodus über das bestehende Projekt:
 
-`/Volumes/My Book 24/NOVA`
+`/Volumes/ELEVUM/Projekte/joachim/NOVA`
 
 Gesteuert über `macos/launcher/Resources/LaunchConfig.plist`:
 
@@ -48,7 +48,7 @@ npm run macos:build
 
 Ergebnis:
 
-`/Volumes/My Book 24/NOVA/macos/build/NOVA.app`
+`/Volumes/ELEVUM/Projekte/joachim/NOVA/macos/build/NOVA.app`
 
 Bundle Identifier: `io.elevum.nova`
 

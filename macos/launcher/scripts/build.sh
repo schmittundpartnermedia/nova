@@ -18,7 +18,14 @@ for png in "$ICONSET"/*.png; do
   sips -s format png "$png" --out "$png" >/dev/null
 done
 xattr -cr "$ICONSET" >/dev/null 2>&1 || true
-iconutil -c icns "$ICONSET" -o "$RES/AppIcon.icns"
+if ! iconutil -c icns "$ICONSET" -o "$RES/AppIcon.icns" 2>/dev/null; then
+  if [[ -f "$RES/AppIcon.icns" ]]; then
+    echo "Hinweis: iconutil fehlgeschlagen, vorhandenes AppIcon.icns wird weiterverwendet."
+  else
+    echo "AppIcon.icns konnte nicht erzeugt werden." >&2
+    exit 1
+  fi
+fi
 
 SDK="$(xcrun --show-sdk-path)"
 swiftc -O \
