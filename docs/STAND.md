@@ -16,6 +16,13 @@ Diese Datei ist die Übergabe zwischen Sitzungen. Wer hier anfängt (Claude Code
 
 **29.09.2026, tagsüber** – Cursor hat mit Phase 1 begonnen und wollte anschließend Phase 2 beginnen. Stand auf GitHub um 15:35: **nichts gepusht seit d162ba9** (28.09. 23:38). Was Cursor gebaut hat, liegt nur lokal. Nicht geprüft.
 
+**29.09.2026, Claude Code übernimmt** – Cursors lokale Commits (7c7db0d Phase 1, 2bef5e2 Launcher-Pfad, 823650d Phase 2) waren committed, aber nicht gepusht; zusammen mit Auftrag/Stand unter `docs/` gepusht (9056b38).
+
+Prüfung Phase 1 gegen den Auftrag – **Urteil: aufbauen, nicht neu.**
+- Tragfähig: Kopf `agents/master/head.ts` (Responses-API-Schleife, max. 10 Werkzeugrunden, Werkzeuge nur aus `services/tools/registry.ts`), `agents/master/index.ts` gibt die letzten 16 Nachrichten der Conversation mit, Dauergedächtnis `lib/gedaechtnis/` lädt `firma.md`/`kunden.md`/`projekte.md` bei jeder Anfrage in den Systemprompt, Werkzeuge `gedaechtnis_lesen`/`_schreiben`. `tsc --noEmit` grün. `docs/nachweis-phase1-kopf.txt` zeigt die vier Abnahmesätze gegen die echte API (ohne App, ohne Mikrofon).
+- Nicht fertig: Löschliste nur teilweise abgearbeitet – übrig u. a. 7× `agents/*/intent.ts` samt Agenten, `lib/*/intent.ts` (Regex), `lib/computer/` (16 Dateien), `services/computer/`, Seitenleisten `NovaSidebar`/`NovaContextPanel`, `three` in `package.json`, alte Doku unter `docs/`. Kein Mock-Regressionstest für den Kopf.
+- Regelverstoß: 823650d ist Phase 2 (Mail-Werkzeuge im Kopf), begonnen vor der Phase-1-Abnahme. Wird zurückgenommen (`git revert`), der Code bleibt in der Historie für Phase 2.
+
 ## Dran
 
 **Phase 1** gilt als offen, bis Joachim den Abnahmepunkt aus `docs/AUFTRAG.md` in NOVA.app bestätigt hat („Merk dir …" / „Was passt zu uns?" / „Und warum die?" / Neustart / „Was suchen wir nochmal?"). Phase 2 wird nicht begonnen, bevor das steht – auch wenn Cursor schon damit angefangen hat.
