@@ -5,22 +5,16 @@ export type ToolJsonSchema = {
   additionalProperties: false;
 };
 
-export type ToolContext = {
-  organizationId: string;
-  jobId?: string;
-};
-
 export type NovaToolDefinition = {
-  /** API-Name (OpenAI: nur [a-zA-Z0-9_-]). Konzeptuell: mail.lesen → mail_lesen */
+  /** API-Name (OpenAI: nur [a-zA-Z0-9_-]). Konzeptuell: gedaechtnis.lesen → gedaechtnis_lesen */
   name: string;
   description: string;
   parameters: ToolJsonSchema;
-  execute: (args: Record<string, unknown>, ctx: ToolContext) => Promise<unknown> | unknown;
+  execute: (args: Record<string, unknown>) => Promise<unknown> | unknown;
 };
 
 export type NovaToolResult = {
   ok: boolean;
-  /** true nur bei tatsächlicher externer Aktion (z. B. Mail gesendet). */
   executed: boolean;
   data?: unknown;
   error?: string;

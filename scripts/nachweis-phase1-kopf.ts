@@ -78,7 +78,6 @@ async function main() {
     history,
     userRequest:
       "Merk dir: unsere Firma ist rankpilot, wir machen Lokal-SEO, wir suchen Sponsoren aus dem Handwerk in Baden-Württemberg.",
-    context: { organizationId: "nachweis-phase1" },
   });
   log("");
   log("— Turn 1 (merken) —");
@@ -101,7 +100,6 @@ async function main() {
     provider,
     model,
     history,
-    context: { organizationId: "nachweis-phase1" },
     userRequest: "Was für Sponsoren passen zu uns?",
   });
   log("");
@@ -118,7 +116,6 @@ async function main() {
     provider,
     model,
     history,
-    context: { organizationId: "nachweis-phase1" },
     userRequest: "Und warum die?",
   });
   log("");
@@ -134,7 +131,6 @@ async function main() {
     provider,
     model,
     history: [],
-    context: { organizationId: "nachweis-phase1" },
     userRequest: "Was suchen wir nochmal?",
   });
   log("");
