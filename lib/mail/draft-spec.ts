@@ -123,7 +123,7 @@ function extractBodyHint(
   if (dass?.[1]?.trim()) {
     const core = dass[1].replace(/[.!?]+$/g, "").trim();
     if (core.length >= 8) {
-      return `Guten Tag,\n\n${core.charAt(0).toUpperCase()}${core.slice(1)}.\n\nFreundliche Grüße\nJoachim`;
+      return `Guten Tag,\n\n${core.charAt(0).toUpperCase()}${core.slice(1)}.\n\nFreundliche Grüße`;
     }
   }
 

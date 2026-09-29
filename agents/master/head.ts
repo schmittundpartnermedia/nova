@@ -1,8 +1,10 @@
-import { gedaechtnisSystemBlock } from "@/lib/gedaechtnis/store";
+import { gedaechtnisSystemBlock, ensureGedaechtnis } from "@/lib/gedaechtnis/store";
+import { ensureVorlagenDir } from "@/lib/mail/vorlagen-files";
 import { executeTool, listTools } from "@/services/tools/registry";
 import type { AIProvider, HeadInputMessage, HeadToolSpec, HeadTurnOutput } from "@/types/ai";
+import type { ToolContext } from "@/services/tools/types";
 
-const MAX_TOOL_ROUNDS = 8;
+const MAX_TOOL_ROUNDS = 10;
 
 export type HeadLoopResult = {
   reply: string;
@@ -10,6 +12,8 @@ export type HeadLoopResult = {
   providerId: string;
   toolRounds: number;
   toolsExecuted: Array<{ name: string; executed: boolean }>;
+  approvalId?: string;
+  actionType?: string;
 };
 
 function toolSpecs(): HeadToolSpec[] {
@@ -21,17 +25,24 @@ function toolSpecs(): HeadToolSpec[] {
 }
 
 function buildInstructions(): string {
+  ensureGedaechtnis();
+  ensureVorlagenDir();
   const memory = gedaechtnisSystemBlock();
   return [
     "Du bist Nova, die Sprach-Oberfläche mit Gedächtnis auf dem Mac des Nutzers.",
     "Du sprichst Deutsch, knapp und klar, wie ein Assistent auf Augenhöhe – kein Assistenten-Jargon.",
-    "Du hast in dieser Phase nur Gedächtnis-Werkzeuge. Keine Mails, kein Scraper, kein Cursor, keine Bildschirmsteuerung.",
-    "Wenn der Nutzer etwas merken soll („Merk dir …“), nutze immer gedaechtnis_schreiben.",
-    "Wähle die passende Datei: firma (Unternehmen, Angebot, Zielgruppe/Sponsoren-Suche), kunden, projekte.",
-    "Bei Fragen zum gemerkten Wissen antworte aus dem Dauergedächtnis und dem Gesprächsverlauf.",
-    "Beziehe dich auf vorherige Antworten im Gespräch, wenn der Nutzer nachfragt („Und warum …?“).",
-    "Wenn dir etwas Unklares fehlt, stelle eine kurze Rückfrage – nicht raten.",
-    "Erfinde keine externen Aktionen. Behaupte nicht, etwas gesendet oder gesucht zu haben.",
+    "Werkzeuge: Gedächtnis, Mail (lesen/entwurf/antworten/senden), Vorlagen, Dauerfreigabe Mail.",
+    "Kein Scraper, kein Cursor, keine Bildschirmsteuerung in dieser Phase.",
+    "",
+    "Gedächtnis: Bei „Merk dir …“ immer gedaechtnis_schreiben. Datei firma|kunden|projekte.",
+    "Mail lesen: „Check meine Mails“ → mail_lesen (modus neueste oder ungelesen).",
+    "Antworten: mail_antworten oder mail_entwurf mit dem Auftrag; lies den Entwurf dem Nutzer vor (Antworttext).",
+    "Kürzer/ändern: erneut mail_entwurf mit dem Änderungswunsch.",
+    "Senden: nur wenn der Nutzer klar „senden“ sagt → mail_senden mit bestaetigt=true. Sonst nicht senden.",
+    "Dauerfreigabe: Wenn der Nutzer sagt, du darfst ab jetzt Mails senden sobald er „senden“ sagt → freigabe_mail_dauer.",
+    "Vorlagen: vorlage_liste / vorlage_fuellen; Texte kommen aus Vorlage oder vom Kopf, nicht aus fest verdrahteten Floskeln.",
+    "Behaupte nie, eine Mail sei gesendet, wenn mail_senden nicht executed:true zurückgibt.",
+    "Bei Unklarheit kurze Rückfrage – nicht raten.",
     "",
     memory,
   ].join("\n");
@@ -42,6 +53,7 @@ export async function runHeadLoop(input: {
   model: string;
   history: Array<{ role: "user" | "assistant"; content: string }>;
   userRequest: string;
+  context: ToolContext;
   onStatus?: (message: string) => void;
 }): Promise<HeadLoopResult> {
   if (!input.provider.headTurn) {
@@ -60,9 +72,11 @@ export async function runHeadLoop(input: {
   let last: HeadTurnOutput | null = null;
   const toolsExecuted: Array<{ name: string; executed: boolean }> = [];
   let toolRounds = 0;
+  let approvalId: string | undefined;
+  let actionType: string | undefined;
 
   for (let round = 0; round < MAX_TOOL_ROUNDS; round += 1) {
-    input.onStatus?.(round === 0 ? "Ich denke nach …" : "Ich arbeite mit dem Gedächtnis …");
+    input.onStatus?.(round === 0 ? "Ich denke nach …" : "Ich arbeite …");
 
     last = await input.provider.headTurn({
       instructions,
@@ -82,8 +96,13 @@ export async function runHeadLoop(input: {
 
     for (const call of last.toolCalls) {
       input.onStatus?.(`Werkzeug: ${call.name.replace(/_/g, ".")}`);
-      const result = await executeTool(call.name, call.arguments);
+      const result = await executeTool(call.name, call.arguments, input.context);
       toolsExecuted.push({ name: call.name, executed: result.executed === true });
+      const data = result.data as { approvalId?: string; waitingApproval?: boolean } | undefined;
+      if (data?.approvalId && data.waitingApproval) {
+        approvalId = data.approvalId;
+        actionType = "mail.send";
+      }
       outputs.push({
         type: "function_call_output",
         call_id: call.callId,
@@ -106,5 +125,7 @@ export async function runHeadLoop(input: {
     providerId: last?.provider ?? input.provider.id,
     toolRounds,
     toolsExecuted,
+    approvalId,
+    actionType,
   };
 }

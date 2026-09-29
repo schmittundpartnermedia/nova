@@ -16,7 +16,8 @@ import { detectMailIntent } from "@/lib/mail/intent";
 import { assertOrganizationId } from "@/services/tenant";
 import { searchMail } from "@/services/mail/search";
 import { auditMail } from "@/services/mail/audit";
-import { authorizeExternalAction, createApprovalRequest } from "@/services/approvals";
+import { createApprovalRequest } from "@/services/approvals";
+import { findMatchingPolicy, standingApprovalAllows } from "@/services/approvals";
 import {
   clearPendingMailDraft,
   loadPendingMailDraft,
@@ -26,6 +27,30 @@ import {
 } from "@/services/mail/pending-draft";
 import { filterSteerableMailAccounts, isSteerableMailAddress } from "@/lib/mail/steerable";
 
+function parsePolicyConditions(raw: string): {
+  allowedRecipientDomains: string[];
+} {
+  try {
+    const parsed = JSON.parse(raw || "{}") as { allowedRecipientDomains?: unknown };
+    return {
+      allowedRecipientDomains: Array.isArray(parsed.allowedRecipientDomains)
+        ? parsed.allowedRecipientDomains.map((item) => String(item).toLowerCase())
+        : [],
+    };
+  } catch {
+    return { allowedRecipientDomains: [] };
+  }
+}
+
+function domainOf(email?: string): string | undefined {
+  if (!email?.includes("@")) return undefined;
+  return email.split("@").pop()?.toLowerCase();
+}
+
+/**
+ * Prüft Dauerfreigabe für Entwurf – ohne Tageslimit zu verbrauchen.
+ * Verbrauch erst beim echten Versand (authorizeExternalAction / mail_senden).
+ */
 async function requestMailSendApproval(input: {
   organizationId: string;
   jobId?: string;
@@ -33,33 +58,29 @@ async function requestMailSendApproval(input: {
   payload: Record<string, unknown>;
   recipient?: string;
 }): Promise<{ approvalId: string; viaStanding: boolean; reason: string }> {
-  const domain = input.recipient?.includes("@") ? input.recipient.split("@").pop() : undefined;
-  const auth = await authorizeExternalAction({
+  const domain = domainOf(input.recipient);
+  const peek = await standingApprovalAllows({
     organizationId: input.organizationId,
-    actionType: "mail.send",
-    description: input.description,
-    jobId: input.jobId,
-    payload: input.payload,
-    riskLevel: "external",
-    requiresApproval: true,
-    conditions: domain ? { recipientDomain: domain } : undefined,
+    actionType: "mail.send.batch",
   });
-  if (auth.decision === "allow" && auth.via === "standing") {
-    return { approvalId: auth.approvalId ?? auth.policyId ?? "standing", viaStanding: true, reason: auth.reason };
-  }
-  if (auth.decision === "need_approval") {
-    return { approvalId: auth.approvalId, viaStanding: false, reason: auth.reason };
-  }
-  if (auth.decision === "deny_hard") {
-    const approval = await createApprovalRequest({
+  if (peek.allowed && peek.policyId) {
+    const policy = await findMatchingPolicy({
       organizationId: input.organizationId,
-      jobId: input.jobId,
-      actionType: "mail.send",
-      description: `${input.description}\n\n(${auth.reason})`,
-      payload: { ...input.payload, deniedByPolicy: true },
+      actionType: "mail.send.batch",
     });
-    return { approvalId: approval.id, viaStanding: false, reason: auth.reason };
+    const allowedDomains = policy ? parsePolicyConditions(policy.conditions).allowedRecipientDomains : [];
+    const domainOk =
+      !allowedDomains.length ||
+      (domain && allowedDomains.some((allowed) => domain === allowed || domain.endsWith(`.${allowed}`)));
+    if (domainOk) {
+      return {
+        approvalId: peek.policyId,
+        viaStanding: true,
+        reason: `${peek.reason} Sag „senden“, dann geht die Mail raus (Limit erst dann).`,
+      };
+    }
   }
+
   const approval = await createApprovalRequest({
     organizationId: input.organizationId,
     jobId: input.jobId,

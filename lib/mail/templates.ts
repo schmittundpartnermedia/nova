@@ -38,5 +38,4 @@ Ich würde das gern knapp und konkret vorstellen – ohne langen Pitch.
 
 Passt Ihnen ein kurzes Gespräch in den nächsten zwei Wochen?
 
-Freundliche Grüße
-Joachim`;
+Freundliche Grüße`;

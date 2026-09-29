@@ -4,7 +4,7 @@ import {
   parseGedaechtnisDatei,
   schreibenGedaechtnis,
 } from "@/lib/gedaechtnis/store";
-import type { NovaToolDefinition, NovaToolResult } from "@/services/tools/types";
+import type { NovaToolDefinition, NovaToolResult, ToolContext } from "@/services/tools/types";
 
 const DATEI_SCHEMA = {
   type: "string" as const,
@@ -22,11 +22,11 @@ export const gedaechtnisLesenTool: NovaToolDefinition = {
     required: ["datei"],
     additionalProperties: false,
   },
-  execute(args): NovaToolResult {
+  execute(args, _ctx: ToolContext): NovaToolResult {
     try {
       const datei = parseGedaechtnisDatei(args.datei);
       const inhalt = lesenGedaechtnis(datei);
-      return { ok: true, executed: true, data: { datei, inhalt } };
+      return { ok: true, executed: false, data: { datei, inhalt } };
     } catch (error) {
       return {
         ok: false,
@@ -58,7 +58,7 @@ export const gedaechtnisSchreibenTool: NovaToolDefinition = {
     required: ["datei", "inhalt", "modus"],
     additionalProperties: false,
   },
-  execute(args): NovaToolResult {
+  execute(args, _ctx: ToolContext): NovaToolResult {
     try {
       const datei = parseGedaechtnisDatei(args.datei);
       const inhalt = String(args.inhalt ?? "");
@@ -67,7 +67,7 @@ export const gedaechtnisSchreibenTool: NovaToolDefinition = {
         modus === "ersetzen" ? schreibenGedaechtnis(datei, inhalt) : ergaenzeGedaechtnis(datei, inhalt);
       return {
         ok: true,
-        executed: true,
+        executed: false,
         data: { datei, modus, inhalt: geschrieben },
       };
     } catch (error) {

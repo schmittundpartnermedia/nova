@@ -108,6 +108,7 @@ export async function runMaster(input: {
       model: decision.model,
       history,
       userRequest: input.userRequest,
+      context: { organizationId: input.organizationId, jobId: job.id },
       onStatus: (statusMessage) => {
         emit({ type: "status", orbState: "WORKING", statusMessage });
       },
@@ -121,12 +122,15 @@ export async function runMaster(input: {
       completedAt: new Date(),
     });
 
+    const mailed = head.toolsExecuted.some((t) => t.name === "mail_senden" && t.executed);
     return {
       jobId: job.id,
-      status: "completed",
-      orbState: "DONE",
-      statusMessage: "Fertig",
+      status: head.approvalId ? "waiting_for_approval" : "completed",
+      orbState: head.approvalId ? "WAITING_FOR_APPROVAL" : mailed ? "DONE" : "DONE",
+      statusMessage: head.approvalId ? "Freigabe erforderlich" : mailed ? "Mail gesendet" : "Fertig",
       reply: head.reply,
+      approvalId: head.approvalId,
+      actionType: head.actionType,
       mock: decision.providerId === "mock",
       providerMode,
       providerId: head.providerId,
