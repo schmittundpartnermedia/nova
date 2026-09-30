@@ -21,8 +21,6 @@ export function NovaCommandBar({
   onMicUp,
   onStopSpeech,
   onToggleVoice,
-  onDraftChange,
-  onComposeStart,
 }: {
   disabled: boolean;
   listening: boolean;
@@ -40,8 +38,6 @@ export function NovaCommandBar({
   onMicUp?: () => void;
   onStopSpeech: () => void;
   onToggleVoice: () => void;
-  onDraftChange?: (value: string) => void;
-  onComposeStart?: () => void;
 }) {
   const [value, setValue] = useState("");
   const shown = sessionActive ? dictation : value;
@@ -75,9 +71,7 @@ export function NovaCommandBar({
           if (sessionActive) return;
           const next = event.target.value;
           setValue(next);
-          onDraftChange?.(next);
         }}
-        onFocus={() => onComposeStart?.()}
         disabled={disabled}
         readOnly={sessionActive}
         placeholder={
