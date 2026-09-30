@@ -119,6 +119,8 @@ Nicht geprüft: echte Google-Places-Suche mit Impressum-Auslese (kostet API), La
 
 ## Dran
 
+Kontaktliste `sponsoren` (30.09.) mit den 28 Firmen aus `sponsoren-2026-09` angelegt (lokal in `~/Nova/kampagnen/`).
+
 **Abnahme Phase 4 durch Joachim in NOVA.app:**
 1. „Such mir 10 Schreinereien in Pforzheim.“ → NOVA nennt Kosten und fragt → „Ja.“ → nach einigen Minuten Meldung mit Anzahl, E-Mails, Ansprechpartnern; Liste in `~/Nova/kampagnen/`.
 2. „Nimm als Sponsor auf: Zurich, Herr Thomas Wolf, thomas.wolf@zurich.com, Bereich Unternehmens- und Gewerbeversicherungen.“ (mit einer eigenen Test-Adresse) → Eintrag in Liste „sponsoren“.
@@ -133,4 +135,4 @@ Nicht geprüft: echte Google-Places-Suche mit Impressum-Auslese (kostet API), La
 
 ## Offene Punkte, die nicht im Code liegen
 
-- Rechtlicher Rahmen für Werbe-Mails an deutsche Empfänger (US-LLC hilft nicht, Empfängerstandort zählt) – vor der ersten echten Kampagne (Phase 4) klären.
+- Rechtlicher Rahmen für Werbe-Mails: laut Joachim am 30.09.2026 geklärt (Entscheidung und Verantwortung bei Joachim).
