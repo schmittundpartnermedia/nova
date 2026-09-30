@@ -74,6 +74,7 @@ async function main() {
   const versand: Array<{ art: string; input: unknown }> = [];
   const postfach: Postfach = {
     neueste: async (input) => mails.filter((m) => !input.nurUngelesen || !m.gelesen).slice(0, input.anzahl),
+    eingang: async () => [],
     lesen: async (ref) => mails.find((m) => m.ref === ref) ?? null,
     senden: async (input) => {
       versand.push({ art: "senden", input });

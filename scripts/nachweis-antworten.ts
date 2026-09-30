@@ -51,6 +51,7 @@ async function main() {
   };
   const postfach: Postfach = {
     neueste: async () => [mail],
+    eingang: async () => [],
     lesen: async (r) => (r === ref ? mail : null),
     senden: async () => ({ ok: false, executed: false, grund: "Nachweis sendet nicht" }),
     antworten: async () => ({ ok: false, executed: false, grund: "Nachweis sendet nicht" }),

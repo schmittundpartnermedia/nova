@@ -394,6 +394,75 @@ end tell`;
 }
 
 /**
+ * Alle Mails, die seit einem Zeitpunkt eingegangen sind (Posteingang und Werbung/Junk aller Konten),
+ * mit den Verlaufs-Kopfzeilen In-Reply-To und References. Für die Postfach-Wache: So wird eine Antwort
+ * auch erkannt, wenn sie von einer anderen Adresse kommt oder viele andere Mails dazwischen liegen.
+ * Felder: id, kontoId, postfach, absender, betreff, eingang, gelesen, message-id, textanfang, in-reply-to, references.
+ */
+export function eingangSeitScript(input: { seit: Date; max: number }): string {
+  const d = input.seit;
+  const sekunden = d.getHours() * 3600 + d.getMinutes() * 60 + d.getSeconds();
+  const max = Math.min(Math.max(Math.round(input.max), 1), 500);
+  return `${SCRIPT_HELPER}
+tell application "Mail"
+  set sep to character id 31
+  set rec to character id 30
+  set out to ""
+  set seitDatum to current date
+  set day of seitDatum to 1
+  set year of seitDatum to ${d.getFullYear()}
+  set month of seitDatum to ${d.getMonth() + 1}
+  set day of seitDatum to ${d.getDate()}
+  set time of seitDatum to ${sekunden}
+  set kandidaten to {}
+  try
+    set kandidaten to kandidaten & (messages of inbox whose date received ≥ seitDatum)
+  end try
+  try
+    set kandidaten to kandidaten & (messages of junk mailbox whose date received ≥ seitDatum)
+  end try
+  set n to 0
+  repeat with m in kandidaten
+    if n ≥ ${max} then exit repeat
+    try
+      set mid to ""
+      try
+        set mid to message id of m
+      end try
+      set inReply to ""
+      set refs to ""
+      try
+        repeat with h in headers of m
+          set hn to name of h
+          if hn is "In-Reply-To" then set inReply to content of h
+          if hn is "References" then set refs to content of h
+        end repeat
+      end try
+      set excerpt to ""
+      try
+        set bodyText to content of m as text
+        if (length of bodyText) > 400 then set bodyText to text 1 thru 400 of bodyText
+        set excerpt to bodyText
+      end try
+      set out to out & (id of m as text) & sep & (id of account of mailbox of m as text) & sep & my novaClean(name of mailbox of m) & sep & my novaClean(sender of m) & sep & my novaClean(subject of m) & sep & my novaStamp(date received of m) & sep & ((read status of m) as text) & sep & my novaClean(mid) & sep & my novaClean(excerpt) & sep & my novaClean(inReply) & sep & my novaClean(refs) & rec
+      set n to n + 1
+    end try
+  end repeat
+  return out
+end tell`;
+}
+
+/** Message-IDs aus In-Reply-To/References, ohne spitze Klammern, klein geschrieben. */
+export function verlaufsKennungen(...kopfzeilen: string[]): string[] {
+  const ids = kopfzeilen.join(" ").match(/<[^<>\s]+>|[^\s<>]+@[^\s<>]+/g) ?? [];
+  return Array.from(new Set(ids.map(normalisiereMessageId).filter(Boolean)));
+}
+
+export function normalisiereMessageId(id: string): string {
+  return id.trim().replace(/^<|>$/g, "").toLowerCase();
+}
+
+/**
  * Neueste Nachrichten aus dem gemeinsamen Posteingang aller Konten, neueste zuerst.
  * Felder: id, Konto-id, Postfach, Absender, Betreff, Eingang, gelesen, Message-ID, Textanfang.
  */

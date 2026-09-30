@@ -194,6 +194,10 @@ Tests: mail 17/17, kunden 9/9, kopf 10, kampagne 9, tagesbetrieb 13, claude 8.
 
 **01.10.2026, 01:15 – Test-Mail bestätigt:** Joachim: Fettdruck, Absender, Abstände passen. Der große Abstand vor der Signatur kam aus Leerzeilen oben in seiner Apple-Mail-Signatur; Joachim hat sie entfernt („passt“).
 
+**01.10.2026 – Ausbau nach Joachims Auftrag „1 bis 5 der Reihe nach“ (Claude Code).**
+
+**1. Antworten zuverlässig erkennen – gebaut.** Die Postfach-Wache liest nicht mehr die 15 neuesten Mails, sondern alles, was seit ihrem letzten Lauf (minus 10 Min. Überlappung, Stand in `~/Nova/zustand/postfach-wache.json`) in Posteingang **und Werbung/Junk** eingegangen ist, bis 300 je Lauf (`eingangSeitScript`, Postfach-Methode `eingang`). Antwort = Mail verweist per In-Reply-To/References auf die Message-ID einer unserer Kampagnen-Mails (erkennt auch Kollegen mit anderer Adresse) oder kommt vom angeschriebenen Empfänger; eigene Adressen werden übergangen. Die Wache bleibt geplant, auch wenn Apple Mail nicht antwortet (vorher starb sie bei einem Fehler). Tests: kampagne 11/11 (neu: Kollegen-Antwort über Verlauf, fremde und eigene Mails nicht; Wache bleibt geplant), Gegenprobe ohne Verlaufsprüfung schlägt fehl. **Nicht geprüft:** das neue AppleScript gegen das echte Apple Mail.
+
 ## Dran
 
 **Erster echter Versand (01.10., Joachims Plan):**

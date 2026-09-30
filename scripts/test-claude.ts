@@ -52,7 +52,7 @@ async function main() {
 
   const org = await prisma.organization.create({ data: { name: "Test", slug: `t-${Date.now()}` } });
   const keinPostfach = {
-    neueste: async () => [], lesen: async () => null,
+    neueste: async () => [], eingang: async () => [], lesen: async () => null,
     senden: async () => ({ ok: false as const, executed: false as const, grund: "x" }),
     antworten: async () => ({ ok: false as const, executed: false as const, grund: "x" }),
   };

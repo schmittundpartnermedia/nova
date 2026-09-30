@@ -6,6 +6,9 @@ import {
   localStampToIso,
   messageDetailScript,
   neuesteNachrichtenScript,
+  eingangSeitScript,
+  normalisiereMessageId,
+  verlaufsKennungen,
   newSendScript,
   parseDetail,
   parseMailAddress,
@@ -26,6 +29,7 @@ import {
   encodeMailRef,
   type MailKonto,
   type MailKopf,
+  type EingangsMail,
   type MailVoll,
   type Postfach,
   type VersandErgebnis,
@@ -105,6 +109,28 @@ export class AppleMailPostfach implements Postfach {
       eingang: localStampToIso(row[5] ?? "") ?? row[5] ?? "",
       gelesen: /true/i.test(row[6] ?? ""),
       textanfang: (row[8] ?? "").trim(),
+    }));
+  }
+
+  async eingang(input: { seit: Date; max: number }): Promise<EingangsMail[]> {
+    await this.bereit();
+    const konten = await this.kontenListe();
+    const rows = parseRecords(await this.script(eingangSeitScript(input), 120_000));
+    return rows.map((row) => ({
+      ref: encodeMailRef({
+        nachrichtId: row[0] ?? "",
+        kontoId: row[1] ?? "",
+        postfach: row[2] ?? "",
+        messageId: row[7] ?? "",
+      }),
+      konto: konten.find((konto) => konto.appleId === row[1])?.email ?? "",
+      von: row[3] ?? "",
+      betreff: row[4] ?? "",
+      eingang: localStampToIso(row[5] ?? "") ?? row[5] ?? "",
+      gelesen: /true/i.test(row[6] ?? ""),
+      textanfang: (row[8] ?? "").trim(),
+      messageId: normalisiereMessageId(row[7] ?? ""),
+      bezuege: verlaufsKennungen(row[9] ?? "", row[10] ?? ""),
     }));
   }
 

@@ -19,6 +19,7 @@ import type { Postfach } from "@/services/mail/postfach";
 /** Diese Tests fassen kein Postfach an; jeder Zugriff wäre ein Fehler. */
 const keinPostfach: Postfach = {
   neueste: async () => { throw new Error("Test darf kein Postfach nutzen."); },
+  eingang: async () => { throw new Error("Test darf kein Postfach nutzen."); },
   lesen: async () => { throw new Error("Test darf kein Postfach nutzen."); },
   senden: async () => { throw new Error("Test darf kein Postfach nutzen."); },
   antworten: async () => { throw new Error("Test darf kein Postfach nutzen."); },

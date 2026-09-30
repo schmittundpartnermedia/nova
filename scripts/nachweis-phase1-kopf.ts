@@ -17,6 +17,7 @@ import type { Postfach } from "@/services/mail/postfach";
 /** Der Phase-1-Nachweis braucht kein Postfach; ein Zugriff würde den Nachweis scheitern lassen. */
 const keinPostfach: Postfach = {
   neueste: async () => { throw new Error("Nachweis Phase 1 nutzt kein Postfach."); },
+  eingang: async () => { throw new Error("Nachweis Phase 1 nutzt kein Postfach."); },
   lesen: async () => { throw new Error("Nachweis Phase 1 nutzt kein Postfach."); },
   senden: async () => { throw new Error("Nachweis Phase 1 nutzt kein Postfach."); },
   antworten: async () => { throw new Error("Nachweis Phase 1 nutzt kein Postfach."); },

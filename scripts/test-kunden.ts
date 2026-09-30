@@ -33,6 +33,7 @@ async function main() {
   const org = await prisma.organization.create({ data: { name: "Test", slug: `test-${Date.now()}` } });
   const keinPostfach = {
     neueste: async () => { throw new Error("kein Postfach im Test"); },
+    eingang: async () => { throw new Error("kein Postfach im Test"); },
     lesen: async () => { throw new Error("kein Postfach im Test"); },
     senden: async () => { throw new Error("kein Postfach im Test"); },
     antworten: async () => { throw new Error("kein Postfach im Test"); },

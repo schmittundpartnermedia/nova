@@ -22,12 +22,17 @@ export type MailVoll = MailKopf & {
   text: string;
 };
 
+/** Eingegangene Mail mit Verlauf: Message-IDs, auf die sie antwortet (In-Reply-To, References). */
+export type EingangsMail = MailKopf & { messageId: string; bezuege: string[] };
+
 export type VersandErgebnis =
   | { ok: true; executed: true; messageId: string; grund: string }
   | { ok: false; executed: false; grund: string };
 
 export interface Postfach {
   neueste(input: { anzahl: number; nurUngelesen: boolean }): Promise<MailKopf[]>;
+  /** Alles, was seit „seit“ in Posteingang oder Werbung/Junk eingegangen ist (höchstens max). */
+  eingang(input: { seit: Date; max: number }): Promise<EingangsMail[]>;
   lesen(ref: string): Promise<MailVoll | null>;
   senden(input: { absender: string; an: string; betreff: string; text: string }): Promise<VersandErgebnis>;
   antworten(input: { absender: string; ref: string; an: string; betreff: string; text: string }): Promise<VersandErgebnis>;

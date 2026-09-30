@@ -27,6 +27,9 @@ function testPostfach(original: Record<string, MailVoll>) {
     return next;
   };
   const postfach: Postfach = {
+    async eingang() {
+      return [];
+    },
     async neueste(input) {
       calls.push({ art: "neueste", input });
       return Object.values(original).slice(0, input.anzahl);

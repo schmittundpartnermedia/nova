@@ -50,16 +50,20 @@ async function main() {
   const { postfachWache } = await import("@/services/kampagnen/wache");
   const { nachNeustart } = await import("@/services/kampagnen");
   const { holeNeueMeldungen } = await import("@/services/meldungen");
-  const { encodeMailRef } = await import("@/services/mail/postfach");
+  const { encodeMailRef, decodeMailRef } = await import("@/services/mail/postfach");
   const { parseKontaktliste } = await import("@/lib/mail/kontaktlisten");
 
   const org = await prisma.organization.create({ data: { name: "Test", slug: `test-${Date.now()}` } });
 
   const gesendet: Array<{ art: string; an: string; betreff: string }> = [];
   let scheitertAn: string | null = null;
-  let posteingang: MailVoll[] = [];
+  let posteingang: Array<MailVoll & { bezuege?: string[] }> = [];
   const postfach: Postfach = {
     neueste: async (input) => posteingang.slice(0, input.anzahl) as MailKopf[],
+    eingang: async (input) =>
+      posteingang
+        .filter((mail) => new Date(mail.eingang) >= input.seit)
+        .map((mail) => ({ ...mail, messageId: (decodeMailRef(mail.ref)?.messageId ?? "").replace(/^<|>$/g, "").toLowerCase(), bezuege: mail.bezuege ?? [] })),
     lesen: async (ref) => posteingang.find((mail) => mail.ref === ref) ?? null,
     senden: async (input) => {
       if (input.an === scheitertAn) return { ok: false, executed: false, grund: "Adresse abgelehnt." };
@@ -214,6 +218,45 @@ async function main() {
       const zweite = await postfachWache({ organizationId: org.id, postfach, kopf: { provider: kopf, model: "m" } });
       assert.equal(zweite.neueAntworten, 0);
       assert.equal(calls.length, 2, "gleiche Antwort löst den Kopf nicht erneut aus");
+    }],
+    ["Postfach-Wache: Antwort über den Mail-Verlauf (Kollege, andere Adresse) wird erkannt, fremde Mails nicht", async () => {
+      const alpha = await prisma.communication.findFirstOrThrow({ where: { campaignId: kampagneId, toAddress: "a@alpha.de", direction: "outbound", status: "sent" } });
+      assert.ok(alpha.externalReference, "gesendete Kampagnen-Mail trägt ihre Message-ID");
+      const kennung = String(alpha.externalReference).replace(/^<|>$/g, "").toLowerCase();
+      const spaeter = new Date(Date.now() + 1000).toISOString();
+      const kollege = encodeMailRef({ kontoId: "K1", postfach: "Junk", nachrichtId: "910", messageId: "<kollege@beta>" });
+      const zufall = encodeMailRef({ kontoId: "K1", postfach: "INBOX", nachrichtId: "911", messageId: "<zufall@x>" });
+      const eigene = encodeMailRef({ kontoId: "K1", postfach: "INBOX", nachrichtId: "912", messageId: "<eigen@x>" });
+      posteingang = [
+        { ref: kollege, konto: "joachim@rankpilot.de", von: "Chef <chef@alpha-gruppe.de>", betreff: "AW: Partnerschaft", eingang: spaeter, gelesen: false, an: [], cc: [], textanfang: "Ich übernehme", text: "Ich übernehme das.", bezuege: [`${kennung}`, "irgendwas@else"] },
+        { ref: zufall, konto: "joachim@rankpilot.de", von: "c@unbekannt.de", betreff: "Re: etwas anderes", eingang: spaeter, gelesen: false, an: [], cc: [], textanfang: "", text: "", bezuege: ["fremd@id"] },
+        { ref: eigene, konto: "joachim@rankpilot.de", von: "joachim@rankpilot.de", betreff: "Re: Partnerschaft", eingang: spaeter, gelesen: false, an: [], cc: [], textanfang: "", text: "", bezuege: [kennung] },
+      ];
+      const aufrufe: string[] = [];
+      const kopf: HeadProvider = {
+        id: "skript",
+        async headTurn(input) {
+          aufrufe.push(String((input.input[0] as { content?: string }).content ?? ""));
+          return { responseId: "r", text: "Antwort von Alpha: Der Chef übernimmt. So senden oder ergänzen?", toolCalls: [], model: "m", provider: "skript" };
+        },
+        async healthCheck() { return { ok: true, provider: "skript", message: "" }; },
+      };
+      const ergebnis = await postfachWache({ organizationId: org.id, postfach, kopf: { provider: kopf, model: "m" } });
+      assert.equal(ergebnis.neueAntworten, 1, "nur die Kollegen-Antwort, nicht die fremde und nicht die eigene");
+      assert.match(aufrufe[0]!, /^\[Postfach-Wache\] Alpha GmbH.*Absender der Antwort: chef@alpha-gruppe\.de/);
+      const eingang = await prisma.communication.findFirstOrThrow({ where: { direction: "inbound", replyRef: kollege } });
+      assert.equal(eingang.campaignId, kampagneId);
+    }],
+    ["Postfach-Wache bleibt geplant, auch wenn Apple Mail nicht antwortet", async () => {
+      await prisma.workItem.deleteMany({ where: { kind: "postfach.wache" } });
+      const kaputt: typeof postfach = { ...postfach, eingang: async () => { throw new Error("Mail antwortet nicht"); } };
+      const kopf: HeadProvider = {
+        id: "skript",
+        async headTurn() { throw new Error("darf nicht laufen"); },
+        async healthCheck() { return { ok: true, provider: "skript", message: "" }; },
+      };
+      await assert.rejects(postfachWache({ organizationId: org.id, postfach: kaputt, kopf: { provider: kopf, model: "m" } }), /Mail antwortet nicht/);
+      assert.equal(await prisma.workItem.count({ where: { kind: "postfach.wache", status: "queued" } }), 1);
     }],
     ["Neustart: laufende Kampagne wird gemeldet, nicht doppelt", async () => {
       const plan = (await plane()).data as { kampagne_id: string; freigabe_id: string };

@@ -45,6 +45,7 @@ async function main() {
   let scheitertAn: string | null = null;
   const postfach: Postfach = {
     neueste: async () => [],
+    eingang: async () => [],
     lesen: async () => null,
     senden: async (input) => {
       if (input.an === scheitertAn) return { ok: false, executed: false, grund: "Adresse abgelehnt." };
