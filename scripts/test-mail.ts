@@ -297,6 +297,23 @@ async function main() {
       const id = idOf(await entwurf({ text: "Hallo, **Dienstag** passt?" }));
       assert.equal(id.length > 0, true);
     }],
+    ["Kopfzeilen: automatische Antworten, Rückläufer und Verlaufs-Kennungen werden richtig gelesen", async () => {
+      const { istAutomatischeAntwort, istRuecklaeufer, verlaufsKennungen, eingangSeitScript } = await import("@/lib/mail/apple");
+      assert.equal(istAutomatischeAntwort("auto-submitted=auto-replied "), true);
+      assert.equal(istAutomatischeAntwort("auto-submitted=no "), false);
+      assert.equal(istAutomatischeAntwort("x-autoreply=yes "), true);
+      assert.equal(istAutomatischeAntwort("precedence=bulk "), false);
+      assert.equal(istAutomatischeAntwort(""), false);
+      assert.equal(istRuecklaeufer("Mail Delivery System <MAILER-DAEMON@mx.ionos.de>"), true);
+      assert.equal(istRuecklaeufer("postmaster@outlook.com"), true);
+      assert.equal(istRuecklaeufer("Max <max@firma.de>"), false);
+      assert.deepEqual(verlaufsKennungen("<A1@X.de>", "<b2@y> <A1@x.de>"), ["a1@x.de", "b2@y"]);
+      const skript = eingangSeitScript({ seit: new Date(2026, 9, 1, 8, 30, 5), max: 50 });
+      assert.match(skript, /set year of seitDatum to 2026/);
+      assert.match(skript, /set month of seitDatum to 10/);
+      assert.match(skript, /set time of seitDatum to 30605/);
+      assert.match(skript, /junk mailbox whose date received ≥ seitDatum/);
+    }],
     ["Signatur: je Absender aus ~/Nova/signaturen.txt, landet im Sende- und Antwort-Skript", async () => {
       const { signaturFuer } = await import("@/lib/mail/signaturen");
       const { newSendScript, replySendScript } = await import("@/lib/mail/apple");

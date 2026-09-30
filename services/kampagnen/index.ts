@@ -7,6 +7,7 @@ import { createApprovalRequest, decideApproval } from "@/services/approvals";
 import { erstelleEntwurf } from "@/services/mail/entwuerfe";
 import { scheduleMailSendBatch } from "@/services/mail/schedule";
 import { enqueueWorkItem } from "@/services/worker/queue";
+import { aufSperrliste, leseSperrliste } from "@/lib/mail/sperrliste";
 import { kuerzlichGemeldet, meldeNutzer } from "@/services/meldungen";
 
 /**
@@ -31,6 +32,10 @@ export type KampagnenStand = {
   gesendet: number;
   offen: number;
   fehlgeschlagen: Array<{ firma: string; email: string; grund: string }>;
+  /** Nicht gesendet, weil der Empfänger inzwischen auf der Sperrliste steht. */
+  gesperrt: Array<{ firma: string; email: string }>;
+  /** Gesendet, aber als unzustellbar zurückgekommen. */
+  unzustellbar: Array<{ firma: string; email: string }>;
   ungueltig: Ungueltig[];
   naechste_mail: string | null;
 };
@@ -62,6 +67,7 @@ export async function planeKampagne(input: {
   const gueltig: Array<{ firma: string; email: string; betreff: string; text: string }> = [];
   const ungueltig: Ungueltig[] = [];
   const gesehen = new Set<string>();
+  const sperrliste = leseSperrliste();
   for (const { zeile, werte } of zeilen) {
     const email = (werte.email ?? "").trim();
     const firma = firmaAus(werte);
@@ -71,6 +77,10 @@ export async function planeKampagne(input: {
     }
     if (gesehen.has(email.toLowerCase())) {
       ungueltig.push({ zeile, firma, email, grund: "Adresse doppelt in der Liste" });
+      continue;
+    }
+    if (aufSperrliste(email, sperrliste)) {
+      ungueltig.push({ zeile, firma, email, grund: "steht auf der Sperrliste" });
       continue;
     }
     const gefuellt = fuelleVorlage(input.vorlage, werte);
@@ -164,6 +174,10 @@ export async function kampagnenStand(organizationId: string, kampagneId: string)
   const gesendet = mails.filter((row) => row.status === "sent").length;
   const fehlgeschlagen = mails.filter((row) => row.status === "failed");
   const offen = mails.filter((row) => row.status === "draft").length;
+  const sperrliste = leseSperrliste();
+  const person = (row: { recipientName: string | null; toAddress: string | null }) => ({ firma: row.recipientName ?? "", email: row.toAddress ?? "" });
+  const gesperrt = mails.filter((row) => row.status === "cancelled" && aufSperrliste(row.toAddress ?? "", sperrliste)).map(person);
+  const unzustellbar = mails.filter((row) => row.status === "sent" && row.deliveryStatus === "BOUNCED").map(person);
   const naechste = await prisma.workItem.findFirst({
     where: {
       organizationId,
@@ -189,6 +203,8 @@ export async function kampagnenStand(organizationId: string, kampagneId: string)
       email: row.toAddress ?? "",
       grund: row.externalReference ?? "",
     })),
+    gesperrt,
+    unzustellbar,
     ungueltig: JSON.parse(kampagne.ungueltig || "[]") as Ungueltig[],
     naechste_mail: kampagne.status === "laeuft" && naechste ? naechste.runAt.toISOString() : null,
   };
@@ -264,6 +280,12 @@ export function fertigMeldung(stand: KampagnenStand): string {
       ? `Kampagne „${stand.name}“ ist durch: Alle ${stand.gesendet} Mails sind raus.`
       : `Kampagne „${stand.name}“ ist durch: ${stand.gesendet} von ${stand.gesamt} Mails sind raus, ${stand.fehlgeschlagen.length} nicht (${stand.fehlgeschlagen.map((item) => item.firma || item.email).join(", ")}).`,
   ];
+  if (stand.gesperrt.length) {
+    teile.push(`${stand.gesperrt.length} nicht gesendet, weil sie inzwischen auf der Sperrliste ${stand.gesperrt.length === 1 ? "steht" : "stehen"}.`);
+  }
+  if (stand.unzustellbar.length) {
+    teile.push(`${stand.unzustellbar.length} kam${stand.unzustellbar.length === 1 ? "" : "en"} als unzustellbar zurück (${stand.unzustellbar.map((item) => item.firma || item.email).join(", ")}), die Adresse${stand.unzustellbar.length === 1 ? " ist" : "n sind"} gesperrt.`);
+  }
   if (stand.ungueltig.length) {
     teile.push(`${stand.ungueltig.length} ${stand.ungueltig.length === 1 ? "Adresse war" : "Adressen waren"} ungültig und wurden nicht angeschrieben.`);
   }

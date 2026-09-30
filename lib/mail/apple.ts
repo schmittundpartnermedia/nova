@@ -397,7 +397,8 @@ end tell`;
  * Alle Mails, die seit einem Zeitpunkt eingegangen sind (Posteingang und Werbung/Junk aller Konten),
  * mit den Verlaufs-Kopfzeilen In-Reply-To und References. Für die Postfach-Wache: So wird eine Antwort
  * auch erkannt, wenn sie von einer anderen Adresse kommt oder viele andere Mails dazwischen liegen.
- * Felder: id, kontoId, postfach, absender, betreff, eingang, gelesen, message-id, textanfang, in-reply-to, references.
+ * Felder: id, kontoId, postfach, absender, betreff, eingang, gelesen, message-id, textanfang, in-reply-to, references,
+ * Kopfzeilen für automatische Antworten (Auto-Submitted, X-Autoreply, X-Autorespond, Precedence).
  */
 export function eingangSeitScript(input: { seit: Date; max: number }): string {
   const d = input.seit;
@@ -431,11 +432,13 @@ tell application "Mail"
       end try
       set inReply to ""
       set refs to ""
+      set autoH to ""
       try
         repeat with h in headers of m
-          set hn to name of h
-          if hn is "In-Reply-To" then set inReply to content of h
-          if hn is "References" then set refs to content of h
+          set hn to my lowerText(name of h as text)
+          if hn is "in-reply-to" then set inReply to content of h
+          if hn is "references" then set refs to content of h
+          if hn is "auto-submitted" or hn is "x-autoreply" or hn is "x-autorespond" or hn is "precedence" then set autoH to autoH & hn & "=" & (content of h) & " "
         end repeat
       end try
       set excerpt to ""
@@ -444,12 +447,29 @@ tell application "Mail"
         if (length of bodyText) > 400 then set bodyText to text 1 thru 400 of bodyText
         set excerpt to bodyText
       end try
-      set out to out & (id of m as text) & sep & (id of account of mailbox of m as text) & sep & my novaClean(name of mailbox of m) & sep & my novaClean(sender of m) & sep & my novaClean(subject of m) & sep & my novaStamp(date received of m) & sep & ((read status of m) as text) & sep & my novaClean(mid) & sep & my novaClean(excerpt) & sep & my novaClean(inReply) & sep & my novaClean(refs) & rec
+      set out to out & (id of m as text) & sep & (id of account of mailbox of m as text) & sep & my novaClean(name of mailbox of m) & sep & my novaClean(sender of m) & sep & my novaClean(subject of m) & sep & my novaStamp(date received of m) & sep & ((read status of m) as text) & sep & my novaClean(mid) & sep & my novaClean(excerpt) & sep & my novaClean(inReply) & sep & my novaClean(refs) & sep & my novaClean(autoH) & rec
       set n to n + 1
     end try
   end repeat
   return out
 end tell`;
+}
+
+/**
+ * Automatisch erzeugte Mail (Abwesenheitsnotiz, Autoresponder) nach RFC 3834 und den üblichen Kopfzeilen.
+ * Eingabe: „name=wert “-Paare aus eingangSeitScript.
+ */
+export function istAutomatischeAntwort(kopfzeilen: string): boolean {
+  const k = kopfzeilen.toLowerCase();
+  if (/auto-submitted=\s*(?!no\b)\S/.test(k)) return true;
+  if (/x-autoreply=|x-autorespond=/.test(k)) return true;
+  return /precedence=\s*(auto_reply|auto-reply)/.test(k);
+}
+
+/** Rückläufer (Unzustellbar-Meldung): kommt vom Mailsystem, nicht von einem Menschen. */
+export function istRuecklaeufer(absender: string): boolean {
+  const lokal = (parseMailAddress(absender).email.split("@")[0] ?? "").toLowerCase();
+  return lokal === "mailer-daemon" || lokal === "postmaster" || lokal === "mail-daemon";
 }
 
 /** Message-IDs aus In-Reply-To/References, ohne spitze Klammern, klein geschrieben. */

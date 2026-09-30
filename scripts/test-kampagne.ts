@@ -57,13 +57,13 @@ async function main() {
 
   const gesendet: Array<{ art: string; an: string; betreff: string }> = [];
   let scheitertAn: string | null = null;
-  let posteingang: Array<MailVoll & { bezuege?: string[] }> = [];
+  let posteingang: Array<MailVoll & { bezuege?: string[]; automatisch?: boolean }> = [];
   const postfach: Postfach = {
     neueste: async (input) => posteingang.slice(0, input.anzahl) as MailKopf[],
     eingang: async (input) =>
       posteingang
         .filter((mail) => new Date(mail.eingang) >= input.seit)
-        .map((mail) => ({ ...mail, messageId: (decodeMailRef(mail.ref)?.messageId ?? "").replace(/^<|>$/g, "").toLowerCase(), bezuege: mail.bezuege ?? [] })),
+        .map((mail) => ({ ...mail, messageId: (decodeMailRef(mail.ref)?.messageId ?? "").replace(/^<|>$/g, "").toLowerCase(), bezuege: mail.bezuege ?? [], automatisch: mail.automatisch ?? false })),
     lesen: async (ref) => posteingang.find((mail) => mail.ref === ref) ?? null,
     senden: async (input) => {
       if (input.an === scheitertAn) return { ok: false, executed: false, grund: "Adresse abgelehnt." };
@@ -246,6 +246,98 @@ async function main() {
       assert.match(aufrufe[0]!, /^\[Postfach-Wache\] Alpha GmbH.*Absender der Antwort: chef@alpha-gruppe\.de/);
       const eingang = await prisma.communication.findFirstOrThrow({ where: { direction: "inbound", replyRef: kollege } });
       assert.equal(eingang.campaignId, kampagneId);
+    }],
+    ["Rückläufer: Adresse wird als unzustellbar markiert, gesperrt und gemeldet", async () => {
+      const { aufSperrliste } = await import("@/lib/mail/sperrliste");
+      const { kampagnenStand } = await import("@/services/kampagnen");
+      await holeNeueMeldungen(org.id);
+      const ref = encodeMailRef({ kontoId: "K1", postfach: "INBOX", nachrichtId: "920", messageId: "<bounce@mx>" });
+      posteingang = [{
+        ref, konto: "joachim@rankpilot.de", von: "Mail Delivery System <MAILER-DAEMON@mx.ionos.de>", betreff: "Mail delivery failed",
+        eingang: new Date(Date.now() + 2000).toISOString(), gelesen: false, an: [], cc: [], textanfang: "This message was created automatically",
+        text: "This message was created automatically by mail delivery software.\n\n  c@gamma.de\n    host mx.gamma.de: 550 5.1.1 User unknown",
+      }];
+      const kopf: HeadProvider = {
+        id: "skript",
+        async headTurn() { throw new Error("Rückläufer braucht den Kopf nicht"); },
+        async healthCheck() { return { ok: true, provider: "skript", message: "" }; },
+      };
+      const ergebnis = await postfachWache({ organizationId: org.id, postfach, kopf: { provider: kopf, model: "m" } });
+      assert.equal(ergebnis.neueAntworten, 0, "ein Rückläufer ist keine Antwort");
+      const gamma = await prisma.communication.findFirstOrThrow({ where: { campaignId: kampagneId, toAddress: "c@gamma.de", direction: "outbound" } });
+      assert.equal(gamma.deliveryStatus, "BOUNCED");
+      assert.equal(aufSperrliste("c@gamma.de"), true);
+      const meldungen = await holeNeueMeldungen(org.id);
+      assert.equal(meldungen.length, 1);
+      assert.match(meldungen[0]!.text, /unzustellbar zurück: Gamma \(c@gamma\.de\)\. Die Adresse habe ich gesperrt\./);
+      assert.deepEqual((await kampagnenStand(org.id, kampagneId)).unzustellbar, [{ firma: "Gamma", email: "c@gamma.de" }]);
+      await postfachWache({ organizationId: org.id, postfach, kopf: { provider: kopf, model: "m" } });
+      assert.equal((await holeNeueMeldungen(org.id)).length, 0, "derselbe Rückläufer wird nicht doppelt gemeldet");
+    }],
+    ["Abwesenheitsnotiz wird festgehalten, aber nicht vorgelegt", async () => {
+      await holeNeueMeldungen(org.id);
+      const ref = encodeMailRef({ kontoId: "K1", postfach: "INBOX", nachrichtId: "930", messageId: "<ooo@alpha>" });
+      posteingang = [{
+        ref, konto: "joachim@rankpilot.de", von: "a@alpha.de", betreff: "Abwesend: Partnerschaft", eingang: new Date(Date.now() + 3000).toISOString(),
+        gelesen: false, an: [], cc: [], textanfang: "Ich bin bis 10.10. nicht im Büro.", text: "Ich bin bis 10.10. nicht im Büro.", automatisch: true,
+      }];
+      const kopf: HeadProvider = {
+        id: "skript",
+        async headTurn() { throw new Error("Abwesenheitsnotiz braucht den Kopf nicht"); },
+        async healthCheck() { return { ok: true, provider: "skript", message: "" }; },
+      };
+      const ergebnis = await postfachWache({ organizationId: org.id, postfach, kopf: { provider: kopf, model: "m" } });
+      assert.equal(ergebnis.neueAntworten, 0);
+      assert.equal((await prisma.communication.findFirstOrThrow({ where: { replyRef: ref, direction: "inbound" } })).status, "autoreply");
+      assert.equal((await holeNeueMeldungen(org.id)).length, 0);
+    }],
+    ["Absage → Sperrliste über den Kopf; geplante Mail an diese Adresse geht nicht raus, neue Kampagne überspringt sie", async () => {
+      const { sperrlisteDatei } = await import("@/lib/mail/sperrliste");
+      // Zweite Kampagne vor der Absage: Gamma ist nach dem Rückläufer schon gesperrt.
+      const plan = (await plane()).data as { kampagne_id: string; freigabe_id: string; ungueltig: Array<{ firma: string; grund: string }> };
+      assert.ok(plan.ungueltig.some((item) => item.firma === "Gamma" && item.grund === "steht auf der Sperrliste"));
+      await run("kampagne_starten", { kampagne_id: plan.kampagne_id, freigabe_id: plan.freigabe_id });
+      const alphaNeu = await prisma.communication.findFirstOrThrow({ where: { campaignId: plan.kampagne_id, toAddress: "a@alpha.de" } });
+
+      await holeNeueMeldungen(org.id);
+      const ref = encodeMailRef({ kontoId: "K1", postfach: "INBOX", nachrichtId: "940", messageId: "<absage@alpha>" });
+      posteingang = [{
+        ref, konto: "joachim@rankpilot.de", von: "a@alpha.de", betreff: "Re: Partnerschaft", eingang: new Date(Date.now() + 4000).toISOString(),
+        gelesen: false, an: [], cc: [], textanfang: "Kein Interesse", text: "Kein Interesse, bitte keine weiteren Mails.",
+      }];
+      const auftraege: string[] = [];
+      let runde = 0;
+      const kopf: HeadProvider = {
+        id: "skript",
+        async headTurn(input) {
+          runde += 1;
+          if (runde === 1) {
+            auftraege.push(String((input.input[0] as { content?: string }).content ?? ""));
+            return { responseId: "r1", text: "", model: "m", provider: "skript", toolCalls: [
+              { callId: "s1", name: "sperrliste_hinzufuegen", arguments: { eintrag: "a@alpha.de", grund: "Absage" } },
+            ] };
+          }
+          return { responseId: "r2", text: "Alpha GmbH hat abgesagt und wird nicht mehr angeschrieben.", toolCalls: [], model: "m", provider: "skript" };
+        },
+        async healthCheck() { return { ok: true, provider: "skript", message: "" }; },
+      };
+      const vorher = gesendet.length;
+      const ergebnis = await postfachWache({ organizationId: org.id, postfach, kopf: { provider: kopf, model: "m" } });
+      assert.equal(ergebnis.neueAntworten, 1);
+      assert.match(auftraege[0]!, /Absage .* sperrliste_hinzufuegen/);
+      assert.equal(await prisma.communication.count({ where: { replyRef: ref, direction: "outbound" } }), 0, "kein Entwurf bei Absage");
+      assert.match((await holeNeueMeldungen(org.id))[0]!.text, /abgesagt/);
+
+      const versuch = await sendeItem(alphaNeu.id);
+      assert.equal(versuch.ok, false);
+      assert.match(versuch.note ?? "", /Sperrliste/);
+      assert.equal(gesendet.length, vorher, "gesperrte Adresse bekommt keine Kampagnen-Mail mehr");
+      assert.equal((await prisma.communication.findUniqueOrThrow({ where: { id: alphaNeu.id } })).status, "cancelled");
+
+      await run("kampagne_abbrechen", { kampagne_id: plan.kampagne_id });
+      fs.rmSync(sperrlisteDatei());
+      posteingang = [];
+      await holeNeueMeldungen(org.id);
     }],
     ["Postfach-Wache bleibt geplant, auch wenn Apple Mail nicht antwortet", async () => {
       await prisma.workItem.deleteMany({ where: { kind: "postfach.wache" } });

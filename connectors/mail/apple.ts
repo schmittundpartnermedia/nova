@@ -7,6 +7,7 @@ import {
   messageDetailScript,
   neuesteNachrichtenScript,
   eingangSeitScript,
+  istAutomatischeAntwort,
   normalisiereMessageId,
   verlaufsKennungen,
   newSendScript,
@@ -131,6 +132,7 @@ export class AppleMailPostfach implements Postfach {
       textanfang: (row[8] ?? "").trim(),
       messageId: normalisiereMessageId(row[7] ?? ""),
       bezuege: verlaufsKennungen(row[9] ?? "", row[10] ?? ""),
+      automatisch: istAutomatischeAntwort(row[11] ?? ""),
     }));
   }
 

@@ -1,8 +1,6 @@
-import fs from "node:fs";
 import { schreibeEinstellungen, lokalesDatum } from "@/services/tagesbetrieb/einstellungen";
 import { planeTagesbetriebTick, tagesbetriebFreigeben, tagesbetriebStand } from "@/services/tagesbetrieb";
-import { sperrlisteDatei } from "@/services/tagesbetrieb/pruefen";
-import { kampagnenDir } from "@/lib/mail/kontaktlisten";
+import { sperre, sperrlisteDatei } from "@/lib/mail/sperrliste";
 import { schreibeTagesbericht } from "@/services/tagesbericht";
 import type { NovaToolDefinition, NovaToolResult } from "@/services/tools/types";
 
@@ -102,10 +100,8 @@ export const sperrlisteTool: NovaToolDefinition = {
   execute(args) {
     try {
       const eintrag = str(args.eintrag).toLowerCase();
-      if (!/^@?[^\s@]+(@[^\s@]+)?\.[^\s@]+$/.test(eintrag)) return { ok: false, executed: false, error: `„${eintrag}“ ist keine Adresse oder Domain.` };
-      fs.mkdirSync(kampagnenDir(), { recursive: true });
-      fs.appendFileSync(sperrlisteDatei(), `${eintrag}${str(args.grund) ? `  # ${str(args.grund)}` : ""}\n`, "utf8");
-      return { ok: true, executed: true, data: { eintrag, datei: sperrlisteDatei() } };
+      const neu = sperre(eintrag, str(args.grund));
+      return { ok: true, executed: neu, data: { eintrag, schon_gesperrt: !neu, datei: sperrlisteDatei() } };
     } catch (error) {
       return fehler(error);
     }

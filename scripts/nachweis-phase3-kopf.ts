@@ -59,13 +59,13 @@ async function main() {
 
   const org = await prisma.organization.create({ data: { name: "Nachweis", slug: `nachweis-${Date.now()}` } });
   const versand: Array<{ art: string; an: string; betreff: string; text: string }> = [];
-  let posteingang: Array<MailVoll & { bezuege?: string[] }> = [];
+  let posteingang: Array<MailVoll & { bezuege?: string[]; automatisch?: boolean }> = [];
   const postfach: Postfach = {
     neueste: async (input) => posteingang.slice(0, input.anzahl),
     eingang: async (input) =>
       posteingang
         .filter((mail) => new Date(mail.eingang) >= input.seit)
-        .map((mail) => ({ ...mail, messageId: (decodeMailRef(mail.ref)?.messageId ?? "").replace(/^<|>$/g, "").toLowerCase(), bezuege: mail.bezuege ?? [] })),
+        .map((mail) => ({ ...mail, messageId: (decodeMailRef(mail.ref)?.messageId ?? "").replace(/^<|>$/g, "").toLowerCase(), bezuege: mail.bezuege ?? [], automatisch: mail.automatisch ?? false })),
     lesen: async (ref) => posteingang.find((mail) => mail.ref === ref) ?? null,
     senden: async (input) => {
       versand.push({ art: "senden", an: input.an, betreff: input.betreff, text: input.text });

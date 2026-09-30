@@ -3,6 +3,7 @@ import { assertOrganizationId } from "@/services/tenant";
 import { isSteerableMailAddress, steerableMailAddresses } from "@/lib/mail/steerable";
 import { authorizeExternalAction, decideApproval } from "@/services/approvals";
 import { gedankenstrichIn } from "@/lib/mail/stil";
+import { aufSperrliste } from "@/lib/mail/sperrliste";
 import { decodeMailRef, type Postfach } from "@/services/mail/postfach";
 
 /**
@@ -140,6 +141,12 @@ export async function sendeEntwurf(input: {
       executed: false,
       grund: "Ein früherer Versandversuch wurde unterbrochen; ob die Mail raus ist, bitte im Ordner Gesendet prüfen.",
     };
+  }
+
+  if (entwurf.kampagneId && aufSperrliste(entwurf.an)) {
+    // Inzwischen gesperrt (Absage, Rückläufer, Bitte um keine Mails): automatische Mails gehen nicht mehr raus.
+    await prisma.communication.update({ where: { id: entwurf.id }, data: { status: "cancelled" } });
+    return { status: "fehlgeschlagen", executed: false, grund: `${entwurf.an} steht auf der Sperrliste, Mail nicht gesendet.` };
   }
 
   let actionType = "mail.send";

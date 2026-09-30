@@ -23,7 +23,12 @@ export type MailVoll = MailKopf & {
 };
 
 /** Eingegangene Mail mit Verlauf: Message-IDs, auf die sie antwortet (In-Reply-To, References). */
-export type EingangsMail = MailKopf & { messageId: string; bezuege: string[] };
+export type EingangsMail = MailKopf & {
+  messageId: string;
+  bezuege: string[];
+  /** Abwesenheitsnotiz o. Ä. (laut Kopfzeilen automatisch erzeugt). */
+  automatisch: boolean;
+};
 
 export type VersandErgebnis =
   | { ok: true; executed: true; messageId: string; grund: string }

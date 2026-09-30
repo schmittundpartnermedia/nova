@@ -36,10 +36,14 @@ export async function schreibeTagesbericht(input: { organizationId: string; datu
     where: { organizationId, direction: "outbound", deliveryStatus: "FAILED", updatedAt: { gte: von, lt: bis } },
     orderBy: { updatedAt: "asc" },
   });
-  const antworten = await prisma.communication.findMany({
+  const eingang = await prisma.communication.findMany({
     where: { organizationId, direction: "inbound", createdAt: { gte: von, lt: bis } },
     orderBy: { createdAt: "asc" },
   });
+  // Echte Antworten getrennt von Abwesenheitsnotizen und Rückläufern (Unzustellbar-Meldungen).
+  const antworten = eingang.filter((mail) => mail.status !== "autoreply" && mail.status !== "bounce");
+  const abwesend = eingang.filter((mail) => mail.status === "autoreply");
+  const rueck = eingang.filter((mail) => mail.status === "bounce");
   const suchen = await prisma.workItem.findMany({
     where: { organizationId, kind: { in: ["scanner.lauf", "tagesbetrieb.suche"] }, createdAt: { gte: von, lt: bis } },
     orderBy: { createdAt: "asc" },
@@ -62,6 +66,7 @@ export async function schreibeTagesbericht(input: { organizationId: string; datu
   zeilen.push(`# NOVA Tagesbericht ${datum}`, "");
   zeilen.push(
     `**Kurz:** ${gesendet.length} Mails gesendet, ${fehlgeschlagen.length} fehlgeschlagen, ${antworten.length} Antworten eingegangen, ` +
+      `${abwesend.length} Abwesenheitsnotizen, ${rueck.length} Rückläufer, ` +
       `${suchen.length} Kundensuchen, ${leadsNeu} neue Betriebe, ${verworfen.length} Adressen verworfen.`,
     "",
   );
@@ -79,6 +84,14 @@ export async function schreibeTagesbericht(input: { organizationId: string; datu
   zeilen.push("", "## Eingegangene Antworten", "");
   if (antworten.length) {
     for (const mail of antworten) zeilen.push(`- ${zeit(mail.createdAt)} ${mail.recipientName ?? ""} <${mail.fromAddress ?? ""}>: ${mail.subject}`);
+  } else zeilen.push("Keine.");
+  zeilen.push("", "## Abwesenheitsnotizen", "");
+  if (abwesend.length) {
+    for (const mail of abwesend) zeilen.push(`- ${zeit(mail.createdAt)} ${mail.recipientName ?? ""} <${mail.fromAddress ?? ""}>: ${mail.subject}`);
+  } else zeilen.push("Keine.");
+  zeilen.push("", "## Rückläufer (unzustellbar, Adresse gesperrt)", "");
+  if (rueck.length) {
+    for (const mail of rueck) zeilen.push(`- ${zeit(mail.createdAt)} ${mail.recipientName ?? "unbekannt"}: ${mail.subject}`);
   } else zeilen.push("Keine.");
   zeilen.push("", "## Kundensuchen (Lead-Scanner)", "");
   if (suchen.length) {
@@ -100,7 +113,7 @@ export async function schreibeTagesbericht(input: { organizationId: string; datu
 
   const kurz =
     `Tagesbericht ${datum}: ${gesendet.length} Mails gesendet, ${fehlgeschlagen.length} fehlgeschlagen, ` +
-    `${antworten.length} Antworten, ${leadsNeu} neue Betriebe gefunden, ${verworfen.length} Adressen verworfen. ` +
+    `${antworten.length} Antworten, ${rueck.length} Rückläufer, ${leadsNeu} neue Betriebe gefunden, ${verworfen.length} Adressen verworfen. ` +
     `Alles im Detail: ~/Nova/berichte/${datum}.md`;
   if (input.melden) await meldeNutzer({ organizationId, anlass: `tagesbericht:${datum}`, text: kurz });
   return { datei, kurz, gesendet: gesendet.length, fehlgeschlagen: fehlgeschlagen.length, antworten: antworten.length };

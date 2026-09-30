@@ -2,11 +2,12 @@ import fs from "node:fs";
 import path from "node:path";
 import type { Communication } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
-import { normalisiereMessageId, parseMailAddress } from "@/lib/mail/apple";
+import { istRuecklaeufer, normalisiereMessageId, parseMailAddress } from "@/lib/mail/apple";
+import { sperre } from "@/lib/mail/sperrliste";
 import { steerableMailAddresses } from "@/lib/mail/steerable";
 import { novaHomeDir } from "@/lib/gedaechtnis/paths";
 import { runHeadLoop } from "@/agents/master/head";
-import { decodeMailRef, type Postfach } from "@/services/mail/postfach";
+import { decodeMailRef, type EingangsMail, type Postfach } from "@/services/mail/postfach";
 import { meldeNutzer } from "@/services/meldungen";
 import { planePostfachWache, WACHE_INTERVALL_MS } from "@/services/kampagnen";
 import type { HeadProvider } from "@/types/ai";
@@ -16,7 +17,8 @@ import type { HeadProvider } from "@/types/ai";
  * Sie sieht jede Mail durch, die seit ihrem letzten Lauf in Posteingang oder Werbung/Junk eingegangen ist.
  * Eine Mail gilt als Antwort, wenn sie im Verlauf auf eine unserer Kampagnen-Mails verweist (In-Reply-To/References,
  * auch wenn ein Kollege von einer anderen Adresse antwortet) oder vom angeschriebenen Empfänger kommt.
- * Der Kopf liest sie, legt einen Antwortentwurf an (ohne zu senden) und spricht den Nutzer an.
+ * Der Kopf liest sie: Absage oder „keine Mails mehr“ → Sperrliste, kein Entwurf; sonst Antwortentwurf (ohne zu senden)
+ * und Meldung. Abwesenheitsnotizen werden nur festgehalten. Rückläufer (Unzustellbar-Meldungen) sperren die Adresse.
  */
 
 const BEOBACHTUNG_TAGE = 14;
@@ -96,18 +98,26 @@ async function pruefeEingang(
   const mails = await input.postfach.eingang({ seit, max: MAX_MAILS_PRO_LAUF });
   let neueAntworten = 0;
 
+  const ruecklaeufer: Array<{ firma: string; email: string }> = [];
+
   for (const mail of mails) {
     const von = parseMailAddress(mail.von).email.toLowerCase();
     if (eigene.has(von)) continue;
-    const original = mail.bezuege.map((id) => nachMessageId.get(id)).find(Boolean) ?? nachEmpfaenger.get(von);
-    if (!original?.sentAt) continue;
-    const eingang = new Date(mail.eingang);
-    if (Number.isNaN(eingang.getTime()) || eingang <= original.sentAt) continue;
     const kennung = mail.messageId || decodeMailRef(mail.ref)?.messageId || mail.ref;
     const bekannt = await prisma.communication.findFirst({
       where: { organizationId: input.organizationId, direction: "inbound", externalReference: kennung },
     });
     if (bekannt) continue;
+
+    if (istRuecklaeufer(mail.von)) {
+      ruecklaeufer.push(...(await verarbeiteRuecklaeufer(input, mail, kennung, gesendet)));
+      continue;
+    }
+
+    const original = mail.bezuege.map((id) => nachMessageId.get(id)).find(Boolean) ?? nachEmpfaenger.get(von);
+    if (!original?.sentAt) continue;
+    const eingang = new Date(mail.eingang);
+    if (Number.isNaN(eingang.getTime()) || eingang <= original.sentAt) continue;
 
     await prisma.communication.create({
       data: {
@@ -116,7 +126,8 @@ async function pruefeEingang(
         direction: "inbound",
         subject: mail.betreff,
         body: mail.textanfang,
-        status: "received",
+        // Abwesenheitsnotizen werden festgehalten, aber niemandem vorgelegt.
+        status: mail.automatisch ? "autoreply" : "received",
         deliveryStatus: "VERIFIED",
         fromAddress: von,
         toAddress: mail.konto,
@@ -126,6 +137,7 @@ async function pruefeEingang(
         recipientName: original.recipientName,
       },
     });
+    if (mail.automatisch) continue;
     neueAntworten += 1;
 
     const firma = original.recipientName || von;
@@ -136,9 +148,13 @@ async function pruefeEingang(
       userRequest: [
         `[Postfach-Wache] ${firma} hat auf unsere Kampagnen-Mail „${original.subject}“ (an ${original.toAddress}) geantwortet, Absender der Antwort: ${von}.`,
         `ref der Antwort: ${mail.ref}`,
-        "Lies die Antwort mit mail_lesen (modus nachricht) und lege mit mail_antworten einen passenden Antwortentwurf von " +
-          `${original.fromAddress} an. Nicht senden.`,
-        `Sag Joachim dann in zwei, drei gesprochenen Sätzen: dass ${firma} geantwortet hat, worum es geht, was du kurz vorschlägst – und frag, ob du so senden oder etwas ergänzen sollst. Den Entwurf nicht wörtlich wiedergeben; er erscheint als Karte im Chat.`,
+        "Lies die Antwort mit mail_lesen (modus nachricht).",
+        `Ist sie eine Absage (kein Interesse) oder die Bitte, keine Mails mehr zu schicken: setze ${original.toAddress}` +
+          (von !== String(original.toAddress).toLowerCase() ? ` und ${von}` : "") +
+          " mit sperrliste_hinzufuegen auf die Sperrliste (Grund: Absage bzw. keine Mails erwünscht), lege keinen Entwurf an " +
+          `und sag Joachim in einem gesprochenen Satz, dass ${firma} abgesagt hat und nicht mehr angeschrieben wird.`,
+        `Sonst: lege mit mail_antworten einen passenden Antwortentwurf von ${original.fromAddress} an, nicht senden. ` +
+          `Sag Joachim dann in zwei, drei gesprochenen Sätzen, dass ${firma} geantwortet hat, worum es geht und was du kurz vorschlägst, und frag, ob du so senden oder etwas ergänzen sollst. Den Entwurf nicht wörtlich wiedergeben; er erscheint als Karte im Chat.`,
       ].join("\n"),
       context: { organizationId: input.organizationId, postfach: input.postfach },
     });
@@ -150,6 +166,57 @@ async function pruefeEingang(
     });
   }
 
+  if (ruecklaeufer.length) {
+    const namen = ruecklaeufer.map((item) => (item.firma ? `${item.firma} (${item.email})` : item.email)).join(", ");
+    await meldeNutzer({
+      organizationId: input.organizationId,
+      anlass: `ruecklaeufer:${jetzt.toISOString()}`,
+      text:
+        ruecklaeufer.length === 1
+          ? `Eine Mail kam als unzustellbar zurück: ${namen}. Die Adresse habe ich gesperrt.`
+          : `${ruecklaeufer.length} Mails kamen als unzustellbar zurück: ${namen}. Die Adressen habe ich gesperrt.`,
+    });
+  }
+
   merkeLauf(input.organizationId, jetzt);
   return neueAntworten;
+}
+
+/**
+ * Rückläufer: Die Unzustellbar-Meldung nennt die Empfängeradresse im Text. Jede unserer Kampagnen-Mails,
+ * deren Adresse darin vorkommt, gilt als unzustellbar; die Adresse kommt auf die Sperrliste.
+ */
+async function verarbeiteRuecklaeufer(
+  input: { organizationId: string; postfach: Postfach },
+  mail: EingangsMail,
+  kennung: string,
+  gesendet: Communication[],
+): Promise<Array<{ firma: string; email: string }>> {
+  const voll = await input.postfach.lesen(mail.ref);
+  const text = `${mail.betreff}\n${voll?.text ?? mail.textanfang}`.toLowerCase();
+  const betroffen = gesendet.filter((row) => row.toAddress && row.deliveryStatus !== "BOUNCED" && text.includes(row.toAddress.toLowerCase()));
+  await prisma.communication.create({
+    data: {
+      organizationId: input.organizationId,
+      channel: "email",
+      direction: "inbound",
+      subject: mail.betreff,
+      body: mail.textanfang,
+      status: "bounce",
+      deliveryStatus: "VERIFIED",
+      fromAddress: parseMailAddress(mail.von).email.toLowerCase(),
+      toAddress: mail.konto,
+      replyRef: mail.ref,
+      externalReference: kennung,
+      campaignId: betroffen[0]?.campaignId ?? null,
+      recipientName: betroffen[0]?.recipientName ?? null,
+    },
+  });
+  const ergebnis: Array<{ firma: string; email: string }> = [];
+  for (const row of betroffen) {
+    await prisma.communication.update({ where: { id: row.id }, data: { deliveryStatus: "BOUNCED" } });
+    sperre(String(row.toAddress), `unzustellbar (Rückläufer ${new Date(mail.eingang).toLocaleDateString("de-DE")})`);
+    ergebnis.push({ firma: row.recipientName ?? "", email: String(row.toAddress) });
+  }
+  return ergebnis;
 }

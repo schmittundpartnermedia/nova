@@ -1,8 +1,6 @@
-import fs from "node:fs";
-import path from "node:path";
 import { promises as dns } from "node:dns";
 import { prisma } from "@/lib/prisma";
-import { kampagnenDir } from "@/lib/mail/kontaktlisten";
+import { aufSperrliste } from "@/lib/mail/sperrliste";
 
 /**
  * Prüfung einer Kunden-Adresse vor dem Anschreiben:
@@ -29,26 +27,6 @@ export const echterMxPruefer: MxPruefer = async (domain) => {
     return false;
   }
 };
-
-export function sperrlisteDatei(): string {
-  return path.join(kampagnenDir(), "sperrliste.txt");
-}
-
-export function leseSperrliste(): string[] {
-  const file = sperrlisteDatei();
-  if (!fs.existsSync(file)) return [];
-  return fs
-    .readFileSync(file, "utf8")
-    .split("\n")
-    .map((line) => line.replace(/#.*$/, "").trim().toLowerCase())
-    .filter(Boolean);
-}
-
-export function aufSperrliste(email: string, sperrliste = leseSperrliste()): boolean {
-  const adresse = email.toLowerCase();
-  const domain = adresse.split("@").pop() ?? "";
-  return sperrliste.some((eintrag) => eintrag === adresse || eintrag === `@${domain}` || eintrag === domain);
-}
 
 export async function pruefeAdresse(input: {
   organizationId: string;
