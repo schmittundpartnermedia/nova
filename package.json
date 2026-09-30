@@ -22,7 +22,8 @@
     "test:kampagne": "tsx scripts/test-kampagne.ts",
     "nachweis:phase3": "tsx scripts/nachweis-phase3-kopf.ts",
     "test:kunden": "tsx scripts/test-kunden.ts",
-    "nachweis:phase4": "tsx scripts/nachweis-phase4-scanner.ts"
+    "nachweis:phase4": "tsx scripts/nachweis-phase4-scanner.ts",
+    "test:tagesbetrieb": "tsx scripts/test-tagesbetrieb.ts"
   },
   "dependencies": {
     "@prisma/client": "^6.16.3",

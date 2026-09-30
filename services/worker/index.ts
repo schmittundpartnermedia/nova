@@ -36,8 +36,10 @@ async function main() {
   process.on("SIGTERM", shutdown);
 
   const { nachNeustart } = await import("@/services/kampagnen");
+  const { tagesbetriebNachNeustart } = await import("@/services/tagesbetrieb/start");
   try {
     await nachNeustart();
+    await tagesbetriebNachNeustart();
   } catch (error) {
     console.error(error instanceof Error ? error.message : "Kampagnen-Neustart fehlgeschlagen");
   }

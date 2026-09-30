@@ -241,7 +241,8 @@ export async function nachKampagnenVersand(organizationId: string, entwurfId: st
     });
   }
   const kampagne = await prisma.campaign.findFirst({ where: { id: entwurf.campaignId, organizationId } });
-  if (!kampagne || kampagne.status !== "laeuft") return;
+  // Der Tagesbetrieb schließt seine Kampagne selbst nach Feierabend.
+  if (!kampagne || kampagne.status !== "laeuft" || kampagne.art === "tagesbetrieb") return;
   const offen = await prisma.communication.count({ where: { campaignId: kampagne.id, status: "draft" } });
   if (offen > 0) return;
   const beendet = await prisma.campaign.updateMany({
@@ -285,7 +286,7 @@ export async function planePostfachWache(organizationId: string, runAt: Date) {
 
 /** Beim Start des Hintergrund-Läufers: laufende Kampagnen melden und die Wache sicherstellen. */
 export async function nachNeustart(): Promise<number> {
-  const laufend = await prisma.campaign.findMany({ where: { status: "laeuft" } });
+  const laufend = await prisma.campaign.findMany({ where: { status: "laeuft", art: "kampagne" } });
   for (const kampagne of laufend) {
     const anlass = `kampagne-neustart:${kampagne.id}`;
     if (await kuerzlichGemeldet(kampagne.organizationId, anlass, 10)) continue;

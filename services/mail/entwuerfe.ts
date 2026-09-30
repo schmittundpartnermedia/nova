@@ -117,6 +117,8 @@ export async function sendeEntwurf(input: {
   postfach: Postfach;
   freigabeId?: string;
   jobId?: string;
+  /** Zeitpunkt des Versands (Standard: jetzt); der Tagesbetrieb gibt seine Taktzeit mit. */
+  jetzt?: Date;
 }): Promise<VersandStatus> {
   assertOrganizationId(input.organizationId);
   const entwurf = await ladeEntwurf(input.organizationId, input.entwurfId);
@@ -208,7 +210,7 @@ export async function sendeEntwurf(input: {
     data: {
       status: "sent",
       deliveryStatus: "VERIFIED",
-      sentAt: new Date(),
+      sentAt: input.jetzt ?? new Date(),
       externalReference: ergebnis.messageId,
     },
   });

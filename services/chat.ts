@@ -8,7 +8,7 @@ import { prisma } from "@/lib/prisma";
 export type ChatSchritt = { werkzeug: string; ok: boolean; ausgefuehrt: boolean; kurz: string };
 
 export type ChatKarte =
-  | { typ: "entwurf"; id: string; absender: string; an: string; betreff: string; text: string; status: string }
+  | { typ: "entwurf"; id: string; absender: string; an: string; betreff: string; text: string; status: string; teilVonKampagne: boolean }
   | { typ: "kampagne"; id: string; name: string; status: string; gesamt: number; gesendet: number };
 
 export type ChatNachricht = {
@@ -107,6 +107,7 @@ export async function chatAnsicht(
             betreff: entwurf.subject,
             text: entwurf.body,
             status: entwurf.status,
+            teilVonKampagne: Boolean(entwurf.campaignId),
           });
         }
       }

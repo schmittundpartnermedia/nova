@@ -41,7 +41,7 @@ function Karte({ karte, onSend, busy }: { karte: ChatKarte; onSend: (text: strin
           <dd>{karte.betreff}</dd>
         </dl>
         <pre className="nova-chat-karte-text">{karte.text}</pre>
-        {karte.status === "draft" ? (
+        {karte.status === "draft" && !karte.teilVonKampagne ? (
           <div className="nova-chat-karte-aktionen">
             <button type="button" disabled={busy} onClick={() => onSend("Senden.")}>
               Freigeben &amp; senden

@@ -1,0 +1,233 @@
+/**
+ * Regressionstest Kunden-Tagesbetrieb – spielt einen Arbeitstag mit festen Uhrzeiten durch.
+ * Ohne Lead-Scanner-API, ohne Apple Mail, ohne DNS: Test-Tageslauf, Test-Postfach, Test-MX. Wegwerf-DB und -NOVA_HOME.
+ */
+import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+
+const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "nova-test-tagesbetrieb-"));
+process.env.DATABASE_URL = `file:${path.join(tmp, "test.db")}`;
+process.env.NOVA_HOME = path.join(tmp, "home");
+
+const TAGESLAUF_CSV = [
+  "placeId,datum,ort,branche,name,inhaberName,ansprechpartner,telefon,email,adresse,website,finalUrl,rating,reviewCount,score,befunde,aufhaenger",
+  "p1,2026-10-01,Pforzheim,Schreinerei,Holz Maier,Anton Maier,Anton Maier,0721 1,info@holz-maier.de,Str 1,https://holz-maier.de,https://holz-maier.de/,4.5,10,70,kein SSL,Aufhänger 1",
+  "p2,2026-10-01,Pforzheim,Schreinerei,Tischlerei Nord,,,0721 2,kontakt@tischlerei-nord.de,Str 2,https://tischlerei-nord.de,https://tischlerei-nord.de/,4.1,3,60,keine Meta-Description,Aufhänger 2",
+  "p3,2026-10-01,Pforzheim,Schreinerei,Ohne Mail GmbH,,,0721 3,,Str 3,,,3.9,1,90,keine Website,Aufhänger 3",
+  "p4,2026-10-01,Pforzheim,Schreinerei,Tote Domain,,,0721 4,info@tot.de,Str 4,https://tot.de,https://tot.de/,4.0,2,80,x,y",
+  "p5,2026-10-01,Pforzheim,Schreinerei,Gesperrt AG,,,0721 5,info@gesperrt.de,Str 5,https://gesperrt.de,https://gesperrt.de/,4.0,2,85,x,y",
+  "p6,2026-10-01,Pforzheim,Schreinerei,Schon Kunde,,,0721 6,hallo@schon.de,Str 6,https://schon.de,https://schon.de/,4.0,2,50,x,y",
+  "p7,2026-10-01,Pforzheim,Schreinerei,Dritte Werkstatt,Eva Kurz,Eva Kurz,0721 7,eva@werkstatt3.de,Str 7,https://werkstatt3.de,https://werkstatt3.de/,4.9,40,40,wenig Bewertungen,Aufhänger 7",
+].join("\n");
+
+// Der Test spielt den HEUTIGEN Tag durch (die Datenbank stempelt mit der echten Uhrzeit); Wochentage werden passend gesetzt.
+const heute = new Date();
+const t = (stunde: number, minute: number) => new Date(heute.getFullYear(), heute.getMonth(), heute.getDate(), stunde, minute);
+const heuteWochentag = heute.getDay() === 0 ? 7 : heute.getDay();
+
+async function main() {
+  const push = spawnSync("npx", ["prisma", "db", "push", "--skip-generate", "--accept-data-loss"], { env: process.env, encoding: "utf8" });
+  if (push.status !== 0) throw new Error(`Test-Datenbank konnte nicht angelegt werden:\n${push.stderr}`);
+
+  const home = process.env.NOVA_HOME!;
+  const { prisma } = await import("@/lib/prisma");
+  const { executeTool } = await import("@/services/tools/registry");
+  const { tagesbetriebTick, fuehreTagessucheAus } = await import("@/services/tagesbetrieb");
+  const { leseEinstellungen } = await import("@/services/tagesbetrieb/einstellungen");
+  const { holeNeueMeldungen } = await import("@/services/meldungen");
+  type Postfach = import("@/services/mail/postfach").Postfach;
+
+  const org = await prisma.organization.create({ data: { name: "Test", slug: `test-${Date.now()}` } });
+  const gesendet: string[] = [];
+  let scheitertAn: string | null = null;
+  const postfach: Postfach = {
+    neueste: async () => [],
+    lesen: async () => null,
+    senden: async (input) => {
+      if (input.an === scheitertAn) return { ok: false, executed: false, grund: "Adresse abgelehnt." };
+      gesendet.push(input.an);
+      return { ok: true, executed: true, messageId: `<${gesendet.length}@t>`, grund: "Im Ordner Gesendet gefunden." };
+    },
+    antworten: async () => ({ ok: false, executed: false, grund: "nicht im Test" }),
+  };
+  const mx = async (domain: string) => domain !== "tot.de";
+  const ctx = { organizationId: org.id, postfach };
+  const run = (name: string, args: Record<string, unknown>) => executeTool(name, args, ctx);
+  const tick = (jetzt: Date) => tagesbetriebTick({ organizationId: org.id, jetzt, postfach, mx });
+  const tageslauf = async () => {
+    const pfad = path.join(tmp, `daily-${Date.now()}.csv`);
+    fs.writeFileSync(pfad, TAGESLAUF_CSV);
+    return { csvPfad: pfad, ausgabe: `7 Leads geschrieben: ${pfad}\nZusammenfassung: 7 Leads, 0 Duplikate gefiltert, 2 Kombi(s) verarbeitet.` };
+  };
+
+  const tests: Array<[string, () => Promise<void>]> = [
+    ["Ausgeschaltet: der Takt tut nichts und plant sich nicht neu", async () => {
+      const result = await tick(t(9, 0));
+      assert.deepEqual(result, { weiter: false, aktion: "ausgeschaltet" });
+    }],
+    ["Einschalten per Werkzeug: Einstellungen mit Standardwerten (50/Tag, 5 Min., 08–17 Uhr), erster Takt geplant", async () => {
+      const result = await run("tagesbetrieb", { aktion: "einschalten", max_pro_tag: 0, abstand_minuten: 0, start: "", ende: "", vorlage: "" });
+      assert.equal(result.ok, true, result.error);
+      assert.deepEqual(leseEinstellungen().wochentage, [1, 2, 3, 4, 5], "Standard Mo–Fr");
+      fs.writeFileSync(path.join(home, "tagesbetrieb.json"), JSON.stringify({ ...leseEinstellungen(), wochentage: [heuteWochentag] }));
+      const cfg = leseEinstellungen();
+      assert.equal(cfg.aktiv, true);
+      assert.equal(cfg.maxProTag, 50);
+      assert.equal(cfg.start, "08:00");
+      assert.equal(cfg.organizationId, org.id);
+      assert.equal(await prisma.workItem.count({ where: { kind: "tagesbetrieb.tick" } }), 1);
+    }],
+    ["Ohne Kunden-Vorlage: einmal melden, nichts suchen, nichts senden", async () => {
+      assert.equal((await tick(t(7, 30))).aktion, "vorlage fehlt");
+      assert.equal((await tick(t(7, 35))).aktion, "vorlage fehlt");
+      const meldungen = await holeNeueMeldungen(org.id);
+      assert.equal(meldungen.length, 1);
+      assert.match(meldungen[0]!.text, /Vorlage „kunden“ fehlt/);
+    }],
+    ["Ohne Dauerfreigabe für den Scanner: melden statt suchen", async () => {
+      fs.mkdirSync(path.join(home, "vorlagen"), { recursive: true });
+      fs.writeFileSync(path.join(home, "vorlagen", "kunden.md"), "Betreff: Mehr Sichtbarkeit für {{firma}}\n\n{{anrede}},\n\nbei {{firma}} in {{ort}} ist uns aufgefallen: {{befunde}}.\n");
+      await tick(t(7, 40));
+      assert.equal(await prisma.workItem.count({ where: { kind: "tagesbetrieb.suche" } }), 0);
+      const meldungen = await holeNeueMeldungen(org.id);
+      assert.match(meldungen[0]!.text, /Dauerfreigabe für den Lead-Scanner/);
+    }],
+    ["Mit Dauerfreigabe: Vorrat leer → genau eine Suche geplant", async () => {
+      await run("freigabe_scanner_dauer", { aktion: "erteilen", max_pro_tag: 5 });
+      await tick(t(7, 45));
+      await tick(t(7, 50));
+      assert.equal(await prisma.workItem.count({ where: { kind: "tagesbetrieb.suche" } }), 1);
+    }],
+    ["Suche + Prüfung: gültige Adressen geprüft, andere mit Grund verworfen", async () => {
+      fs.mkdirSync(path.join(home, "kampagnen"), { recursive: true });
+      fs.writeFileSync(path.join(home, "kampagnen", "sperrliste.txt"), "@gesperrt.de  # will keine Mails\n");
+      await prisma.communication.create({
+        data: { organizationId: org.id, channel: "email", direction: "outbound", subject: "alt", body: "alt", status: "sent", toAddress: "hallo@schon.de", sentAt: new Date(Date.now() - 20 * 86_400_000) },
+      });
+      const result = await fuehreTagessucheAus({ organizationId: org.id, tageslauf, mx });
+      assert.equal(result.ok, true);
+      assert.equal((result as { kombis: number }).kombis, 2);
+      // wie der Worker: geplanten Auftrag mit Ergebnis-Notiz abschließen
+      const { completeWorkItem } = await import("@/services/worker/queue");
+      const auftrag = await prisma.workItem.findFirstOrThrow({ where: { kind: "tagesbetrieb.suche" } });
+      await completeWorkItem(auftrag.id, org.id, "2 Kombi(s), 7 neue Betriebe");
+      const leads = await prisma.lead.findMany({ orderBy: { firma: "asc" } });
+      const nachFirma = Object.fromEntries(leads.map((lead) => [lead.firma, [lead.status, lead.grund]]));
+      assert.deepEqual(nachFirma["Holz Maier"], ["geprueft", null]);
+      assert.deepEqual(nachFirma["Tischlerei Nord"], ["geprueft", null]);
+      assert.deepEqual(nachFirma["Dritte Werkstatt"], ["geprueft", null]);
+      assert.deepEqual(nachFirma["Ohne Mail GmbH"], ["verworfen", "keine E-Mail-Adresse"]);
+      assert.deepEqual(nachFirma["Tote Domain"], ["verworfen", "Domain tot.de nimmt keine Mail an"]);
+      assert.deepEqual(nachFirma["Gesperrt AG"], ["verworfen", "steht auf der Sperrliste"]);
+      assert.deepEqual(nachFirma["Schon Kunde"], ["verworfen", "wurde schon angeschrieben"]);
+      const nochmal = await fuehreTagessucheAus({ organizationId: org.id, tageslauf, mx });
+      assert.equal((nochmal as { neu: number }).neu, 0, "gleiche Adressen werden nicht doppelt eingelesen");
+    }],
+    ["Morgens: Tageskampagne mit EINER Beispiel-Mail zur Freigabe vorgelegt, nichts gesendet", async () => {
+      await holeNeueMeldungen(org.id);
+      assert.equal((await tick(t(7, 55))).aktion, "freigabe vorgelegt");
+      const kampagne = await prisma.campaign.findFirstOrThrow({ where: { art: "tagesbetrieb" } });
+      assert.equal(kampagne.status, "wartet_auf_freigabe");
+      const entwuerfe = await prisma.communication.findMany({ where: { campaignId: kampagne.id } });
+      assert.equal(entwuerfe.length, 1);
+      assert.equal(entwuerfe[0]!.toAddress, "info@holz-maier.de", "Lead mit höchstem Score zuerst");
+      assert.equal(entwuerfe[0]!.subject, "Mehr Sichtbarkeit für Holz Maier");
+      assert.equal(entwuerfe[0]!.body, "Guten Tag Anton Maier,\n\nbei Holz Maier in Pforzheim ist uns aufgefallen: kein SSL.");
+      const meldungen = await holeNeueMeldungen(org.id);
+      assert.equal(meldungen.length, 1);
+      assert.match(meldungen[0]!.text, /bis zu 50 Mails .* 08:00–17:00 Uhr, alle 5 Minuten/);
+      const zeile = await prisma.conversationMessage.findFirstOrThrow({ where: { id: meldungen[0]!.id } });
+      assert.match(zeile.metadata ?? "", /freigabe_id/);
+      assert.equal((await tick(t(8, 5))).aktion, "kampagne wartet_auf_freigabe");
+      assert.equal(gesendet.length, 0);
+    }],
+    ["Freigabe nur mit der richtigen ID; danach eine Mail pro Takt im Abstand", async () => {
+      const falsch = await run("tagesbetrieb_freigeben", { freigabe_id: "falsch" });
+      assert.equal(falsch.ok, false);
+      const kampagne = await prisma.campaign.findFirstOrThrow({ where: { art: "tagesbetrieb" } });
+      const ok = await run("tagesbetrieb_freigeben", { freigabe_id: kampagne.approvalId });
+      assert.equal(ok.ok, true, ok.error);
+      assert.equal((await tick(t(8, 10))).aktion, "gesendet");
+      assert.deepEqual(gesendet, ["info@holz-maier.de"]);
+      assert.equal((await prisma.lead.findFirstOrThrow({ where: { firma: "Holz Maier" } })).status, "angeschrieben");
+      assert.equal((await tick(t(8, 12))).aktion, "abstand");
+      assert.equal((await tick(t(8, 15))).aktion, "gesendet");
+      assert.deepEqual(gesendet, ["info@holz-maier.de", "kontakt@tischlerei-nord.de"]);
+      assert.equal(await prisma.workItem.count({ where: { kind: "postfach.wache" } }) >= 1, true, "Antwort-Wache geplant");
+    }],
+    ["Fehlgeschlagener Versand: Lead mit Grund verworfen, Mail als fehlgeschlagen", async () => {
+      scheitertAn = "eva@werkstatt3.de";
+      assert.match((await tick(t(8, 20))).aktion, /fehlgeschlagen/);
+      scheitertAn = null;
+      const lead = await prisma.lead.findFirstOrThrow({ where: { firma: "Dritte Werkstatt" } });
+      assert.equal(lead.status, "verworfen");
+      assert.match(lead.grund ?? "", /Versand fehlgeschlagen: Adresse abgelehnt/);
+      assert.equal((await tick(t(8, 25))).aktion, "keine geprüfte Adresse im Vorrat");
+    }],
+    ["Tageslimit wird eingehalten", async () => {
+      fs.writeFileSync(path.join(home, "tagesbetrieb.json"), JSON.stringify({ ...leseEinstellungen(), maxProTag: 2 }));
+      await prisma.lead.create({ data: { organizationId: org.id, firma: "Noch einer", anrede: "Sehr geehrtes Noch-einer-Team", email: "a@noch-einer.de", ort: "Pforzheim", befunde: "x", quelle: "test", status: "geprueft" } });
+      assert.equal((await tick(t(8, 30))).aktion, "tageslimit erreicht");
+      assert.equal(gesendet.length, 2);
+    }],
+    ["Feierabend: Kampagne fertig, Tagesbericht einmal – als Datei und im Chat", async () => {
+      await holeNeueMeldungen(org.id);
+      assert.equal((await tick(t(17, 5))).aktion, "tagesbericht");
+      assert.equal((await prisma.campaign.findFirstOrThrow({ where: { art: "tagesbetrieb" } })).status, "fertig");
+      const datum = `${heute.getFullYear()}-${String(heute.getMonth() + 1).padStart(2, "0")}-${String(heute.getDate()).padStart(2, "0")}`;
+      const datei = path.join(home, "berichte", `${datum}.md`);
+      const bericht = fs.readFileSync(datei, "utf8");
+      assert.match(bericht, /2 Mails gesendet, 1 fehlgeschlagen/);
+      assert.ok(bericht.includes(`| 08:10 | Holz Maier | info@holz-maier.de | Mehr Sichtbarkeit für Holz Maier | Kunden-Tagesbetrieb ${datum} |`));
+      assert.match(bericht, /1 Kundensuchen|2 Kundensuchen/);
+      assert.match(bericht, /Geschätzte Google-Kosten: mindestens/);
+      assert.match(bericht, /1 × Domain tot.de nimmt keine Mail an/);
+      const meldungen = await holeNeueMeldungen(org.id);
+      assert.equal(meldungen.length, 1);
+      assert.ok(meldungen[0]!.text.startsWith(`Tagesbericht ${datum}: 2 Mails gesendet`));
+      assert.equal((await tick(t(17, 10))).aktion, "ausserhalb");
+      assert.equal((await holeNeueMeldungen(org.id)).length, 0);
+    }],
+    ["Kein Arbeitstag: nichts passiert", async () => {
+      const vorher = gesendet.length;
+      const kampagnen = await prisma.campaign.count();
+      fs.writeFileSync(path.join(home, "tagesbetrieb.json"), JSON.stringify({ ...leseEinstellungen(), wochentage: [((heuteWochentag % 7) + 1)] }));
+      assert.equal((await tick(t(10, 0))).aktion, "ausserhalb");
+      assert.equal(await prisma.campaign.count(), kampagnen);
+      assert.equal(gesendet.length, vorher);
+    }],
+    ["Ausschalten per Werkzeug", async () => {
+      await run("tagesbetrieb", { aktion: "ausschalten", max_pro_tag: 0, abstand_minuten: 0, start: "", ende: "", vorlage: "" });
+      assert.deepEqual(await tick(t(9, 0)), { weiter: false, aktion: "ausgeschaltet" });
+    }],
+  ];
+
+  let failed = 0;
+  for (const [name, fn] of tests) {
+    try {
+      await fn();
+      console.log(`ok   ${name}`);
+    } catch (error) {
+      failed += 1;
+      console.log(`FAIL ${name}`);
+      console.log(error instanceof Error ? error.message : error);
+    }
+  }
+  await prisma.$disconnect();
+  console.log(failed ? `${failed} von ${tests.length} fehlgeschlagen` : `alle ${tests.length} bestanden`);
+  return failed;
+}
+
+main()
+  .then((failed) => {
+    fs.rmSync(tmp, { recursive: true, force: true });
+    process.exit(failed ? 1 : 0);
+  })
+  .catch((error) => {
+    fs.rmSync(tmp, { recursive: true, force: true });
+    console.error(error);
+    process.exit(1);
+  });

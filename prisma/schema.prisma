@@ -63,6 +63,7 @@ model Organization {
   developmentOrders       DevelopmentOrder[]
   activeWorks             ActiveWork[]
   mailTemplates           MailTemplate[]
+  Lead                    Lead[]
 
   @@map("organizations")
 }
@@ -1362,6 +1363,8 @@ model Campaign {
   liste          String
   absender       String
   abstandMinuten Int       @map("abstand_minuten")
+  /// kampagne (Liste auf einmal) | tagesbetrieb (Kunden-Tagesbetrieb, Mails kommen im Lauf des Tages dazu)
+  art            String    @default("kampagne")
   /// wartet_auf_freigabe | laeuft | fertig | abgebrochen
   status         String    @default("wartet_auf_freigabe")
   approvalId     String?   @map("approval_id")
@@ -1374,7 +1377,42 @@ model Campaign {
 
   organization   Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   communications Communication[]
+  leads          Lead[]
 
   @@index([organizationId, status])
   @@map("campaigns")
+}
+
+/// Ein vom Lead-Scanner gefundener Kunde für den Tagesbetrieb, mit Prüfergebnis.
+model Lead {
+  id              String    @id @default(cuid())
+  organizationId  String    @map("organization_id")
+  firma           String
+  ansprechpartner String?
+  anrede          String
+  email           String?
+  telefon         String?
+  ort             String?
+  branche         String?
+  website         String?
+  befunde         String?
+  aufhaenger      String?
+  score           Int?
+  /// Scanner-CSV, aus der der Lead stammt
+  quelle          String
+  /// neu | geprueft | verworfen | angeschrieben
+  status          String    @default("neu")
+  grund           String?
+  geprueftAt      DateTime? @map("geprueft_at")
+  campaignId      String?   @map("campaign_id")
+  entwurfId       String?   @map("entwurf_id")
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  campaign     Campaign?    @relation(fields: [campaignId], references: [id], onDelete: SetNull)
+
+  @@unique([organizationId, email])
+  @@index([organizationId, status])
+  @@map("leads")
 }
