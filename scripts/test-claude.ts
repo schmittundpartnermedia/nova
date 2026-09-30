@@ -165,6 +165,62 @@ async function main() {
       const meldungen = await holeNeueMeldungen(org.id);
       assert.match(meldungen.at(-1)!.text, /übernommen und gepusht, aber das Veröffentlichen ist fehlgeschlagen/);
     }],
+    ["Projekterkennung: alle Git-Ordner, ohne NOVA und Doppel; Prüfbefehle aus package.json; ohne Git gemeldet", async () => {
+      const root = path.join(tmp, "projekte");
+      fs.mkdirSync(root);
+      const neuesRepo = (name: string, scripts: Record<string, string>, remote?: string, commit = true) => {
+        const dir = path.join(root, name);
+        fs.mkdirSync(dir);
+        sh("git init -b main", dir);
+        sh('git config user.email "t@n" && git config user.name "T"', dir);
+        fs.writeFileSync(path.join(dir, "package.json"), JSON.stringify({ description: `${name} Beschreibung`, scripts }));
+        if (remote) sh(`git remote add origin ${remote}`, dir);
+        if (commit) sh("git add -A && git commit -m start", dir);
+      };
+      neuesRepo("planexus", { check: "x", build: "x", dev: "x" }, "https://github.com/x/planexus");
+      neuesRepo("planexus-kopie", { build: "x" }, "https://github.com/x/planexus");
+      neuesRepo("Lokales Ding", { typecheck: "node -e 0" });
+      neuesRepo("leer", {}, undefined, false);
+      neuesRepo("NOVA", { build: "x" }, "https://github.com/x/nova");
+      fs.mkdirSync(path.join(root, "Notizen"));
+      const alt = path.join(process.env.NOVA_HOME!, "claude", "projekte.json");
+      fs.renameSync(alt, `${alt}.bak`);
+      process.env.NOVA_PROJEKTE_DIR = root;
+      try {
+        const { leseProjekte, ordnerOhneGit, projekt } = await import("@/lib/claude/projekte");
+        const liste = leseProjekte();
+        assert.deepEqual(liste.map((p) => p.name).sort(), ["leer", "lokales-ding", "planexus"]);
+        const planexus = projekt("planexus");
+        assert.deepEqual(planexus.pruefen, ["npm run check", "npm run build"]);
+        assert.equal(planexus.remote, true);
+        assert.equal(planexus.live, null);
+        assert.equal(projekt("lokales-ding").remote, false);
+        assert.equal(projekt("leer").zustand, "ohne_stand");
+        assert.deepEqual(ordnerOhneGit(), ["Notizen"]);
+        const ohneStand = await run("claude_beauftragen", { projekt: "leer", aufgabe: "x", abnahmekriterium: "" });
+        assert.match(ohneStand.error ?? "", /noch nie etwas gespeichert/);
+        // Projekt ohne GitHub und ohne Live-Skript: Branch wird nicht gepusht, „live“ = übernehmen
+        const id = (await run("claude_beauftragen", { projekt: "lokales-ding", aufgabe: "README anlegen", abnahmekriterium: "" })).data as { auftrag_id: string };
+        const lokal: ClaudeRunner = async ({ ordner, auftrag }) => {
+          assert.match(auftrag, /kein GitHub – nichts pushen/);
+          fs.writeFileSync(path.join(ordner, "README.md"), "# Neu\n");
+          execSync('git add -A && git commit -m "README"', { cwd: ordner });
+          return { ok: true, text: "README angelegt.", kostenUsd: null, sessionId: null };
+        };
+        const fertig = await fuehreAuftragAus({ auftragId: id.auftrag_id, claude: lokal });
+        assert.equal(fertig.status, "fertig", fertig.fehler);
+        const frage = await run("claude_live", { auftrag_id: id.auftrag_id, freigabe_id: "" });
+        await run("claude_live", { auftrag_id: id.auftrag_id, freigabe_id: (frage.data as { freigabe_id: string }).freigabe_id });
+        const live = await fuehreLiveAus({ auftragId: id.auftrag_id });
+        assert.equal(live.status, "live", live.fehler);
+        assert.ok(fs.existsSync(path.join(root, "Lokales Ding", "README.md")), "in main übernommen");
+        const meldungen = await holeNeueMeldungen(org.id);
+        assert.match(meldungen.at(-1)!.text, /ist übernommen\. Übernommen; das Projekt hat kein GitHub/);
+      } finally {
+        fs.renameSync(`${alt}.bak`, alt);
+        delete process.env.NOVA_PROJEKTE_DIR;
+      }
+    }],
   ];
 
   let failed = 0;

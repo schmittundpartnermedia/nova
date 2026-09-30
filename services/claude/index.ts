@@ -96,6 +96,9 @@ async function git(ordner: string, befehl: string) {
 
 async function bereitFuerAuftrag(p: ClaudeProjekt): Promise<void> {
   if (!fs.existsSync(path.join(p.ordner, ".git"))) throw new Error(`${p.ordner} ist kein Git-Projekt.`);
+  if (p.zustand === "ohne_stand") {
+    throw new Error(`Im Projekt ${p.name} ist noch nie etwas gespeichert worden (kein erster Commit). Davon kann ich nicht abzweigen – leg bitte einmal einen Anfangsstand an oder sag mir, dass ich das tun soll.`);
+  }
   const offen = (await git(p.ordner, "status --porcelain")).trim();
   if (offen) throw new Error(`Im Projekt ${p.name} gibt es ungespeicherte Änderungen – so fange ich nichts an. Bitte erst committen oder verwerfen.`);
   const zweig = (await git(p.ordner, "branch --show-current")).trim();
@@ -143,7 +146,9 @@ function anweisung(auftrag: Auftrag, p: ClaudeProjekt): string {
     "## Regeln",
     `- Du bist auf dem Branch ${auftrag.branch}. Bleib darauf. Nicht mergen, nicht auf ${p.hauptzweig} pushen, nichts veröffentlichen oder deployen – das macht NOVA nach Joachims Freigabe.`,
     `- Prüfe deine Änderung mit: ${p.pruefen.join(" und ")}.`,
-    `- Committe am Ende mit einer kurzen deutschen Nachricht und pushe den Branch: git push -u origin ${auftrag.branch}`,
+    p.remote
+      ? `- Committe am Ende mit einer kurzen deutschen Nachricht und pushe den Branch: git push -u origin ${auftrag.branch}`
+      : "- Committe am Ende mit einer kurzen deutschen Nachricht. Das Projekt hat kein GitHub – nichts pushen.",
     "- Keine Secrets, keine .env-Dateien anfassen. Nichts löschen, was nicht zur Aufgabe gehört.",
     "- Antworte am Ende in ein, zwei einfachen deutschen Sätzen, die man vorlesen kann: was sich für Joachim sichtbar geändert hat. Keine Dateinamen, keine Befehle, keine Branch-Namen, keine Code-Formatierung. Wenn etwas unklar war, stell stattdessen die Frage.",
   ].join("\n");
@@ -261,12 +266,16 @@ export async function fuehreLiveAus(input: { auftragId: string }): Promise<Auftr
   let schritt: "vorbereitung" | "uebernommen" | "gepusht" = "vorbereitung";
   try {
     await bereitFuerAuftrag(p);
-    await git(p.ordner, `pull --ff-only origin ${p.hauptzweig}`);
+    if (p.remote) await git(p.ordner, `pull --ff-only origin ${p.hauptzweig}`);
     await git(p.ordner, `merge --no-ff ${auftrag.branch} -m "NOVA-Auftrag ${auftrag.id} übernommen"`);
     schritt = "uebernommen";
-    await git(p.ordner, `push origin ${p.hauptzweig}`);
-    schritt = "gepusht";
-    const live = await fuehreBefehlAus(p.live, p.ordner, 30 * 60_000);
+    if (p.remote) {
+      await git(p.ordner, `push origin ${p.hauptzweig}`);
+      schritt = "gepusht";
+    }
+    const live = p.live
+      ? await fuehreBefehlAus(p.live, p.ordner, 30 * 60_000)
+      : { ok: true, ausgabe: p.remote ? "Übernommen und hochgeladen; ein Veröffentlichungs-Skript gibt es für dieses Projekt nicht." : "Übernommen; das Projekt hat kein GitHub und kein Veröffentlichungs-Skript." };
     auftrag = speichere({
       ...auftrag,
       status: live.ok ? "live" : "live_fehlgeschlagen",
@@ -288,7 +297,9 @@ export async function fuehreLiveAus(input: { auftragId: string }): Promise<Auftr
     anlass: `claude-live:${auftrag.id}`,
     text:
       auftrag.status === "live"
-        ? `Die Änderung an der ${p.beschreibung} ist live. Letzte Meldung vom Veröffentlichen: ${ende}`
+        ? p.live
+          ? `Die Änderung an der ${p.beschreibung} ist live. Letzte Meldung vom Veröffentlichen: ${ende}`
+          : `Die Änderung an ${p.beschreibung} ist übernommen. ${ende}`
         : `Live stellen hat nicht geklappt: ${ende}. ${stand}`,
   });
   return auftrag;

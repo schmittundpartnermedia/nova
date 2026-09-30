@@ -5,6 +5,7 @@ import { alleSignaturen } from "@/lib/mail/signaturen";
 import { kontaktlistenNamen } from "@/lib/mail/kontaktlisten";
 import { findMatchingPolicy } from "@/services/approvals";
 import { leseEinstellungen } from "@/services/tagesbetrieb/einstellungen";
+import { leseProjekte, ordnerOhneGit } from "@/lib/claude/projekte";
 import type { NovaToolDefinition } from "@/services/tools/types";
 
 /**
@@ -23,7 +24,7 @@ const FAEHIGKEITEN = [
   "Kunden-Tagesbetrieb: werktags Kunden suchen, prüfen und nach deiner Morgen-Freigabe automatisch anschreiben",
   "Tagesbericht über alles, was ich an einem Tag gemacht habe",
   "Adressen auf die Sperrliste setzen",
-  "Claude Code Programmier-Aufträge an der Webseite rankpilot.de oder der App geben, das Ergebnis prüfen und nach deinem Ja live stellen",
+  "Claude Code Programmier-Aufträge an deinen Projekten geben (alle Git-Projekte unter Projekte/joachim), das Ergebnis prüfen und nach deinem Ja übernehmen bzw. live stellen",
 ];
 
 const NICHT = [
@@ -68,6 +69,14 @@ export const novaStatusTool: NovaToolDefinition = {
           tagesbetrieb: tagesbetrieb.aktiv
             ? `an: ${tagesbetrieb.start}–${tagesbetrieb.ende} Uhr, bis ${tagesbetrieb.maxProTag} Mails, alle ${tagesbetrieb.abstandMinuten} Minuten, Vorlage „${tagesbetrieb.vorlage}“`
             : "aus",
+          projekte_fuer_claude: leseProjekte().map((p) => ({
+            name: p.name,
+            beschreibung: p.beschreibung,
+            bereit: p.zustand === "bereit",
+            github: p.remote,
+            veroeffentlichen: p.live ? "per Skript" : "nur übernehmen",
+          })),
+          ordner_ohne_git: ordnerOhneGit(),
           laufende_kampagnen: laufend.map((kampagne) => `${kampagne.name} (${kampagne.status.replace(/_/g, " ")})`),
         },
         fehlt,

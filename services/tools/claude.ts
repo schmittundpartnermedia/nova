@@ -1,5 +1,4 @@
 import { alleAuftraege, beauftrageClaude, claudeLiveStellen, leseAuftrag } from "@/services/claude";
-import { leseProjekte } from "@/lib/claude/projekte";
 import type { NovaToolDefinition, NovaToolResult } from "@/services/tools/types";
 
 function str(value: unknown): string {
@@ -12,11 +11,11 @@ function fehler(error: unknown): NovaToolResult {
 
 export const claudeBeauftragenTool: NovaToolDefinition = {
   name: "claude_beauftragen",
-  description: `Gibt Claude Code einen Programmier-Auftrag an einem Projekt (${leseProjekte().map((p) => `${p.name} = ${p.beschreibung}`).join("; ")}). Claude arbeitet im Hintergrund auf einem eigenen Branch, NOVA prüft das Ergebnis und meldet sich; veröffentlicht wird erst nach Joachims Ja (claude_live). Formuliere die Aufgabe vollständig und konkret; frag nach, wenn Wesentliches fehlt (z. B. die neue Telefonnummer).`,
+  description: `Gibt Claude Code einen Programmier-Auftrag an einem von Joachims Projekten unter /Volumes/ELEVUM/Projekte/joachim (Namen und Beschreibungen liefert nova_status; „webseite“ = rankpilot.de, „app“ = app.rankpilot.de). Claude arbeitet im Hintergrund auf einem eigenen Branch, NOVA prüft das Ergebnis und meldet sich; veröffentlicht wird erst nach Joachims Ja (claude_live). Formuliere die Aufgabe vollständig und konkret; frag nach, wenn Wesentliches fehlt (z. B. die neue Telefonnummer).`,
   parameters: {
     type: "object",
     properties: {
-      projekt: { type: "string", enum: leseProjekte().map((p) => p.name) },
+      projekt: { type: "string", description: "Projektname (Ordnername klein, z. B. planexus, adfiltec) oder webseite/app." },
       aufgabe: { type: "string" },
       abnahmekriterium: { type: "string", description: "Woran Joachim sieht, dass es fertig ist. Leer, wenn er nichts sagt." },
     },
