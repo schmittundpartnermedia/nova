@@ -99,13 +99,12 @@ Nicht geprüft / offen:
 
 **30.09.2026, vormittags – Empfangsproblem, nicht im Code:** Joachims Test-Antwort an joachim@rankpilot.de kam nie an. Ursache: rankpilot.de hatte neben den IONOS-MX einen dritten MX gleicher Priorität (`inbound-smtp.eu-west-1.amazonaws.com`), etwa jede dritte Mail ging an Amazon SES statt ins Postfach. Joachim hat den Eintrag gelöscht; alle IONOS-Nameserver liefern nur noch mx00/mx01.ionos.de. Getrennt davon landen seit 29.09. neue Mails bei info@joachimschmitt.com und info@elevum.io im Papierkorb – kein NOVA-Code löscht oder verschiebt Mails (geprüft, auch in der Historie); Ursache vermutlich Server-Filter oder ein anderes Gerät/Programm, Joachim prüft.
 
+**30.09.2026, 10:22 – Abnahme Phase 3:** Joachim hat Phase 3 in NOVA.app abgenommen: Testkampagne an 3 Adressen raus, Antwort erkannt, Vorschlag ergänzt, „senden“ → Antwort mit Signatur in Gmail angekommen.
+Bekannte Grenze: Die Postfach-Wache ordnet eine Antwort über den Absender zu, nicht über den Mail-Verlauf. Bei der Abnahme hatte Joachim auf die frühere Einzel-Testmail („[NOVA-Test] … Zurich“) geantwortet; erkannt wurde sie, weil der Absender auch Kampagnen-Empfänger war.
+
 ## Dran
 
-**Abnahme Phase 3 durch Joachim in NOVA.app.** App öffnen, Taste halten:
-1. „Schreib die Liste test mit der Sponsoren-Vorlage an, eine Mail pro Minute.“ → NOVA fasst zusammen und fragt → „Ja.“
-2. Warten (ca. 3 Minuten; Statuszeile zeigt „arbeite: Kampagne x/3“) → NOVA meldet „Alle 3 Mails sind raus“. Alle 3 liegen in Apple Mail unter „Gesendet“.
-3. Von einer der drei Adressen auf die Kampagnen-Mail antworten → spätestens nach etwa 5 Minuten legt NOVA einen Entwurf vor.
-4. Entwurf ergänzen („Ergänze …“) → „Senden“ → „Ja“ → Antwort liegt unter „Gesendet“.
+**Phase 4 – Scraper** (siehe `docs/AUFTRAG.md`). Startet auf Joachims Signal. Vorher klären: rechtlicher Rahmen für Werbe-Mails an die echten Sponsoren-Firmen.
 
 ## Was Joachim liefert (siehe Auftrag, Anhang)
 
