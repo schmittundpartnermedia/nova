@@ -48,7 +48,27 @@ async function main() {
   };
   const heute = new Date("2026-09-30T10:00:00Z");
 
+  const { feststellungAus } = await import("@/lib/leads/feststellung");
+  const { fillMailTemplate } = await import("@/lib/mail/templates");
+
   const tests: Array<[string, () => Promise<void>]> = [
+    [
+      "Feststellung aus Scanner-Befunden: wichtigste zwei, lesbar, nichts erfunden",
+      async () => {
+        assert.equal(
+          feststellungAus("keine Meta-Description; nur 4 Bewertungen (< 10); kein SSL/HTTPS"),
+          "Ihr Google-Profil bisher nur 4 Bewertungen hat und Ihre Website ohne sichere HTTPS-Verbindung läuft",
+        );
+        assert.equal(feststellungAus("nur eine GMB-Kategorie gepflegt"), "in Ihrem Google-Unternehmensprofil nur eine Kategorie gepflegt ist");
+        assert.equal(feststellungAus("Bewertungsschnitt 3.7 (< 4,0)"), "Ihr Bewertungsschnitt bei Google aktuell bei 3,7 Sternen liegt");
+        assert.equal(feststellungAus("langsame Ladezeit (TTFB 2.4s > 1,5s)"), "Ihre Website erst nach 2,4 Sekunden antwortet");
+        assert.equal(feststellungAus("Domain-Wechsel: a.de -> b.de; Redirect nicht auflösbar"), "");
+        assert.equal(feststellungAus(""), "");
+        // Ohne Feststellung fehlt der Platzhalter – die Mail darf dann nicht entstehen.
+        const gefuellt = fillMailTemplate("Dabei ist mir aufgefallen, dass {{feststellung}}.", { feststellung: feststellungAus("") });
+        assert.deepEqual(gefuellt.fehlend, ["feststellung"]);
+      },
+    ],
     ["Kundensuche ohne Freigabe: Rückfrage mit Kosten, kein Lauf", async () => {
       const result = await run("kunden_suchen", { branche: "Schreinerei", ort: "Pforzheim", anzahl: 20, freigabe_id: "" });
       const data = result.data as { status: string; kosten_usd: number };
@@ -84,6 +104,9 @@ async function main() {
         ],
       );
       assert.equal(liste[0]!.befunde, "keine Meta-Description");
+      assert.equal(liste[0]!.feststellung, "Ihre Startseite keine Beschreibung für die Google-Ergebnisse hat");
+      assert.equal(liste[1]!.feststellung, "Ihre Website ohne sichere HTTPS-Verbindung läuft");
+      assert.equal(liste[2]!.feststellung, "", "unbekannter Befund ergibt keine erfundene Feststellung");
       assert.equal(await prisma.company.count({ where: { organizationId: org.id } }), 3);
       assert.equal(await prisma.contact.count({ where: { organizationId: org.id } }), 3);
       const uwe = await prisma.contact.findFirstOrThrow({ where: { email: "info@schreinerei-zimmermann.eu" } });

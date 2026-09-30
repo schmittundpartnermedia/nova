@@ -173,17 +173,21 @@ Nicht geprüft: NOVA.app selbst (Eckfenster, immer vorne, Wechsel, Einstellungsf
 
 **30.09.2026, 23:00 – Phase 6 in NOVA.app bestätigt:** Joachim: „passt alles“ – Eckfenster, immer vorne, Sprechtaste aus anderen Programmen, Wechsel Chat/Ecke, Einstellungen. Next-Entwicklersymbol („N“) ausgeblendet (facdf69), bestätigt. Offen aus dem Auftrag: der „Vormittag mit NOVA in der Ecke“ im echten Alltag.
 
+**30.09.2026, 23:15 – Kunden-Vorlage (Claude Code):** Joachim hat die Kunden-Vorlage geliefert → `~/Nova/vorlagen/kunden.md` (Betreff „Kurze Frage zu Ihrer Google-Sichtbarkeit“, Platzhalter `anrede`, `firma`, `feststellung`; Link https://rankpilot.de/check, erreichbar geprüft; Grußformel kommt aus der Apple-Mail-Signatur wie bei den Sponsoren). Neu `lib/leads/feststellung.ts`: macht aus den festen Befund-Texten des Scanners höchstens zwei lesbare Sätze (wichtigste zuerst). Ohne verwertbaren Befund bleibt `feststellung` leer → der Tagesbetrieb verwirft den Betrieb („fehlende Werte für die Vorlage“), es geht keine Mail mit erfundener Feststellung raus. Spalte `feststellung` auch in den Kundenlisten. `test:kunden` 9/9 (neu: Feststellungen, leerer Befund → fehlender Platzhalter), `test:tagesbetrieb` 13/13.
+
 ## Dran
 
-**Joachim entscheidet:**
-- Phase 7 (Browser/Plattformen), angehängt am 30.09.
-- Abnahme Phase 4 (Kundensuche, Sponsoren, Tagesbetrieb) – braucht die Kunden-Vorlage `~/Nova/vorlagen/kunden.md`.
-- Später: Vergleich Kopf OpenAI/Claude.
+**Joachim: Abnahme Phase 4 in NOVA.app** (vorher NOVA.app einmal neu starten, damit der Hintergrund-Läufer den neuen Code hat):
+1. „Such mir 10 Schreinereien in Pforzheim.“ → NOVA nennt Kosten und fragt → „Ja.“ → nach einigen Minuten Meldung mit Anzahl, E-Mails, Ansprechpartnern; Liste in `~/Nova/kampagnen/`.
+2. „Zeig mir, wie die Mail an den ersten aussehen würde.“ → Entwurf mit Feststellung als Karte im Chat (nicht senden).
+3. Sponsor: „Nimm als Sponsor auf: … (eigene Test-Adresse)“ → „Schreib ihn an.“ → Zusammenfassung → „Ja“ → Mail in „Gesendet“.
+4. Tagesbetrieb erst danach und nur auf Joachims Wort: braucht Dauerfreigabe Scanner (kostet Google-API).
+Danach: Phase 7 (Browser/Plattformen). Später: Vergleich Kopf OpenAI/Claude.
 
 ## Was Joachim liefert (siehe Auftrag, Anhang)
 
 - Inhalt `firma.md` – diktiert in Phase 1
-- Mail-Vorlagen in `~/Nova/vorlagen/` – Sponsoren geliefert (30.09.), Kunden folgt (nötig für den Tagesbetrieb)
+- Mail-Vorlagen in `~/Nova/vorlagen/` – Sponsoren und Kunden geliefert (30.09.)
 - Drei Test-Adressen – geliefert (30.09.), liegen lokal in `~/Nova/kampagnen/testadressen.txt`
 - PTT-Taste – Standard rechte Option-Taste, bis er etwas anderes sagt
 

@@ -12,6 +12,7 @@ import { planePostfachWache } from "@/services/kampagnen";
 import { schreibeTagesbericht } from "@/services/tagesbericht";
 import type { TageslaufRunner } from "@/lib/leads/scanner";
 import { leseEinstellungen, lokalesDatum, zeitfenster, type TagesbetriebEinstellungen } from "@/services/tagesbetrieb/einstellungen";
+import { feststellungAus } from "@/lib/leads/feststellung";
 import { pruefeAdresse, type MxPruefer } from "@/services/tagesbetrieb/pruefen";
 
 /**
@@ -46,6 +47,7 @@ function werteAus(lead: {
     branche: lead.branche ?? "",
     website: lead.website ?? "",
     befunde: lead.befunde ?? "",
+    feststellung: feststellungAus(lead.befunde),
     aufhaenger: lead.aufhaenger ?? "",
   };
 }
