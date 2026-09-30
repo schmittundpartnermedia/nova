@@ -2,7 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { prisma } from "@/lib/prisma";
 import { novaHomeDir } from "@/lib/gedaechtnis/paths";
-import { fillMailTemplate, platzhalterIn } from "@/lib/mail/templates";
+import { fillMailTemplate, optionalePlatzhalterIn, platzhalterIn } from "@/lib/mail/templates";
 
 /**
  * Mail-Vorlagen des Nutzers: Dateien `~/Nova/vorlagen/<name>.md`.
@@ -10,7 +10,8 @@ import { fillMailTemplate, platzhalterIn } from "@/lib/mail/templates";
  * Beim Auflisten werden sie in `mail_templates` übernommen (Name = Dateiname).
  */
 
-export type Vorlage = { name: string; betreff: string; text: string; platzhalter: string[] };
+/** platzhalter: Pflicht ({{name}}); optional: Absatz fällt ohne Wert weg ({{?name}}). */
+export type Vorlage = { name: string; betreff: string; text: string; platzhalter: string[]; optional: string[] };
 
 export function vorlagenDir(): string {
   return path.join(novaHomeDir(), "vorlagen");
@@ -25,7 +26,7 @@ export function parseVorlage(name: string, raw: string): Vorlage {
     lines.shift();
   }
   const text = lines.join("\n").trim();
-  return { name, betreff, text, platzhalter: platzhalterIn(`${betreff}\n${text}`) };
+  return { name, betreff, text, platzhalter: platzhalterIn(`${betreff}\n${text}`), optional: optionalePlatzhalterIn(text) };
 }
 
 export function leseVorlagen(): Vorlage[] {

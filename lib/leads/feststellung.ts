@@ -1,9 +1,9 @@
 /**
  * Macht aus den Befunden des Lead-Scanners einen Satzteil für die Kunden-Vorlage:
- * „Dabei ist mir aufgefallen, dass {{feststellung}}.“
+ * „Dabei ist mir aufgefallen, dass {{?feststellung}}. …“ (optionale Zeile)
  * Grundlage sind die festen Befund-Texte aus lead-scanner/src/scoring.ts (Spalte `befunde`, getrennt mit „; “).
  * Genommen werden höchstens zwei, die wichtigsten zuerst (Reihenfolge = Punkte im Scanner).
- * Ohne verwertbaren Befund bleibt die Feststellung leer – dann geht keine Mail raus (fehlender Platzhalter).
+ * Ohne verwertbaren Befund bleibt die Feststellung leer – dann fällt die Zeile weg, erfunden wird nichts.
  */
 
 type Regel = { beginnt: string; satz: (befund: string) => string | null };

@@ -175,6 +175,9 @@ Nicht geprüft: NOVA.app selbst (Eckfenster, immer vorne, Wechsel, Einstellungsf
 
 **30.09.2026, 23:15 – Kunden-Vorlage (Claude Code):** Joachim hat die Kunden-Vorlage geliefert → `~/Nova/vorlagen/kunden.md` (Betreff „Kurze Frage zu Ihrer Google-Sichtbarkeit“, Platzhalter `anrede`, `firma`, `feststellung`; Link https://rankpilot.de/check, erreichbar geprüft; Grußformel kommt aus der Apple-Mail-Signatur wie bei den Sponsoren). Neu `lib/leads/feststellung.ts`: macht aus den festen Befund-Texten des Scanners höchstens zwei lesbare Sätze (wichtigste zuerst). Ohne verwertbaren Befund bleibt `feststellung` leer → der Tagesbetrieb verwirft den Betrieb („fehlende Werte für die Vorlage“), es geht keine Mail mit erfundener Feststellung raus. Spalte `feststellung` auch in den Kundenlisten. `test:kunden` 9/9 (neu: Feststellungen, leerer Befund → fehlender Platzhalter), `test:tagesbetrieb` 13/13.
 
+**30.09.2026, 23:40 – Kunden-Mail umgestellt (Joachims Vorgabe):** Jede Firma mit E-Mail bekommt die Mail; Kern ist KI-Suche (kurz erklärt), der Scanner-Befund kommt nur dazu, wenn es einen gibt. Neu: optionaler Platzhalter `{{?name}}` in `lib/mail/templates.ts` – ohne Wert fällt die ganze Zeile weg; Pflicht-Platzhalter bleiben Pflicht. Vorlage `~/Nova/vorlagen/kunden.md` neu (Betreff „Wird {{firma}} in KI-Suchen empfohlen?“). Damit gilt nicht mehr, dass Betriebe ohne Befund verworfen werden. Der echte Scan „Schreinereien Pforzheim“ ergab 10 Betriebe, 9 mit E-Mail, alle 9 mit Befund. `test:kunden` 9/9, `test:mail` 15/15, `test:kampagne` 9/9, `test:tagesbetrieb` 13/13.
+Offen: fünf archivierte Testgespräche aus Cursors ChatGPT-Import-Tests (Alpha, Beta, Gamma, Smalltalk, Omega; 38 Nachrichten) liegen noch in der DB – Löschen wurde von der Freigabe-Automatik abgelehnt, Joachim entscheidet. NOVA liest sie nicht.
+
 ## Dran
 
 **Joachim: Abnahme Phase 4 in NOVA.app** (vorher NOVA.app einmal neu starten, damit der Hintergrund-Läufer den neuen Code hat):

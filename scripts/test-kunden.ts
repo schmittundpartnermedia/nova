@@ -53,7 +53,7 @@ async function main() {
 
   const tests: Array<[string, () => Promise<void>]> = [
     [
-      "Feststellung aus Scanner-Befunden: wichtigste zwei, lesbar, nichts erfunden",
+      "Feststellung aus Scanner-Befunden: wichtigste zwei, lesbar, nichts erfunden; ohne Befund fällt die Zeile weg",
       async () => {
         assert.equal(
           feststellungAus("keine Meta-Description; nur 4 Bewertungen (< 10); kein SSL/HTTPS"),
@@ -64,9 +64,15 @@ async function main() {
         assert.equal(feststellungAus("langsame Ladezeit (TTFB 2.4s > 1,5s)"), "Ihre Website erst nach 2,4 Sekunden antwortet");
         assert.equal(feststellungAus("Domain-Wechsel: a.de -> b.de; Redirect nicht auflösbar"), "");
         assert.equal(feststellungAus(""), "");
-        // Ohne Feststellung fehlt der Platzhalter – die Mail darf dann nicht entstehen.
-        const gefuellt = fillMailTemplate("Dabei ist mir aufgefallen, dass {{feststellung}}.", { feststellung: feststellungAus("") });
-        assert.deepEqual(gefuellt.fehlend, ["feststellung"]);
+        // Optionale Zeile: mit Befund drin, ohne Befund fällt sie ganz weg (kein Loch, keine erfundene Feststellung).
+        const vorlage = "A\n\nDabei ist mir aufgefallen, dass {{?feststellung}}. Das zählt.\n\nB {{firma}}";
+        const mit = fillMailTemplate(vorlage, { firma: "X", feststellung: feststellungAus("kein SSL/HTTPS") });
+        assert.equal(mit.text, "A\n\nDabei ist mir aufgefallen, dass Ihre Website ohne sichere HTTPS-Verbindung läuft. Das zählt.\n\nB X");
+        const ohne = fillMailTemplate(vorlage, { firma: "X", feststellung: feststellungAus("") });
+        assert.equal(ohne.text, "A\n\nB X");
+        assert.deepEqual(ohne.fehlend, []);
+        // Pflicht-Platzhalter bleiben Pflicht.
+        assert.deepEqual(fillMailTemplate(vorlage, {}).fehlend, ["firma"]);
       },
     ],
     ["Kundensuche ohne Freigabe: Rückfrage mit Kosten, kein Lauf", async () => {
