@@ -5,6 +5,7 @@ import { authorizeExternalAction, decideApproval } from "@/services/approvals";
 import { gedankenstrichIn } from "@/lib/mail/stil";
 import { aufSperrliste } from "@/lib/mail/sperrliste";
 import { hatGeantwortet } from "@/services/mail/antworten";
+import { markiereCheckLinks, neuerCheckCode } from "@/lib/rankpilot/checks";
 import { decodeMailRef, type Postfach } from "@/services/mail/postfach";
 
 /**
@@ -86,13 +87,17 @@ export async function erstelleEntwurf(input: {
     });
   }
 
+  // Kampagnen-Mails: eigener Kurzlink auf den Check, damit sichtbar wird, welche Mail gewirkt hat.
+  const markiert = input.kampagneId ? markiereCheckLinks(input.text.trim(), neuerCheckCode()) : { text: input.text.trim(), link: null };
+
   const row = await prisma.communication.create({
     data: {
       organizationId: input.organizationId,
       channel: "email",
       direction: "outbound",
       subject: input.betreff.trim(),
-      body: input.text.trim(),
+      body: markiert.text,
+      externalUrl: markiert.link,
       status: "draft",
       deliveryStatus: "PREPARED",
       fromAddress: absender,

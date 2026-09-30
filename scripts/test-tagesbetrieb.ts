@@ -11,6 +11,8 @@ import path from "node:path";
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "nova-test-tagesbetrieb-"));
 process.env.DATABASE_URL = `file:${path.join(tmp, "test.db")}`;
 process.env.NOVA_HOME = path.join(tmp, "home");
+// Die Check-Zählung fragt die echte App ab; im Test nie.
+delete process.env.RANKPILOT_CHECKS_TOKEN;
 
 const TAGESLAUF_CSV = [
   "placeId,datum,ort,branche,name,inhaberName,ansprechpartner,telefon,email,adresse,website,finalUrl,rating,reviewCount,score,befunde,aufhaenger",

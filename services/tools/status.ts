@@ -25,6 +25,7 @@ const FAEHIGKEITEN = [
   "mit deinem Lead-Scanner lokale Betriebe als Kunden suchen",
   "Kunden-Tagesbetrieb: werktags Kunden suchen, prüfen und nach deiner Morgen-Freigabe automatisch anschreiben",
   "Tagesbericht über alles, was ich an einem Tag gemacht habe",
+  "zeigen, was die Mails gebracht haben: Antworten, gestartete rankPilot Checks und neue Konten je Kampagne",
   "Adressen auf die Sperrliste setzen",
   "Claude Code Programmier-Aufträge an deinen Projekten geben (alle Git-Projekte unter Projekte/joachim), das Ergebnis prüfen und nach deinem Ja übernehmen bzw. live stellen",
 ];
@@ -55,6 +56,7 @@ export const novaStatusTool: NovaToolDefinition = {
     if (!vorlagen.includes("sponsoren")) fehlt.push("Sponsoren-Vorlage (~/Nova/vorlagen/sponsoren.md).");
     if (!alleSignaturen().length) fehlt.push("Signatur-Zuordnung (~/Nova/signaturen.txt).");
     if (!scannerDauer) fehlt.push("Dauerfreigabe für den Lead-Scanner – nötig für den Tagesbetrieb (sag z. B. „Erteile die Dauerfreigabe für den Scanner, höchstens 5 Läufe am Tag“).");
+    if (!process.env.RANKPILOT_CHECKS_TOKEN?.trim()) fehlt.push("Schlüssel für die Check-Zählung (RANKPILOT_CHECKS_TOKEN in NOVAs .env) – ohne ihn sehe ich nicht, wer über meine Mails den Check startet.");
     if (tagesbetrieb.aktiv && !vorlagen.includes(tagesbetrieb.vorlage)) fehlt.push(`Der Tagesbetrieb ist an, aber die Vorlage „${tagesbetrieb.vorlage}“ fehlt.`);
 
     return {

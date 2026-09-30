@@ -27,6 +27,7 @@
     "nachweis:antworten": "tsx scripts/nachweis-antworten.ts",
     "test:claude": "tsx scripts/test-claude.ts",
     "test:nachfass": "tsx scripts/test-nachfass.ts",
+    "test:wirkung": "tsx scripts/test-wirkung.ts",
     "nachweis:phase5": "tsx scripts/nachweis-phase5-claude.ts"
   },
   "dependencies": {

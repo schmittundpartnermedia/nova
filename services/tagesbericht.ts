@@ -3,6 +3,8 @@ import path from "node:path";
 import { prisma } from "@/lib/prisma";
 import { novaHomeDir } from "@/lib/gedaechtnis/paths";
 import { meldeNutzer } from "@/services/meldungen";
+import { wirkung } from "@/services/wirkung";
+import type { CheckQuelle } from "@/lib/rankpilot/checks";
 
 /**
  * Tagesbericht: alles, was NOVA an einem Tag nach außen getan hat – als Archivdatei ~/Nova/berichte/<datum>.md
@@ -23,7 +25,7 @@ export function berichteDir(): string {
   return path.join(novaHomeDir(), "berichte");
 }
 
-export async function schreibeTagesbericht(input: { organizationId: string; datum: string; melden: boolean }) {
+export async function schreibeTagesbericht(input: { organizationId: string; datum: string; melden: boolean; checkQuelle?: CheckQuelle }) {
   const { organizationId, datum } = input;
   const { von, bis } = tagesgrenzen(datum);
 
@@ -62,6 +64,7 @@ export async function schreibeTagesbericht(input: { organizationId: string; datu
     return summe + Number(audit.match(/(\d+) Kombi/)?.[1] ?? 0);
   }, 0);
 
+  const wirkt = await wirkung({ organizationId, seit: von, bis, quelle: input.checkQuelle });
   const zeilen: string[] = [];
   zeilen.push(`# NOVA Tagesbericht ${datum}`, "");
   zeilen.push(
@@ -93,6 +96,11 @@ export async function schreibeTagesbericht(input: { organizationId: string; datu
   if (rueck.length) {
     for (const mail of rueck) zeilen.push(`- ${zeit(mail.createdAt)} ${mail.recipientName ?? "unbekannt"}: ${mail.subject}`);
   } else zeilen.push("Keine.");
+  zeilen.push("", "## Gestartete rankPilot Checks (über den Link in NOVAs Mails)", "");
+  if (!wirkt.checks_eingerichtet) zeilen.push(wirkt.hinweis ?? "Nicht eingerichtet.");
+  else if (wirkt.checks.length) {
+    for (const check of wirkt.checks) zeilen.push(`- ${zeit(new Date(check.zeit))} ${check.firma} (${check.kampagne})${check.konto_angelegt ? ", Konto angelegt" : ""}`);
+  } else zeilen.push("Keine.");
   zeilen.push("", "## Kundensuchen (Lead-Scanner)", "");
   if (suchen.length) {
     for (const item of suchen) {
@@ -113,7 +121,9 @@ export async function schreibeTagesbericht(input: { organizationId: string; datu
 
   const kurz =
     `Tagesbericht ${datum}: ${gesendet.length} Mails gesendet, ${fehlgeschlagen.length} fehlgeschlagen, ` +
-    `${antworten.length} Antworten, ${rueck.length} Rückläufer, ${leadsNeu} neue Betriebe gefunden, ${verworfen.length} Adressen verworfen. ` +
+    `${antworten.length} Antworten, ${rueck.length} Rückläufer, ` +
+    (wirkt.checks_eingerichtet ? `${wirkt.checks.length} Checks über meine Mails gestartet, ` : "") +
+    `${leadsNeu} neue Betriebe gefunden, ${verworfen.length} Adressen verworfen. ` +
     `Alles im Detail: ~/Nova/berichte/${datum}.md`;
   if (input.melden) await meldeNutzer({ organizationId, anlass: `tagesbericht:${datum}`, text: kurz });
   return { datei, kurz, gesendet: gesendet.length, fehlgeschlagen: fehlgeschlagen.length, antworten: antworten.length };
