@@ -104,7 +104,7 @@ Bekannte Grenze: Die Postfach-Wache ordnet eine Antwort über den Absender zu, n
 
 ## Dran
 
-**Phase 4 – Scraper** (siehe `docs/AUFTRAG.md`). Startet auf Joachims Signal. Vorher klären: rechtlicher Rahmen für Werbe-Mails an die echten Sponsoren-Firmen.
+**Phase 4 – Scraper** (siehe `docs/AUFTRAG.md`). Untersuchung des Lead-Scanners liegt in `docs/SCRAPER.md` (30.09.). Ergebnis: Das Tool findet lokale Betriebe (potenzielle Kunden) für Telefon-/Post-Akquise und schließt E-Mail-Versand ausdrücklich aus – passt nicht direkt zu „Sponsoren suchen und anschreiben“. **Wartet auf Joachims Entscheidung**, bevor gebaut wird. Außerdem offen: rechtlicher Rahmen für Werbe-Mails.
 
 ## Was Joachim liefert (siehe Auftrag, Anhang)
 
