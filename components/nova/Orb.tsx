@@ -4,8 +4,8 @@ import { useEffect, useRef } from "react";
 import type { OrbState } from "@/types";
 
 /**
- * NOVAs Orb: WebGL-Shader – fließendes Plasma in einer runden Kugel (schwarz-weiß) mit Leuchtrand, Glanzlicht und engem Schein.
- * Außerhalb der Kugel ist jeder Pixel durchsichtig, damit keine Zeichenfläche als Kasten sichtbar wird.
+ * NOVAs Orb: WebGL-Shader zeichnet nur die Kugel (schwarz-weiß: Rauch, Leuchtrand, Glanzlicht, Sterne), außerhalb exakt durchsichtig.
+ * Der Schein um die Kugel kommt aus CSS (.nova-orb-schein) – WebKit verrechnet halbdurchsichtige WebGL-Pixel anders als Chrome.
  * Helligkeit, Tempo und Energie folgen dem Zustand; beim Zuhören reagiert er auf die Mikrofon-Lautstärke.
  */
 
@@ -83,11 +83,6 @@ void main() {
   float edge = 0.3 + 0.006 * sin(t * 1.3) + 0.018 * uEnergy;
   float d = r / edge;
 
-  // Leuchtender Saum direkt an der Kugel; ab 1,3 × Radius exakt nichts.
-  float glow = exp(-max(r - edge, 0.0) * 30.0) * (0.55 + 0.4 * uEnergy);
-  glow *= 1.0 - smoothstep(edge * 1.12, edge * 1.3, r);
-  vec3 col = uB * glow;
-
   if (d < 1.0) {
     float z = sqrt(1.0 - d * d);
     vec3 n = normalize(vec3(uv / edge, z));
@@ -106,15 +101,11 @@ void main() {
     inner += uB * fresnel * 1.8;
     inner += uB * pow(max(dot(n, normalize(vec3(-0.45, 0.55, 0.7))), 0.0), 22.0) * 0.9;
     float innen = smoothstep(1.0, 0.985, d);
-    float glowAlpha = clamp(max(max(col.r, col.g), col.b), 0.0, 1.0);
-    vec3 glowFarbe = glowAlpha > 0.002 ? col / glowAlpha : vec3(0.0);
-    gl_FragColor = vec4(mix(glowFarbe, min(inner, vec3(1.0)), innen), mix(glowAlpha, 1.0, innen));
+    // Vormultipliert: am Rand weich, außerhalb exakt durchsichtig.
+    gl_FragColor = vec4(min(inner, vec3(1.0)) * innen, innen);
     return;
   }
-
-  float alpha = clamp(max(max(col.r, col.g), col.b), 0.0, 1.0);
-  // Straight alpha: Farbe unabhängig von der Deckkraft, damit kein Hof entsteht.
-  gl_FragColor = alpha > 0.002 ? vec4(col / alpha, alpha) : vec4(0.0);
+  gl_FragColor = vec4(0.0);
 }
 `;
 
@@ -151,7 +142,7 @@ export function Orb({ state, level = null }: { state: OrbState; level?: number |
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
-    const gl = canvas.getContext("webgl", { alpha: true, premultipliedAlpha: false, antialias: true });
+    const gl = canvas.getContext("webgl", { alpha: true, premultipliedAlpha: true, antialias: true });
     if (!gl) return;
 
     const vs = shader(gl, gl.VERTEX_SHADER, VERTEX);
@@ -242,6 +233,7 @@ export function Orb({ state, level = null }: { state: OrbState; level?: number |
   return (
     <div className="nova-orb" data-orb-state={state} aria-label={`NOVA-Zustand ${state}`} role="img">
       <span className="nova-ax-label">{`NOVA-Zustand ${state}`}</span>
+      <span className="nova-orb-schein" />
       <canvas ref={canvasRef} className="nova-orb-canvas" />
       <svg className="nova-orb-bahnen" viewBox="-100 -100 200 200" aria-hidden="true">
         <g className="nova-orb-bahn a">

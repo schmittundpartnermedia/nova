@@ -608,8 +608,39 @@
 }
 
 .nova-orb-canvas {
+  position: relative;
   display: block;
   background: transparent;
+}
+
+/* Schein um die Kugel: Kugeldurchmesser = 60 % der Zeichenfläche (Radius 0,3 der Höhe im Shader). */
+.nova-orb-schein {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 60%;
+  height: 60%;
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+  box-shadow:
+    0 0 18px 2px rgba(255, 255, 255, 0.55),
+    0 0 60px 8px rgba(255, 255, 255, 0.16);
+  pointer-events: none;
+  animation: nova-schein 5s ease-in-out infinite;
+}
+
+.nova-orb[data-orb-state="LISTENING"] .nova-orb-schein,
+.nova-orb[data-orb-state="SPEAKING"] .nova-orb-schein,
+.nova-orb[data-orb-state="THINKING"] .nova-orb-schein,
+.nova-orb[data-orb-state="WORKING"] .nova-orb-schein {
+  box-shadow:
+    0 0 24px 4px rgba(255, 255, 255, 0.7),
+    0 0 80px 14px rgba(255, 255, 255, 0.22);
+}
+
+@keyframes nova-schein {
+  0%, 100% { opacity: 0.85; }
+  50% { opacity: 1; }
 }
 
 .nova-orb-bahnen {
