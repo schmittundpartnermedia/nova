@@ -142,6 +142,8 @@ Nicht geprüft / offen:
 - Sofort-Ansage: Beim Start eines langsamen Werkzeugs sagt NOVA sofort z. B. „Moment, ich schaue in deine Mails.“ und zeigt es im Chat; danach die Fakten. Die Ansage kommt nach der ersten Modellentscheidung (typisch 1–3 s), nicht vor ihr.
 - Gestaltung nach Joachims Bildvorlage: runde Kugel schwarz-weiß (Rauch, Leuchtsaum, Glanzlicht, feine Sterne), kreisende Bahnen mit Punkten, gesperrte Statuszeile, Pillen-Eingabe mit Wellen-Symbol, Lautsprecher, großem Mikro und Senden, Wellenform mit Punkt-Ausläufern, Lichthorizont. Außerhalb der Kugel ist die Zeichenfläche exakt durchsichtig (vorher als Kasten sichtbar). Im eingebauten Browser angesehen; in NOVA.app selbst (WebKit) nicht.
 
+**30.09.2026, spät – Phase 5 neu gefasst (Joachims Entscheidung):** Statt Cursor beauftragt NOVA **Claude Code** (CLI `~/.local/bin/claude`, v2.1.286, von Joachim angemeldet; ohne Fenster aufrufbar, geprüft). Cursor-Anbindung entfällt. Projekte: Webseite rankpilot.de = `/Volumes/ELEVUM/Projekte/joachim/rankpilot-website`, App app.rankpilot.de = `/Volumes/ELEVUM/Projekte/joachim/rankPilot-app` (je ein identischer Doppel auf „My Book 24“ und `rankPilot`). Freigabe vorerst: Claude darf ändern, testen und auf GitHub pushen; **live (deploy-rpw / deploy-rp) nur nach Joachims Ja**; später ganz selbstständig. Achtung: Joachims Aliase `deploy-rpw`/`deploy-rp` zeigen noch auf „My Book 24“ – NOVA veröffentlicht über die Skripte im ELEVUM-Ordner. Phase-4-Abnahme steht weiterhin aus.
+
 ## Dran
 
 **Joachim:** Kunden-Vorlage liefern. Dann NOVA.app neu starten und abnehmen:

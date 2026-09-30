@@ -120,7 +120,7 @@ Arbeit:
 
 Abnahme: „Such mir 30 passende Sponsoren und schreib sie mit der Sponsoren-Vorlage an." → Rückfrage → „Ja" → Scraper läuft, Kontakte angelegt, Kampagne läuft, nach Ende Meldung. Alle 30 in „Gesendet".
 
-## Phase 5 – Cursor
+## Phase 5 – Cursor (ersetzt durch Claude Code, Entscheidung Joachim 30.09.2026 – siehe docs/STAND.md)
 
 Ziel: Nova beauftragt Cursor, wartet, prüft, meldet.
 
