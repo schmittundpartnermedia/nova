@@ -144,14 +144,24 @@ Nicht geprüft / offen:
 
 **30.09.2026, spät – Phase 5 neu gefasst (Joachims Entscheidung):** Statt Cursor beauftragt NOVA **Claude Code** (CLI `~/.local/bin/claude`, v2.1.286, von Joachim angemeldet; ohne Fenster aufrufbar, geprüft). Cursor-Anbindung entfällt. Projekte: Webseite rankpilot.de = `/Volumes/ELEVUM/Projekte/joachim/rankpilot-website`, App app.rankpilot.de = `/Volumes/ELEVUM/Projekte/joachim/rankPilot-app` (je ein identischer Doppel auf „My Book 24“ und `rankPilot`). Freigabe vorerst: Claude darf ändern, testen und auf GitHub pushen; **live (deploy-rpw / deploy-rp) nur nach Joachims Ja**; später ganz selbstständig. Achtung: Joachims Aliase `deploy-rpw`/`deploy-rp` zeigen noch auf „My Book 24“ – NOVA veröffentlicht über die Skripte im ELEVUM-Ordner. Phase-4-Abnahme steht weiterhin aus.
 
+**30.09.2026, nachts – Phase 5 gebaut (Claude Code statt Cursor), Abnahme steht aus.**
+
+Was jetzt real im Code steht:
+- Werkzeuge `claude_beauftragen` (Projekt webseite/app, Aufgabe, Abnahmekriterium), `claude_status`, `claude_live`. Auftrag als Datei `~/Nova/claude/auftraege/<id>.md` + Stand `<id>.json`; Worker `claude.lauf` und `claude.live`.
+- Ablauf: NOVA fängt nur an, wenn das Projekt sauber auf `main` steht; eigener Branch `nova/<id>`; Claude Code (`claude -p`, Dateien ändern erlaubt, Befehle nur aus Erlaubtliste, Deploy/ssh/rsync/Push auf main gesperrt) arbeitet, committet, pusht den Branch; NOVA übernimmt Reste, liest Diff, führt die Prüfbefehle selbst aus (Webseite: `npm run check`, `npm run build`; App: `npm run check`), stellt das Projekt zurück auf `main` und meldet sich kurz und vorlesbar mit der Frage „live stellen?“. Nach Joachims Ja (Freigabe genau dieses Auftrags): `pull --ff-only`, Merge, Push von main, Live-Skript im ELEVUM-Ordner; Meldung sagt genau, bis zu welchem Schritt es kam.
+- Joachims Aliase `deploy-rpw`/`deploy-rp` in `~/.zshrc` auf ELEVUM umgestellt (Sicherung `~/.zshrc.vor-nova-*`).
+- Cursor-Anbindung ist nicht mehr im Code; `nova_status` nennt Claude-Aufträge als Fähigkeit.
+
+Nachweise: `tsc`, `eslint` grün; `test:claude` 7/7 (Wegwerf-Git-Projekt), alle anderen Tests grün (kopf 10, mail 15, kampagne 9, kunden 8, tagesbetrieb 13). `npm run nachweis:phase5` → `docs/nachweis-phase5-claude.txt`: **echtes Claude Code** an einem Wegwerf-Projekt – Footer-Nummer geändert (15 s, ~0,17 $), Branch gepusht, nichts veröffentlicht, Freigabe, übernommen, „live“ (nur Markierung).
+
+Nicht geprüft: echter Auftrag an rankpilot.de, echtes `deploy-rpw`/`deploy-rp`, Lauf im Worker von NOVA.app (braucht Neustart der App). `macos:build` nicht ausgeführt (App lief; Launcher unverändert).
+
 ## Dran
 
-**Joachim:** Kunden-Vorlage liefern. Dann NOVA.app neu starten und abnehmen:
-1. Chatfenster: Verlauf, Schritte, Karten; Orb in allen Zuständen.
-2. „Erteile die Dauerfreigabe für den Scanner, höchstens 5 Läufe am Tag.“ → „Schalte den Tagesbetrieb ein.“
-3. Am nächsten Werktag ab 07:00: Beispiel-Mail im Chat → „Ja“ → ab 08:00 alle 5 Minuten eine Mail (Statuszeile, Chat).
-4. Nach 17:00: Tagesbericht im Chat und in `~/Nova/berichte/`.
-Offen aus Phase 4: Abnahme Kundensuche/Sponsoren per Sprache.
+**Joachim:** NOVA.app neu starten (damit der Hintergrund-Läufer die Claude-Aufträge kennt), dann abnehmen:
+1. „Gib Claude den Auftrag: auf rankpilot.de im Footer die Telefonnummer auf … ändern. Sag mir, wenn es fertig ist.“
+2. NOVA meldet sich, wenn Claude fertig ist und sie geprüft hat → „Ja, stell es live.“ → NOVA meldet „ist live“ → Seite prüfen.
+Offen: Abnahme Phase 4 (Kundensuche, Sponsoren, Tagesbetrieb) und die Kunden-Vorlage.
 
 ## Was Joachim liefert (siehe Auftrag, Anhang)
 

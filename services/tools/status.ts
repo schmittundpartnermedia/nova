@@ -23,11 +23,11 @@ const FAEHIGKEITEN = [
   "Kunden-Tagesbetrieb: werktags Kunden suchen, prüfen und nach deiner Morgen-Freigabe automatisch anschreiben",
   "Tagesbericht über alles, was ich an einem Tag gemacht habe",
   "Adressen auf die Sperrliste setzen",
+  "Claude Code Programmier-Aufträge an der Webseite rankpilot.de oder der App geben, das Ergebnis prüfen und nach deinem Ja live stellen",
 ];
 
 const NICHT = [
   "keine Bildschirmsteuerung und keine Klicks in anderen Programmen",
-  "Cursor beauftragen (kommt in Phase 5)",
   "keinen Kalender, keine Dateien außer meinen Listen und Vorlagen",
 ];
 

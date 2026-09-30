@@ -4,6 +4,7 @@ import { KAMPAGNE_TOOLS } from "@/services/tools/kampagne";
 import { KONTAKT_TOOLS } from "@/services/tools/kontakte";
 import { TAGESBETRIEB_TOOLS } from "@/services/tools/tagesbetrieb";
 import { novaStatusTool } from "@/services/tools/status";
+import { CLAUDE_TOOLS } from "@/services/tools/claude";
 import type { NovaToolDefinition, NovaToolResult, ToolContext } from "@/services/tools/types";
 
 const tools = new Map<string, NovaToolDefinition>();
@@ -23,6 +24,7 @@ export function bootstrapTools(): void {
   for (const tool of KAMPAGNE_TOOLS) register(tool);
   for (const tool of KONTAKT_TOOLS) register(tool);
   for (const tool of TAGESBETRIEB_TOOLS) register(tool);
+  for (const tool of CLAUDE_TOOLS) register(tool);
   register(novaStatusTool);
   bootstrapped = true;
 }

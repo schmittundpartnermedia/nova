@@ -15,6 +15,7 @@ import { mailSendWorkHandler } from "@/services/mail/send-work";
 import { postfachWacheWorkHandler } from "@/services/kampagnen/wache-work";
 import { scannerLaufWorkHandler } from "@/services/leads/work";
 import { tagesbetriebSucheWorkHandler, tagesbetriebTickWorkHandler } from "@/services/tagesbetrieb/work";
+import { claudeLaufWorkHandler, claudeLiveWorkHandler } from "@/services/claude/work";
 
 export type WorkHandler = (item: {
   id: string;
@@ -42,6 +43,10 @@ registerWorkHandler("scanner.lauf", scannerLaufWorkHandler);
 registerWorkHandler("tagesbetrieb.tick", tagesbetriebTickWorkHandler);
 
 registerWorkHandler("tagesbetrieb.suche", tagesbetriebSucheWorkHandler);
+
+registerWorkHandler("claude.lauf", claudeLaufWorkHandler);
+
+registerWorkHandler("claude.live", claudeLiveWorkHandler);
 
 export async function tickWorker(workerId: string, now = new Date()) {
   await prisma.$queryRawUnsafe("PRAGMA journal_mode=WAL;");
