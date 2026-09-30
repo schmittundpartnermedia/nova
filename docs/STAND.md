@@ -78,13 +78,18 @@ Nicht geprüft / offen:
 
 ## Dran
 
-**Phase 3 – Kampagne im Hintergrund** (siehe `docs/AUFTRAG.md`). Laut Auftrag in einem neuen Chat. Für die Abnahme braucht es drei Test-Adressen von Joachim.
+**Phase 3 – Kampagne im Hintergrund** (siehe `docs/AUFTRAG.md`). Startet auf Joachims Signal.
+
+Von Joachim geliefert (30.09.2026):
+- Vorlage `~/Nova/vorlagen/sponsoren.md` (nur für Sponsoren; eine Kunden-Vorlage folgt später). Platzhalter: `{{anrede}}` (ganze Anredezeile, z. B. „Guten Tag Herr Wolf“), `{{firma}}`, `{{bereich}}`. Gegenüber seinem Text geändert: Anrede, Firma (an beiden Stellen) und Bereich als Platzhalter, Tippfehler „Nutzermit“ korrigiert, Markdown-Link in der Signatur als reiner Text, Punkt nach der Hausnummer entfernt.
+- Kampagnen-Absender: **immer joachim@rankpilot.de**.
+- Drei Test-Adressen für die Abnahme: lokal in `~/Nova/kampagnen/testadressen.txt` (nicht im Repo).
 
 ## Was Joachim liefert (siehe Auftrag, Anhang)
 
 - Inhalt `firma.md` – diktiert in Phase 1
-- Mail-Vorlagen in `~/Nova/vorlagen/` – Phase 2
-- Drei Test-Adressen – Phase 3
+- Mail-Vorlagen in `~/Nova/vorlagen/` – Sponsoren geliefert (30.09.), Kunden folgt
+- Drei Test-Adressen – geliefert (30.09.), liegen lokal in `~/Nova/kampagnen/testadressen.txt`
 - PTT-Taste – Standard rechte Option-Taste, bis er etwas anderes sagt
 
 ## Offene Punkte, die nicht im Code liegen
