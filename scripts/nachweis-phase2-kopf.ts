@@ -112,7 +112,9 @@ async function main() {
   check(t2.toolsExecuted.some((t) => t.name === "mail_antworten" && t.executed), "Antwort-Entwurf angelegt");
   check(nach2.length === 1 && nach2[0]!.toAddress === "business@revolut.com", "Empfänger aus Originalmail");
   check(nach2[0]!.replyRef === ref1, "Entwurf bezieht sich auf die Revolut-Mail");
-  check(t2.reply.includes(nach2[0]!.body.split("\n")[0]!.trim()), "Entwurf wird vorgelesen (Text in der Antwort)");
+  check(!t2.reply.includes(nach2[0]!.body.trim()), "Entwurf wird nicht wörtlich vorgelesen (liegt als Karte im Chat)");
+  check(/revolut/i.test(t2.reply), "Antwort sagt in eigenen Worten, an wen");
+  check(!/\*\*/.test(t2.reply), "keine Markdown-Formatierung in der gesprochenen Antwort");
   check(versand.length === 0, "nichts gesendet");
 
   const t3 = await sag("Mach es kürzer.");

@@ -77,7 +77,7 @@ export async function postfachWache(input: {
         `ref der Antwort: ${mail.ref}`,
         "Lies die Antwort mit mail_lesen (modus nachricht) und lege mit mail_antworten einen passenden Antwortentwurf von " +
           `${original.fromAddress} an. Nicht senden.`,
-        `Sprich Joachim dann direkt an: „Antwort von ${firma}: <worum es geht, ein Satz>. Mein Vorschlag:“, dann den Entwurf wörtlich, am Ende: „So senden oder ergänzen?“`,
+        `Sag Joachim dann in zwei, drei gesprochenen Sätzen: dass ${firma} geantwortet hat, worum es geht, was du kurz vorschlägst – und frag, ob du so senden oder etwas ergänzen sollst. Den Entwurf nicht wörtlich wiedergeben; er erscheint als Karte im Chat.`,
       ].join("\n"),
       context: { organizationId: input.organizationId, postfach: input.postfach },
     });

@@ -220,6 +220,9 @@ export function NovaShell() {
       setLiveZeilen((current) => current.map((zeile) => (zeile.rolle === "assistant" ? { ...zeile, text, wartet: false } : zeile)));
 
     let accumulated = "";
+    // Gesprochen wird: Sofort-Ansage (falls NOVA nachschauen muss) + Antwort.
+    let ansage = "";
+    const gesprochen = () => (ansage ? `${ansage} ${accumulated}` : accumulated);
     try {
       const response = await fetch("/api/nova/message", {
         method: "POST",
@@ -259,7 +262,12 @@ export function NovaShell() {
         if (type === "delta" && typeof payload.delta === "string") {
           accumulated += payload.delta;
           zeigeAntwort(accumulated);
-          if (voiceEnabled && !interruptedRef.current) ingest(accumulated);
+          if (voiceEnabled && !interruptedRef.current) ingest(gesprochen());
+        }
+        if (type === "ansage" && typeof payload.text === "string") {
+          ansage = payload.text;
+          zeigeAntwort(ansage);
+          if (voiceEnabled && !interruptedRef.current) ingest(`${ansage} `);
         }
         if (type === "done") {
           if (typeof payload.reply === "string" && payload.reply) {
@@ -273,7 +281,7 @@ export function NovaShell() {
             return;
           }
           if (voiceEnabled && accumulated.trim()) {
-            flush(accumulated);
+            flush(gesprochen());
             if (nextState === "WAITING_FOR_APPROVAL") {
               setOrbState("WAITING_FOR_APPROVAL");
             } else if (nextState === "ERROR") {

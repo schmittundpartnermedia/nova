@@ -4,23 +4,24 @@ import { useEffect, useRef } from "react";
 import type { OrbState } from "@/types";
 
 /**
- * NOVAs Orb: WebGL-Shader – fließendes Plasma in einer Kugel mit Leuchtrand, Glanzlicht, Halo und Orbit-Ring.
- * Farbe, Tempo und Energie folgen dem Zustand; beim Zuhören reagiert er auf die Mikrofon-Lautstärke.
+ * NOVAs Orb: WebGL-Shader – fließendes Plasma in einer runden Kugel (schwarz-weiß) mit Leuchtrand, Glanzlicht und engem Schein.
+ * Außerhalb der Kugel ist jeder Pixel durchsichtig, damit keine Zeichenfläche als Kasten sichtbar wird.
+ * Helligkeit, Tempo und Energie folgen dem Zustand; beim Zuhören reagiert er auf die Mikrofon-Lautstärke.
  */
 
 type Rgb = [number, number, number];
 type Look = { a: Rgb; b: Rgb; c: Rgb; speed: number; energy: number };
 
 const LOOKS: Record<OrbState, Look> = {
-  IDLE: { a: [0.36, 0.3, 0.95], b: [0.3, 0.85, 1.0], c: [0.05, 0.03, 0.2], speed: 0.35, energy: 0.06 },
-  LISTENING: { a: [0.2, 0.75, 1.0], b: [0.55, 1.0, 0.9], c: [0.02, 0.08, 0.25], speed: 0.7, energy: 0.18 },
-  THINKING: { a: [0.6, 0.3, 1.0], b: [1.0, 0.4, 0.85], c: [0.08, 0.02, 0.2], speed: 1.25, energy: 0.35 },
-  WORKING: { a: [0.25, 0.55, 1.0], b: [0.62, 0.42, 1.0], c: [0.02, 0.04, 0.18], speed: 1.0, energy: 0.3 },
-  SPEAKING: { a: [1.0, 0.35, 0.65], b: [1.0, 0.78, 0.45], c: [0.2, 0.03, 0.25], speed: 0.9, energy: 0.3 },
-  WAITING_FOR_APPROVAL: { a: [1.0, 0.62, 0.22], b: [1.0, 0.9, 0.6], c: [0.2, 0.08, 0.02], speed: 0.5, energy: 0.16 },
-  WAITING_FOR_REVIEW: { a: [1.0, 0.62, 0.22], b: [1.0, 0.9, 0.6], c: [0.2, 0.08, 0.02], speed: 0.5, energy: 0.16 },
-  DONE: { a: [0.25, 0.95, 0.65], b: [0.7, 1.0, 0.9], c: [0.02, 0.15, 0.1], speed: 0.5, energy: 0.12 },
-  ERROR: { a: [1.0, 0.25, 0.3], b: [1.0, 0.55, 0.45], c: [0.2, 0.02, 0.04], speed: 0.6, energy: 0.16 },
+  IDLE: { a: [0.55, 0.55, 0.57], b: [1.0, 1.0, 1.0], c: [0.04, 0.04, 0.05], speed: 0.35, energy: 0.06 },
+  LISTENING: { a: [0.7, 0.7, 0.72], b: [1.0, 1.0, 1.0], c: [0.06, 0.06, 0.07], speed: 0.7, energy: 0.2 },
+  THINKING: { a: [0.5, 0.5, 0.52], b: [0.95, 0.95, 0.97], c: [0.03, 0.03, 0.04], speed: 1.25, energy: 0.32 },
+  WORKING: { a: [0.6, 0.6, 0.62], b: [1.0, 1.0, 1.0], c: [0.04, 0.04, 0.05], speed: 1.0, energy: 0.28 },
+  SPEAKING: { a: [0.75, 0.75, 0.77], b: [1.0, 1.0, 1.0], c: [0.07, 0.07, 0.08], speed: 0.9, energy: 0.3 },
+  WAITING_FOR_APPROVAL: { a: [0.62, 0.62, 0.64], b: [1.0, 1.0, 1.0], c: [0.05, 0.05, 0.06], speed: 0.5, energy: 0.16 },
+  WAITING_FOR_REVIEW: { a: [0.62, 0.62, 0.64], b: [1.0, 1.0, 1.0], c: [0.05, 0.05, 0.06], speed: 0.5, energy: 0.16 },
+  DONE: { a: [0.65, 0.65, 0.67], b: [1.0, 1.0, 1.0], c: [0.05, 0.05, 0.06], speed: 0.5, energy: 0.12 },
+  ERROR: { a: [0.35, 0.35, 0.36], b: [0.8, 0.8, 0.82], c: [0.02, 0.02, 0.02], speed: 0.6, energy: 0.14 },
 };
 
 const VERTEX = `
@@ -69,16 +70,15 @@ void main() {
   vec2 uv = (gl_FragCoord.xy - 0.5 * uRes) / uRes.y;
   float t = uTime;
   float r = length(uv);
-  float ang = atan(uv.y, uv.x);
 
-  float radius = 0.29 + 0.01 * sin(t * 1.3) + 0.035 * uEnergy;
-  float wobble = (0.010 * sin(ang * 3.0 + t * 1.7) + 0.008 * sin(ang * 5.0 - t * 2.3) + 0.006 * sin(ang * 7.0 + t * 3.1)) * (0.5 + uEnergy * 2.5);
-  float edge = radius + wobble;
+  // Runde Kugel, atmet nur leicht.
+  float edge = 0.34 + 0.008 * sin(t * 1.3) + 0.02 * uEnergy;
   float d = r / edge;
 
-  vec3 haloTint = mix(uA, uB, 0.5 + 0.5 * sin(ang * 1.0 + t * 0.6));
-  float halo = exp(-max(r - edge, 0.0) * 8.0) * (0.28 + 0.6 * uEnergy);
-  vec3 col = haloTint * halo;
+  // Enger Schein direkt an der Kugel; ab 1,35 × Radius exakt nichts.
+  float glow = exp(-max(r - edge, 0.0) * 22.0) * (0.22 + 0.45 * uEnergy);
+  glow *= 1.0 - smoothstep(edge * 1.15, edge * 1.35, r);
+  vec3 col = uB * glow;
 
   if (d < 1.0) {
     float z = sqrt(1.0 - d * d);
@@ -87,22 +87,22 @@ void main() {
     float f1 = fbm(p + vec3(t * 0.22, -t * 0.16, 0.0));
     float f2 = fbm(p * 1.7 + f1 * 1.6 + vec3(-t * 0.27, t * 0.12, t * 0.06));
     vec3 base = mix(uC, uA, smoothstep(-0.35, 0.45, f2));
-    base = mix(base, uB, smoothstep(0.2, 0.85, f1 + f2 * 0.6));
-    float fresnel = pow(1.0 - z, 2.4);
-    vec3 rim = mix(uB, vec3(1.0), 0.35) * fresnel * 1.5;
-    float spec = pow(max(dot(n, normalize(vec3(-0.35, 0.5, 0.8))), 0.0), 32.0) * 0.6;
-    vec3 inner = base * (0.5 + 0.5 * z) + rim + spec;
-    inner += uB * 0.22 * exp(-d * d * 3.0) * (0.5 + uEnergy);
-    col = mix(col, inner, smoothstep(1.0, 0.975, d));
+    base = mix(base, uB, smoothstep(0.25, 0.9, f1 + f2 * 0.6));
+    float fresnel = pow(1.0 - z, 2.6);
+    vec3 rim = uB * fresnel * 1.2;
+    float spec = pow(max(dot(n, normalize(vec3(-0.35, 0.5, 0.8))), 0.0), 36.0) * 0.55;
+    vec3 inner = base * (0.45 + 0.55 * z) + rim + spec;
+    inner += uB * 0.18 * exp(-d * d * 3.0) * (0.5 + uEnergy);
+    float innen = smoothstep(1.0, 0.985, d);
+    float glowAlpha = clamp(max(max(col.r, col.g), col.b), 0.0, 1.0);
+    vec3 glowFarbe = glowAlpha > 0.002 ? col / glowAlpha : vec3(0.0);
+    gl_FragColor = vec4(mix(glowFarbe, inner, innen), mix(glowAlpha, 1.0, innen));
+    return;
   }
 
-  float ring = exp(-pow((r - edge * 1.3) * 70.0, 2.0)) * (0.12 + 0.5 * uEnergy);
-  col += haloTint * ring;
-
-  // Zum Rand der Zeichenfläche hin weich auf null, damit kein Viereck sichtbar wird.
-  col *= smoothstep(0.5, 0.36, r);
   float alpha = clamp(max(max(col.r, col.g), col.b), 0.0, 1.0);
-  gl_FragColor = vec4(col, alpha);
+  // Straight alpha: Farbe unabhängig von der Deckkraft, damit kein Hof entsteht.
+  gl_FragColor = alpha > 0.002 ? vec4(col / alpha, alpha) : vec4(0.0);
 }
 `;
 
@@ -139,7 +139,7 @@ export function Orb({ state, level = null }: { state: OrbState; level?: number |
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
-    const gl = canvas.getContext("webgl", { alpha: true, premultipliedAlpha: true, antialias: true });
+    const gl = canvas.getContext("webgl", { alpha: true, premultipliedAlpha: false, antialias: true });
     if (!gl) return;
 
     const vs = shader(gl, gl.VERTEX_SHADER, VERTEX);

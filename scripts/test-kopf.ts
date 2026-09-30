@@ -71,6 +71,7 @@ test("Werkzeugliste: Gedächtnis (Phase 1), Mail und Vorlagen (Phase 2), Kampagn
       "mail_entwurf",
       "mail_lesen",
       "mail_senden",
+      "nova_status",
       "sperrliste_hinzufuegen",
       "tagesbericht",
       "tagesbetrieb",
@@ -162,6 +163,24 @@ test("Werkzeugprotokoll: Ergebnisse gehen in den Verlauf, lange Texte nicht", as
   assert.ok(inhalt.startsWith("Steht drin."));
   assert.ok(inhalt.includes(result.werkzeugNotiz));
   assert.equal(verlaufsInhalt("Nur Text.", ""), "Nur Text.");
+});
+
+test("Sofort-Ansage: einmal, bevor ein langsames Werkzeug läuft – beim Gedächtnis nicht", async () => {
+  const ansagen: string[] = [];
+  const langsam = scripted([
+    { text: "", toolCalls: [{ callId: "m", name: "kalender_eintragen", arguments: {} }, { callId: "n", name: "mail_lesen", arguments: { modus: "neueste", anzahl: 3, ref: "" } }] },
+    { text: "", toolCalls: [{ callId: "o", name: "mail_lesen", arguments: { modus: "neueste", anzahl: 3, ref: "" } }] },
+    { text: "Drei neue Mails.", toolCalls: [] },
+  ]);
+  await runHeadLoop({ provider: langsam, model: "m", history: [], userRequest: "Welche Mails sind heute gekommen?", context, onAnsage: (text) => ansagen.push(text) });
+  assert.deepEqual(ansagen, ["Moment, ich schaue in deine Mails."]);
+  const schnell = scripted([
+    { text: "", toolCalls: [{ callId: "g", name: "gedaechtnis_lesen", arguments: { datei: "firma" } }] },
+    { text: "Steht drin.", toolCalls: [] },
+  ]);
+  const keine: string[] = [];
+  await runHeadLoop({ provider: schnell, model: "m", history: [], userRequest: "Was weißt du über uns?", context, onAnsage: (text) => keine.push(text) });
+  assert.deepEqual(keine, []);
 });
 
 test("Werkzeugrunden erschöpft: ehrliche Meldung statt „Erledigt“", async () => {

@@ -15,7 +15,8 @@ const postfach = new AppleMailPostfach();
 export type MasterEvent =
   | { type: "status"; orbState: OrbState; statusMessage: string }
   | { type: "provider"; providerMode: ProviderMode; providerId: string; model: string }
-  | { type: "delta"; delta: string };
+  | { type: "delta"; delta: string }
+  | { type: "ansage"; text: string };
 
 export type MasterRunResult = {
   jobId: string;
@@ -91,6 +92,7 @@ export async function runMaster(input: {
       history,
       userRequest: input.userRequest,
       context: { organizationId: input.organizationId, jobId: job.id, postfach },
+      onAnsage: (text) => emit({ type: "ansage", text }),
       onStatus: (statusMessage) => {
         emit({ type: "status", orbState: "WORKING", statusMessage });
       },

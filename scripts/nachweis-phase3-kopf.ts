@@ -139,7 +139,7 @@ async function main() {
   const vorschlag = await holeNeueMeldungen(org.id);
   check(vorschlag.length === 1, "Nutzer wird angesprochen");
   log(`NOVA (Meldung): ${vorschlag[0]!.text}`);
-  check(/Testfirma B/.test(vorschlag[0]!.text) && /senden oder ergänzen/i.test(vorschlag[0]!.text), "Meldung nennt Firma und fragt „senden oder ergänzen?“");
+  check(/Testfirma B|Berg/.test(vorschlag[0]!.text) && /send|ergänz/i.test(vorschlag[0]!.text), "Meldung nennt Firma und fragt, ob senden oder ergänzen");
   check(versand.length === 3, "Wache hat nichts gesendet");
   const meldungZeile = await prisma.conversationMessage.findFirstOrThrow({ where: { id: vorschlag[0]!.id } });
   const notiz = (JSON.parse(meldungZeile.metadata ?? "{}") as { werkzeuge?: string }).werkzeuge;

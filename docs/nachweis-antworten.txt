@@ -1,0 +1,32 @@
+NOVA Nachweis Antwortverhalten – 2026-09-30T19:44:07.761Z – Modell gpt-6-astra, Test-Postfach
+
+Joachim: Was kannst du eigentlich alles?
+Werkzeuge: [{"name":"nova_status","executed":false}]
+NOVA: Ich kann deine Mails lesen und zusammenfassen, Entwürfe schreiben, nach deiner Freigabe senden, lokale Kunden suchen, Kontaktlisten pflegen und Mail-Kampagnen organisieren – außerdem merke ich mir Informationen zu rankpilot, Kunden und Projekten und erstelle Tagesberichte; deinen Bildschirm steuern kann ich nicht.
+
+Gerade laufen keine Kampagnen, der Kunden-Tagesbetrieb ist aus, und eine Sponsoren-Vorlage ist bereits vorhanden.
+
+Für den automatischen Tagesbetrieb fehlen noch die Kunden-Vorlage unter „~/Nova/vorlagen/kunden.md“ und deine Scanner-Dauerfreigabe – die kannst du mir beispielsweise mit „Erteile die Scanner-Dauerfreigabe für höchstens fünf Läufe am Tag“ geben.
+  ✓ Selbstauskunft aus dem echten Zustand geholt
+  ✓ nennt Mails und Kunden/Kampagnen
+  ✓ gesprochene Antwort ohne Listen/Fettdruck
+
+Joachim: Und was brauchst du noch von mir?
+Werkzeuge: [{"name":"nova_status","executed":false}]
+NOVA: Für Mails und einzelne Kundensuchen brauche ich nur deinen konkreten Auftrag; aktuell läuft nichts automatisch. Für den Kunden-Tagesbetrieb fehlen eine Kunden-Mailvorlage als Datei unter „~/Nova/vorlagen/kunden.md“ und deine Scanner-Dauerfreigabe, etwa mit „Erteile die Scanner-Dauerfreigabe für höchstens fünf Läufe am Tag“. Für Sponsoren-Anschreiben ist die Vorlage schon da – dafür brauche ich noch Firma, Ansprechpartner, Mail-Adresse und Leistungsbereich von dir.
+  ✓ sagt, dass die Kunden-Vorlage fehlt
+  ✓ sagt, dass die Scanner-Freigabe fehlt
+  ✓ gesprochene Antwort ohne Listen/Fettdruck
+
+Joachim: Check meine Mails.
+Werkzeuge: [{"name":"mail_lesen","executed":false}]
+NOVA: Im Posteingang liegt eine ungelesene Mail von Revolut Business: Für dein Geschäftskonto benötigen sie noch einen aktuellen Handelsregisterauszug. Soll ich eine Antwort vorbereiten?
+
+Joachim: Antworte Revolut, dass der Auszug diese Woche kommt.
+Werkzeuge: [{"name":"mail_antworten","executed":true}]
+NOVA: Ich habe die Antwort vorbereitet, dass du den Handelsregisterauszug noch diese Woche nachreichst. Soll ich den Entwurf senden?
+  ✓ Entwurf angelegt
+  ✓ Entwurf nicht wörtlich vorgelesen
+  ✓ kurze, gesprochene Antwort
+
+ERGEBNIS: Nachweis Antwortverhalten bestanden (echte API, Test-Postfach).
