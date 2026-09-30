@@ -74,24 +74,11 @@ Nicht geprüft / offen:
 - `mail_accounts`-Zeilen in der DB werden nicht mehr gelesen (Konten kommen live aus Apple Mail).
 - Phase 1 ist weiterhin nicht abgenommen.
 
+**30.09.2026 – Abnahme:** Joachim hat Phase 1 und Phase 2 in NOVA.app abgenommen („Phase 1 … funktioniert", „Phase 2 funktioniert vollständig"). Damit sind beide Phasen fertig.
+
 ## Dran
 
-**Abnahme durch Joachim in NOVA.app – Phase 1 und Phase 2.** `macos/build/NOVA.app` öffnen, Taste halten (rechte Option), sprechen.
-
-Phase 1:
-1. „Merk dir: unsere Firma ist rankpilot, wir machen Lokal-SEO, wir suchen Sponsoren aus dem Handwerk in Baden-Württemberg."
-2. „Was für Sponsoren passen zu uns?"
-3. „Und warum die?"
-4. App beenden, neu starten, „Was suchen wir nochmal?"
-
-Phase 2 (Joachim startet den Mail-Test selbst; Apple Mail muss laufen, beim ersten Mal fragt macOS nach der Automations-Freigabe):
-1. „Check meine Mails."
-2. „Antworte auf die von X: wir melden uns nächste Woche."
-3. „Mach es kürzer."
-4. „Senden." → NOVA fragt einmal nach („An …, Betreff … – senden?") → „Ja." → Mail liegt in Apple Mail unter „Gesendet".
-   Optional vorher: „Du darfst ab jetzt Mails senden, wenn ich ‚senden‘ sage." → dann geht „Senden." ohne Rückfrage raus.
-
-Phase 3 beginnt erst nach Bestätigung beider Abnahmen.
+**Phase 3 – Kampagne im Hintergrund** (siehe `docs/AUFTRAG.md`). Laut Auftrag in einem neuen Chat. Für die Abnahme braucht es drei Test-Adressen von Joachim.
 
 ## Was Joachim liefert (siehe Auftrag, Anhang)
 
