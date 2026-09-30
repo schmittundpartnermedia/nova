@@ -6,6 +6,7 @@ import {
   isStandingActionType,
   mailsSentToday,
   policyMaxPerDay,
+  scannerRunsToday,
 } from "@/services/approvals";
 
 /**
@@ -61,6 +62,7 @@ function recipientDomainAllowed(policy: { conditions: string }, recipientDomain?
 
 async function executedToday(organizationId: string, actionType: string): Promise<number> {
   if (actionType === "mail.send") return mailsSentToday(organizationId);
+  if (actionType === "scanner.start") return scannerRunsToday(organizationId);
   return 0;
 }
 

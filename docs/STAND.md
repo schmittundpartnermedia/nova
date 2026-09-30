@@ -102,9 +102,27 @@ Nicht geprüft / offen:
 **30.09.2026, 10:22 – Abnahme Phase 3:** Joachim hat Phase 3 in NOVA.app abgenommen: Testkampagne an 3 Adressen raus, Antwort erkannt, Vorschlag ergänzt, „senden“ → Antwort mit Signatur in Gmail angekommen.
 Bekannte Grenze: Die Postfach-Wache ordnet eine Antwort über den Absender zu, nicht über den Mail-Verlauf. Bei der Abnahme hatte Joachim auf die frühere Einzel-Testmail („[NOVA-Test] … Zurich“) geantwortet; erkannt wurde sie, weil der Absender auch Kampagnen-Empfänger war.
 
+**30.09.2026 – Phase 4 gebaut nach Joachims Entscheidung (Claude Code), Abnahme steht aus.**
+
+Entscheidung Joachim: Lead-Scanner sucht **nur Kunden** (lokale Betriebe) und soll E-Mail-Adressen mit ausziehen (tut er bereits aus dem Impressum). **Sponsoren sucht Joachim selbst** und gibt NOVA Firma, Ansprechpartner, Adresse; NOVA schreibt sie personalisiert mit der Vorlage an. Damit weicht Phase 4 bewusst vom Auftrag ab („Such mir 30 Sponsoren“ über den Scraper entfällt).
+
+Was jetzt real im Code steht:
+- `kunden_suchen`: Freigabe pro Suche (mit geschätzten Kosten) oder Dauerfreigabe `scanner.start` (`freigabe_scanner_dauer`, Tageslimit zählt Läufe). Lauf als Worker-Job `scanner.lauf` über die Kommandozeile des Lead-Scanners; Ergebnis → `Company`/`Contact` (ohne Doppelte) und Kontaktliste `kunden-<branche>-<ort>-<datum>` mit Anrede („Guten Tag <Name>“ bzw. „Sehr geehrtes <Firma>-Team“), Telefon, Befunden, Aufhänger; Meldung mit Zahlen und größtem Handlungsbedarf. Kein Versand an Kunden – dafür fehlt noch die Kunden-Vorlage.
+- `kontakt_hinzufuegen` / `kontaktliste_anzeigen`: Sponsoren auf Zuruf in eine Liste (Standard „sponsoren“) mit Anrede „Sehr geehrter Herr … / Sehr geehrte Frau … / Sehr geehrtes …-Team“; doppelte Adressen werden nicht erneut eingetragen. Versand danach einzeln (Vorlage + Entwurf) oder als Kampagne wie in Phase 3.
+- Websuche (`web.suchen` im Auftrag) ist **nicht** gebaut – entfällt mit Joachims Entscheidung, Sponsoren selbst zu suchen.
+
+Nachweise:
+- `tsc`, `eslint`, `next build`, `macos:build` grün. `test:kopf` 9/9, `test:mail` 15/15, `test:kampagne` 9/9, `test:kunden` 8/8.
+- `npm run nachweis:phase4` → `docs/nachweis-phase4-scanner.txt`: echter Lead-Scanner mit seiner Beispieldatei (ohne Google-API, ohne Website-Abruf) über NOVA gestartet und eingelesen; erzeugte Scanner-CSV danach entfernt.
+
+Nicht geprüft: echte Google-Places-Suche mit Impressum-Auslese (kostet API), Lauf im echten Worker, Sponsoren per Sprache in NOVA.app.
+
 ## Dran
 
-**Phase 4 – Scraper** (siehe `docs/AUFTRAG.md`). Untersuchung des Lead-Scanners liegt in `docs/SCRAPER.md` (30.09.). Ergebnis: Das Tool findet lokale Betriebe (potenzielle Kunden) für Telefon-/Post-Akquise und schließt E-Mail-Versand ausdrücklich aus – passt nicht direkt zu „Sponsoren suchen und anschreiben“. **Wartet auf Joachims Entscheidung**, bevor gebaut wird. Außerdem offen: rechtlicher Rahmen für Werbe-Mails.
+**Abnahme Phase 4 durch Joachim in NOVA.app:**
+1. „Such mir 10 Schreinereien in Pforzheim.“ → NOVA nennt Kosten und fragt → „Ja.“ → nach einigen Minuten Meldung mit Anzahl, E-Mails, Ansprechpartnern; Liste in `~/Nova/kampagnen/`.
+2. „Nimm als Sponsor auf: Zurich, Herr Thomas Wolf, thomas.wolf@zurich.com, Bereich Unternehmens- und Gewerbeversicherungen.“ (mit einer eigenen Test-Adresse) → Eintrag in Liste „sponsoren“.
+3. „Schreib die Sponsoren an.“ → Zusammenfassung → „Ja“ → Mail mit „Sehr geehrter Herr Wolf“ in „Gesendet“.
 
 ## Was Joachim liefert (siehe Auftrag, Anhang)
 

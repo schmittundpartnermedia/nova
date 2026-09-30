@@ -74,3 +74,43 @@ export function leseKontaktliste(name: string): KontaktZeile[] {
   }
   return parseKontaktliste(fs.readFileSync(file, "utf8"));
 }
+
+function csvFeld(value: string): string {
+  const text = String(value ?? "").replace(/\r?\n/g, " ").trim();
+  return /[;"]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
+}
+
+function listenPfad(name: string): string {
+  const clean = name.trim().replace(/\.csv$/i, "").replace(/[^a-zA-Z0-9äöüÄÖÜß_-]+/g, "-").replace(/^-+|-+$/g, "");
+  if (!clean) throw new Error("Name der Kontaktliste fehlt.");
+  return path.join(kampagnenDir(), `${clean}.csv`);
+}
+
+/** Schreibt eine Kontaktliste neu (Trenner „;“). Gibt den Listennamen zurück. */
+export function schreibeKontaktliste(name: string, spalten: string[], zeilen: Array<Record<string, string>>): string {
+  fs.mkdirSync(kampagnenDir(), { recursive: true });
+  const file = listenPfad(name);
+  const text = [spalten.join(";"), ...zeilen.map((werte) => spalten.map((spalte) => csvFeld(werte[spalte] ?? "")).join(";"))].join("\n");
+  fs.writeFileSync(file, `${text}\n`, "utf8");
+  return path.basename(file, ".csv");
+}
+
+/**
+ * Hängt einen Kontakt an eine Liste an (legt sie an, wenn es sie nicht gibt). Neue Spalten werden ergänzt.
+ * Eine Adresse, die schon in der Liste steht, wird nicht doppelt aufgenommen.
+ */
+export function haengeKontaktAn(name: string, werte: Record<string, string>): { liste: string; neu: boolean; anzahl: number } {
+  const file = listenPfad(name);
+  const liste = path.basename(file, ".csv");
+  const bestehend = fs.existsSync(file) ? parseKontaktliste(fs.readFileSync(file, "utf8")) : [];
+  const email = (werte.email ?? "").trim().toLowerCase();
+  if (email && bestehend.some((zeile) => (zeile.werte.email ?? "").trim().toLowerCase() === email)) {
+    return { liste, neu: false, anzahl: bestehend.length };
+  }
+  const spalten: string[] = [];
+  for (const zeile of [...bestehend.map((item) => item.werte), werte]) {
+    for (const key of Object.keys(zeile)) if (!spalten.includes(key)) spalten.push(key);
+  }
+  schreibeKontaktliste(liste, spalten, [...bestehend.map((item) => item.werte), werte]);
+  return { liste, neu: true, anzahl: bestehend.length + 1 };
+}

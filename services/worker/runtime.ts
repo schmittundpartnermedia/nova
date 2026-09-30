@@ -13,6 +13,7 @@ import {
 import { pauseAbandonedJobs } from "@/services/jobs/recover";
 import { mailSendWorkHandler } from "@/services/mail/send-work";
 import { postfachWacheWorkHandler } from "@/services/kampagnen/wache-work";
+import { scannerLaufWorkHandler } from "@/services/leads/work";
 
 export type WorkHandler = (item: {
   id: string;
@@ -34,6 +35,8 @@ registerWorkHandler("system.ping", async () => ({ ok: true, note: "pong" }));
 registerWorkHandler("mail.send", mailSendWorkHandler);
 
 registerWorkHandler("postfach.wache", postfachWacheWorkHandler);
+
+registerWorkHandler("scanner.lauf", scannerLaufWorkHandler);
 
 export async function tickWorker(workerId: string, now = new Date()) {
   await prisma.$queryRawUnsafe("PRAGMA journal_mode=WAL;");

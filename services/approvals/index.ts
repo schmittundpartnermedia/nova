@@ -3,7 +3,7 @@ import { assertOrganizationId } from "@/services/tenant";
 import type { ApprovalStatus } from "@/types";
 
 /** Aktionen, für die der Nutzer eine Dauerfreigabe erteilen kann. */
-export const STANDING_ACTION_TYPES = ["mail.send"] as const;
+export const STANDING_ACTION_TYPES = ["mail.send", "scanner.start"] as const;
 
 export type StandingActionType = (typeof STANDING_ACTION_TYPES)[number];
 
@@ -76,6 +76,14 @@ export async function mailsSentToday(organizationId: string): Promise<number> {
   assertOrganizationId(organizationId);
   return prisma.communication.count({
     where: { organizationId, channel: "email", status: "sent", sentAt: { gte: startOfToday() } },
+  });
+}
+
+/** Heute gestartete Läufe des Lead-Scanners. */
+export async function scannerRunsToday(organizationId: string): Promise<number> {
+  assertOrganizationId(organizationId);
+  return prisma.workItem.count({
+    where: { organizationId, kind: "scanner.lauf", status: { not: "cancelled" }, createdAt: { gte: startOfToday() } },
   });
 }
 

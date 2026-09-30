@@ -1,0 +1,12 @@
+NOVA Phase-4-Nachweis Lead-Scanner – 2026-09-30T08:36:39.830Z
+Scanner: /Volumes/ELEVUM/Projekte/joachim/lead-scanner (Beispieldatei fixtures/places_sample.json, --skip-audit, keine API-Kosten)
+Scanner-CSV: /Volumes/ELEVUM/Projekte/joachim/lead-scanner/output/leads_nachweis-schreinerei_nachweisort_2026-09-30.csv
+Liste: kunden-nachweis-schreinerei-nachweisort-2026-09-30 – 3 Betriebe, 0 mit E-Mail, 0 mit Ansprechpartner
+  Schreinerei Weber | Sehr geehrtes Schreinerei Weber-Team | (keine E-Mail) | 07231 123456
+  Holzdesign Müller | Sehr geehrtes Holzdesign Müller-Team | (keine E-Mail) | 
+  Tischlerei Sonnenschein GmbH | Sehr geehrtes Tischlerei Sonnenschein GmbH-Team | (keine E-Mail) | 07231 987654
+Firmen in DB: 3, Kontakte: 0
+Meldung: Kundensuche „Nachweis Schreinerei in Nachweisort“ ist fertig: 3 Betriebe, 0 mit E-Mail, 0 mit Ansprechpartner. Liste „kunden-nachweis-schreinerei-nachweisort-2026-09-30“ liegt in ~/Nova/kampagnen/. Größter Handlungsbedarf: Schreinerei Weber, Holzdesign Müller, Tischlerei Sonnenschein GmbH.
+
+ERGEBNIS: Aufruf des echten Lead-Scanners und Einlesen in NOVA funktionieren (Beispieldaten, ohne Google-API).
+Nicht geprüft: echte Google-Places-Suche und Impressum-Auslese – das prüft Joachim in NOVA.app.
