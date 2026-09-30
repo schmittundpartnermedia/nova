@@ -19,6 +19,8 @@ export type Entwurf = {
   text: string;
   antwortAuf: string | null;
   status: string;
+  kampagneId: string | null;
+  empfaengerName: string | null;
 };
 
 function toEntwurf(row: {
@@ -29,6 +31,8 @@ function toEntwurf(row: {
   body: string;
   replyRef: string | null;
   status: string;
+  campaignId: string | null;
+  recipientName: string | null;
 }): Entwurf {
   return {
     id: row.id,
@@ -38,6 +42,8 @@ function toEntwurf(row: {
     text: row.body,
     antwortAuf: row.replyRef,
     status: row.status,
+    kampagneId: row.campaignId,
+    empfaengerName: row.recipientName,
   };
 }
 
@@ -49,6 +55,8 @@ export async function erstelleEntwurf(input: {
   text: string;
   antwortAuf?: string;
   ersetzt?: string;
+  kampagneId?: string;
+  empfaengerName?: string;
 }): Promise<Entwurf> {
   assertOrganizationId(input.organizationId);
   const absender = input.absender.trim().toLowerCase();
@@ -80,6 +88,8 @@ export async function erstelleEntwurf(input: {
       fromAddress: absender,
       toAddress: an,
       replyRef: input.antwortAuf ?? null,
+      campaignId: input.kampagneId ?? null,
+      recipientName: input.empfaengerName ?? null,
     },
   });
   return toEntwurf(row);
@@ -115,8 +125,30 @@ export async function sendeEntwurf(input: {
   if (entwurf.status !== "draft") {
     return { status: "fehlgeschlagen", executed: false, grund: "Dieser Entwurf ist durch einen neueren ersetzt." };
   }
+  const zeile = await prisma.communication.findUniqueOrThrow({ where: { id: entwurf.id } });
+  if (zeile.deliveryStatus === "SENDING") {
+    // Ein früherer Versuch wurde mitten im Versand unterbrochen: nicht blind noch einmal senden.
+    await prisma.communication.update({ where: { id: entwurf.id }, data: { deliveryStatus: "FAILED" } });
+    return {
+      status: "fehlgeschlagen",
+      executed: false,
+      grund: "Ein früherer Versandversuch wurde unterbrochen; ob die Mail raus ist, bitte im Ordner Gesendet prüfen.",
+    };
+  }
 
-  if (input.freigabeId) {
+  let actionType = "mail.send";
+  let approvalToken = input.freigabeId;
+  if (entwurf.kampagneId) {
+    // Kampagnen-Mails laufen nur über die eine Freigabe der Kampagne.
+    const kampagne = await prisma.campaign.findFirst({
+      where: { id: entwurf.kampagneId, organizationId: input.organizationId },
+    });
+    if (!kampagne || kampagne.status !== "laeuft" || !kampagne.approvalId) {
+      return { status: "fehlgeschlagen", executed: false, grund: "Die Kampagne läuft nicht (nicht freigegeben oder abgebrochen)." };
+    }
+    actionType = "mail.campaign";
+    approvalToken = kampagne.approvalId;
+  } else if (input.freigabeId) {
     const pending = await prisma.approvalRequest.findFirst({
       where: { id: input.freigabeId, organizationId: input.organizationId, actionType: "mail.send", status: "pending" },
     });
@@ -129,14 +161,17 @@ export async function sendeEntwurf(input: {
 
   const auth = await authorizeExternalAction({
     organizationId: input.organizationId,
-    actionType: "mail.send",
+    actionType,
     description: `Mail von ${entwurf.absender} an ${entwurf.an}: ${entwurf.betreff}`,
     payload: { entwurfId: entwurf.id },
-    approvalToken: input.freigabeId,
+    approvalToken,
     riskLevel: "external",
     jobId: input.jobId,
     conditions: { recipientDomain: entwurf.an },
   });
+  if (auth.decision === "need_approval" && entwurf.kampagneId) {
+    return { status: "fehlgeschlagen", executed: false, grund: "Die Freigabe der Kampagne fehlt." };
+  }
   if (auth.decision === "need_approval") {
     await prisma.communication.update({ where: { id: entwurf.id }, data: { deliveryStatus: "WAITING_FOR_APPROVAL" } });
     return { status: "freigabe_noetig", executed: false, freigabeId: auth.approvalId, grund: auth.reason };

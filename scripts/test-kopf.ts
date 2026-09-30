@@ -52,13 +52,17 @@ function test(name: string, fn: () => Promise<void>) {
   tests.push([name, fn]);
 }
 
-test("Werkzeugliste: Gedächtnis (Phase 1), Mail und Vorlagen (Phase 2) – nichts sonst", async () => {
+test("Werkzeugliste: Gedächtnis (Phase 1), Mail und Vorlagen (Phase 2), Kampagnen (Phase 3) – nichts sonst", async () => {
   assert.deepEqual(
     listTools().map((t) => t.name).sort(),
     [
       "freigabe_mail_dauer",
       "gedaechtnis_lesen",
       "gedaechtnis_schreiben",
+      "kampagne_abbrechen",
+      "kampagne_planen",
+      "kampagne_starten",
+      "kampagne_status",
       "mail_antworten",
       "mail_entwurf",
       "mail_lesen",

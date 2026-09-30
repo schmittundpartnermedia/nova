@@ -18,7 +18,9 @@
     "nachweis:phase1": "tsx scripts/nachweis-phase1-kopf.ts",
     "test:kopf": "tsx scripts/test-kopf.ts",
     "test:mail": "tsx scripts/test-mail.ts",
-    "nachweis:phase2": "tsx scripts/nachweis-phase2-kopf.ts"
+    "nachweis:phase2": "tsx scripts/nachweis-phase2-kopf.ts",
+    "test:kampagne": "tsx scripts/test-kampagne.ts",
+    "nachweis:phase3": "tsx scripts/nachweis-phase3-kopf.ts"
   },
   "dependencies": {
     "@prisma/client": "^6.16.3",

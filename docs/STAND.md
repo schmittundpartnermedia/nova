@@ -76,15 +76,34 @@ Nicht geprüft / offen:
 
 **30.09.2026 – Abnahme:** Joachim hat Phase 1 und Phase 2 in NOVA.app abgenommen („Phase 1 … funktioniert", „Phase 2 funktioniert vollständig"). Damit sind beide Phasen fertig.
 
+**30.09.2026 – Phase 3 gebaut (Claude Code), Abnahme durch Joachim steht aus.**
+
+Was jetzt real im Code steht:
+- Werkzeuge `kampagne_planen` (legt Entwürfe + eine Freigabe an, sendet nichts), `kampagne_starten` (nur mit der Freigabe dieser Kampagne), `kampagne_status`, `kampagne_abbrechen`.
+- Neues Modell `Campaign` (Migration `20260930120000_kampagnen`), Entwürfe tragen `campaign_id` und `recipient_name`. Kontaktlisten: `~/Nova/kampagnen/*.csv` (`lib/mail/kontaktlisten.ts`); ungültige Adressen, doppelte Adressen und fehlende Platzhalterwerte werden mit Grund aussortiert.
+- `scheduleMailSendBatch` ist angeschlossen: eine Mail pro Work-Item mit `runAt` im Abstand. Kampagnen-Mails gehen nur, solange die Kampagne läuft und ihre Freigabe erteilt ist. Kein automatischer zweiter Versuch; ein unterbrochener Versand (`SENDING`) wird nicht blind wiederholt.
+- Nach der letzten Mail: Meldung ins Gespräch („Alle N Mails sind raus …“, mit Fehlschlägen und ungültigen Adressen). Oberfläche fragt alle 15 s `/api/nova/status`, zeigt und spricht neue Meldungen einmal, Statuszeile „arbeite: Kampagne x/y“.
+- Postfach-Wache (`postfach.wache`, alle 5 Min., solange Kampagnen-Mails der letzten 14 Tage existieren): neue Mail von einem Kampagnen-Empfänger → Kopf legt Antwortentwurf an → Meldung „Antwort von …, mein Vorschlag … – so senden oder ergänzen?“. Die Wache sendet nie.
+- Neustart: Der Worker meldet beim Start laufende Kampagnen (höchstens einmal in 10 Minuten); geplante Work-Items liegen in der DB und laufen weiter.
+- Gedächtnis `firma.md` ergänzt: Kampagnen immer von joachim@rankpilot.de, Listen in `~/Nova/kampagnen/`.
+- Listen von Joachim: `sponsoren-2026-09.csv` (28 Firmen aus seinen drei Listen; Pennylane und Edenred ohne Mail-Adresse ausgelassen; Auffälligkeiten in Spalte `hinweis`) und `test.csv` (seine drei Test-Adressen) – beide nur lokal.
+
+Nachweise:
+- `tsc`, `eslint`, `next build`, `macos:build` grün. `test:kopf` 9/9, `test:mail` 15/15, `test:kampagne` 9/9. Der Kampagnen-Test hat einen echten Fehler gefunden (Abbruch ließ ein geplantes Work-Item stehen) – im Code behoben. Gegenprobe: Freigabe-Prüfung für Kampagnen-Mails entfernt → Test schlägt fehl.
+- `npm run nachweis:phase3` → `docs/nachweis-phase3-kopf.txt`: gegen die echte API bestanden – planen, Zusammenfassung, „Ja“, 3 personalisierte Mails, Abschlussmeldung, Stand, Antwort erkannt, Vorschlag, „Ergänze …“, „Senden“, „Ja“. **Mit Test-Postfach; Worker-Handler direkt aufgerufen.**
+
+Nicht geprüft / offen:
+- Nichts davon lief gegen Apple Mail oder im echten Hintergrund-Läufer mit Wartezeiten; Neustart der App mit laufender Kampagne nicht ausprobiert.
+- Eine Antwort wird nur erkannt, wenn sie unter den 15 neuesten Mails im gemeinsamen Posteingang ist und vom angeschriebenen Absender kommt.
+- Rechtlicher Rahmen für Werbe-Mails an die echten Sponsoren-Firmen ist ungeklärt (siehe unten) – vor dem Versand der Liste `sponsoren-2026-09` klären.
+
 ## Dran
 
-**Phase 3 – Kampagne im Hintergrund** (siehe `docs/AUFTRAG.md`). Startet auf Joachims Signal.
-
-Von Joachim geliefert (30.09.2026):
-- Vorlage `~/Nova/vorlagen/sponsoren.md` (nur für Sponsoren; eine Kunden-Vorlage folgt später). Platzhalter: `{{anrede}}` (ganze Anredezeile, z. B. „Guten Tag Herr Wolf“), `{{firma}}`, `{{bereich}}`. Gegenüber seinem Text geändert: Anrede, Firma (an beiden Stellen) und Bereich als Platzhalter, Tippfehler „Nutzermit“ korrigiert, Markdown-Link in der Signatur als reiner Text, Punkt nach der Hausnummer entfernt.
-- Kampagnen-Absender: **immer joachim@rankpilot.de**.
-- Betreff der Sponsoren-Vorlage endet auf „… mit {{firma}}“. Signaturblock aus der Vorlage entfernt: Stattdessen setzt NOVA die Apple-Mail-Signatur „rankpilot Joachim“ für joachim@rankpilot.de (`~/Nova/signaturen.txt`, `lib/mail/signaturen.ts`). Der Kopf weiß, dass bei diesem Absender Gruß und Name aus der Signatur kommen. Live geprüft (30.09., mit Joachims Freigabe): Testmail von joachim@rankpilot.de an schmittundpartnermedia@gmail.com, im Ordner Gesendet bestätigt; der Inhalt der gesendeten Mail enthält die Signatur. Die optische Darstellung (Logo, Farben) prüft Joachim im Empfangspostfach. Zwischen Text und Signatur setzt Apple Mail mehrere Leerzeilen.
-- Drei Test-Adressen für die Abnahme: lokal in `~/Nova/kampagnen/testadressen.txt` (nicht im Repo).
+**Abnahme Phase 3 durch Joachim in NOVA.app.** App öffnen, Taste halten:
+1. „Schreib die Liste test mit der Sponsoren-Vorlage an, eine Mail pro Minute.“ → NOVA fasst zusammen und fragt → „Ja.“
+2. Warten (ca. 3 Minuten; Statuszeile zeigt „arbeite: Kampagne x/3“) → NOVA meldet „Alle 3 Mails sind raus“. Alle 3 liegen in Apple Mail unter „Gesendet“.
+3. Von einer der drei Adressen auf die Kampagnen-Mail antworten → spätestens nach etwa 5 Minuten legt NOVA einen Entwurf vor.
+4. Entwurf ergänzen („Ergänze …“) → „Senden“ → „Ja“ → Antwort liegt unter „Gesendet“.
 
 ## Was Joachim liefert (siehe Auftrag, Anhang)
 

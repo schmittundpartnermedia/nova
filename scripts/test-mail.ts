@@ -63,7 +63,7 @@ async function main() {
 
   const { prisma } = await import("@/lib/prisma");
   const { executeTool } = await import("@/services/tools/registry");
-  const { mailSendWorkHandler } = await import("@/services/mail/send-work");
+  const { mailSendHandler } = await import("@/services/mail/send-work");
   const { encodeMailRef } = await import("@/services/mail/postfach");
 
   const org = await prisma.organization.create({ data: { name: "Test", slug: `test-${Date.now()}` } });
@@ -97,6 +97,7 @@ async function main() {
     },
   };
   const box = testPostfach(original);
+  const mailSendWorkHandler = mailSendHandler(box.postfach);
   const ctx = { organizationId: org.id, postfach: box.postfach };
   const run = (name: string, args: Record<string, unknown>) => executeTool(name, args, ctx);
   const entwurf = (args: Partial<Record<string, string>> = {}) =>

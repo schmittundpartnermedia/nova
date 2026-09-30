@@ -14,54 +14,55 @@ model Organization {
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
-  members           OrganizationMember[]
-  projects          Project[]
-  companies         Company[]
-  contacts          Contact[]
-  tasks             Task[]
-  jobs              Job[]
-  jobSteps          JobStep[]
-  activities        Activity[]
-  memoryEntries     MemoryEntry[]
-  memoryRelations   MemoryRelation[]
-  meetings          Meeting[]
-  memos             Memo[]
-  documents         Document[]
-  communications    Communication[]
-  approvalRequests  ApprovalRequest[]
-  approvalPolicies  ApprovalPolicy[]
-  conversations     Conversation[]
-  conversationMsgs  ConversationMessage[]
-  sources           Source[]
-  connectorConfigs  ConnectorConfig[]
-  aiProviderConfigs AiProviderConfig[]
-  computerJobs      ComputerJob[]
-  computerActions   ComputerAction[]
-  projectContexts   ProjectContext[]
-  cursorSessions    CursorSession[]
-  knowledgeSources  KnowledgeSource[]
-  knowledgeDocuments KnowledgeParsedDocument[]
-  knowledgeItems    KnowledgeItem[]
-  knowledgeEmbeddings KnowledgeEmbedding[]
-  knowledgeImports  KnowledgeImport[]
+  members                 OrganizationMember[]
+  projects                Project[]
+  companies               Company[]
+  contacts                Contact[]
+  tasks                   Task[]
+  jobs                    Job[]
+  campaigns               Campaign[]
+  jobSteps                JobStep[]
+  activities              Activity[]
+  memoryEntries           MemoryEntry[]
+  memoryRelations         MemoryRelation[]
+  meetings                Meeting[]
+  memos                   Memo[]
+  documents               Document[]
+  communications          Communication[]
+  approvalRequests        ApprovalRequest[]
+  approvalPolicies        ApprovalPolicy[]
+  conversations           Conversation[]
+  conversationMsgs        ConversationMessage[]
+  sources                 Source[]
+  connectorConfigs        ConnectorConfig[]
+  aiProviderConfigs       AiProviderConfig[]
+  computerJobs            ComputerJob[]
+  computerActions         ComputerAction[]
+  projectContexts         ProjectContext[]
+  cursorSessions          CursorSession[]
+  knowledgeSources        KnowledgeSource[]
+  knowledgeDocuments      KnowledgeParsedDocument[]
+  knowledgeItems          KnowledgeItem[]
+  knowledgeEmbeddings     KnowledgeEmbedding[]
+  knowledgeImports        KnowledgeImport[]
   knowledgeContradictions KnowledgeContradiction[]
-  retrievalChunks   RetrievalChunk[]
-  retrievalEmbeddings RetrievalEmbedding[]
-  embeddingUsages   EmbeddingUsage[]
-  mailAccounts      MailAccount[]
-  mailThreads       MailThread[]
-  mailMessages      MailMessage[]
-  mailAttachments   MailAttachment[]
-  mailFollowUps     MailFollowUp[]
-  mailAuditEvents   MailAuditEvent[]
-  workspaceEntries  WorkspaceEntry[]
-  artifacts         Artifact[]
-  reviewSessions    ReviewSession[]
-  workItems         WorkItem[]
-  workEffects       WorkEffect[]
-  developmentOrders DevelopmentOrder[]
-  activeWorks       ActiveWork[]
-  mailTemplates     MailTemplate[]
+  retrievalChunks         RetrievalChunk[]
+  retrievalEmbeddings     RetrievalEmbedding[]
+  embeddingUsages         EmbeddingUsage[]
+  mailAccounts            MailAccount[]
+  mailThreads             MailThread[]
+  mailMessages            MailMessage[]
+  mailAttachments         MailAttachment[]
+  mailFollowUps           MailFollowUp[]
+  mailAuditEvents         MailAuditEvent[]
+  workspaceEntries        WorkspaceEntry[]
+  artifacts               Artifact[]
+  reviewSessions          ReviewSession[]
+  workItems               WorkItem[]
+  workEffects             WorkEffect[]
+  developmentOrders       DevelopmentOrder[]
+  activeWorks             ActiveWork[]
+  mailTemplates           MailTemplate[]
 
   @@map("organizations")
 }
@@ -103,18 +104,18 @@ model Project {
   createdAt      DateTime @default(now()) @map("created_at")
   updatedAt      DateTime @updatedAt @map("updated_at")
 
-  organization   Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  companies      Company[]
-  contacts       Contact[]
-  tasks          Task[]
-  jobs           Job[]
-  activities     Activity[]
-  meetings       Meeting[]
-  memos          Memo[]
-  documents      Document[]
-  communications Communication[]
-  memoryEntries  MemoryEntry[]
-  conversations  Conversation[]
+  organization     Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  companies        Company[]
+  contacts         Contact[]
+  tasks            Task[]
+  jobs             Job[]
+  activities       Activity[]
+  meetings         Meeting[]
+  memos            Memo[]
+  documents        Document[]
+  communications   Communication[]
+  memoryEntries    MemoryEntry[]
+  conversations    Conversation[]
   context          ProjectContext?
   cursorSessions   CursorSession[]
   knowledgeSources KnowledgeSource[]
@@ -215,31 +216,31 @@ model Job {
   projectId      String?   @map("project_id")
   userRequest    String    @map("user_request")
   goal           String
-  status          String    @default("pending")
-  resumeState     String?   @map("resume_state")
-  scheduledAt     DateTime? @map("scheduled_at")
-  pauseReason     String?   @map("pause_reason")
-  attemptCount    Int       @default(0) @map("attempt_count")
-  idempotencyKey  String?   @map("idempotency_key")
-  createdAt       DateTime  @default(now()) @map("created_at")
-  startedAt       DateTime? @map("started_at")
-  completedAt     DateTime? @map("completed_at")
+  status         String    @default("pending")
+  resumeState    String?   @map("resume_state")
+  scheduledAt    DateTime? @map("scheduled_at")
+  pauseReason    String?   @map("pause_reason")
+  attemptCount   Int       @default(0) @map("attempt_count")
+  idempotencyKey String?   @map("idempotency_key")
+  createdAt      DateTime  @default(now()) @map("created_at")
+  startedAt      DateTime? @map("started_at")
+  completedAt    DateTime? @map("completed_at")
 
-  organization     Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  project          Project?          @relation(fields: [projectId], references: [id], onDelete: SetNull)
-  steps            JobStep[]
-  approvalRequests ApprovalRequest[]
-  activities       Activity[]
-  conversations    Conversation[]
-  computerJobs     ComputerJob[]
-  computerActions  ComputerAction[]
-  cursorSessions   CursorSession[]
-  sources          Source[]
-  knowledgeImports KnowledgeImport[]
-  knowledgeSources KnowledgeSource[]
-  artifacts        Artifact[]
-  reviewSessions   ReviewSession[]
-  workItems        WorkItem[]
+  organization      Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  project           Project?           @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  steps             JobStep[]
+  approvalRequests  ApprovalRequest[]
+  activities        Activity[]
+  conversations     Conversation[]
+  computerJobs      ComputerJob[]
+  computerActions   ComputerAction[]
+  cursorSessions    CursorSession[]
+  sources           Source[]
+  knowledgeImports  KnowledgeImport[]
+  knowledgeSources  KnowledgeSource[]
+  artifacts         Artifact[]
+  reviewSessions    ReviewSession[]
+  workItems         WorkItem[]
   developmentOrders DevelopmentOrder[]
 
   @@index([organizationId])
@@ -350,14 +351,14 @@ model MemoryEntry {
   createdAt             DateTime @default(now()) @map("created_at")
   updatedAt             DateTime @updatedAt @map("updated_at")
 
-  organization        Organization          @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  project             Project?              @relation(fields: [projectId], references: [id], onDelete: SetNull)
-  company             Company?              @relation(fields: [companyId], references: [id], onDelete: SetNull)
-  contact             Contact?              @relation(fields: [contactId], references: [id], onDelete: SetNull)
-  source              Source?               @relation(fields: [sourceId], references: [id], onDelete: SetNull)
-  conversationMessage ConversationMessage?  @relation(fields: [conversationMessageId], references: [id], onDelete: SetNull)
-  fromRelations       MemoryRelation[]      @relation("RelationFrom")
-  toRelations         MemoryRelation[]      @relation("RelationTo")
+  organization        Organization         @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  project             Project?             @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  company             Company?             @relation(fields: [companyId], references: [id], onDelete: SetNull)
+  contact             Contact?             @relation(fields: [contactId], references: [id], onDelete: SetNull)
+  source              Source?              @relation(fields: [sourceId], references: [id], onDelete: SetNull)
+  conversationMessage ConversationMessage? @relation(fields: [conversationMessageId], references: [id], onDelete: SetNull)
+  fromRelations       MemoryRelation[]     @relation("RelationFrom")
+  toRelations         MemoryRelation[]     @relation("RelationTo")
   knowledgeItems      KnowledgeItem[]
 
   @@index([organizationId])
@@ -469,6 +470,9 @@ model Communication {
   toAddress         String?   @map("to_address")
   /// Bezug auf die beantwortete Nachricht in Apple Mail (opaker Verweis aus mail_lesen).
   replyRef          String?   @map("reply_ref")
+  /// Kampagne, zu der dieser Entwurf / diese Antwort gehört, und der Name des Empfängers (Firma).
+  campaignId        String?   @map("campaign_id")
+  recipientName     String?   @map("recipient_name")
   mailThreadId      String?   @map("mail_thread_id")
   inReplyTo         String?   @map("in_reply_to")
   referencesHeader  String?   @map("references_header")
@@ -476,15 +480,17 @@ model Communication {
   createdAt         DateTime  @default(now()) @map("created_at")
   updatedAt         DateTime  @updatedAt @map("updated_at")
 
-  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  project      Project?     @relation(fields: [projectId], references: [id], onDelete: SetNull)
-  company      Company?     @relation(fields: [companyId], references: [id], onDelete: SetNull)
-  contact      Contact?     @relation(fields: [contactId], references: [id], onDelete: SetNull)
+  organization Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  project      Project?      @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  company      Company?      @relation(fields: [companyId], references: [id], onDelete: SetNull)
+  contact      Contact?      @relation(fields: [contactId], references: [id], onDelete: SetNull)
   template     MailTemplate? @relation(fields: [templateId], references: [id], onDelete: SetNull)
+  campaign     Campaign?     @relation(fields: [campaignId], references: [id], onDelete: SetNull)
   activities   Activity[]
 
   @@index([organizationId])
   @@index([organizationId, status])
+  @@index([campaignId])
   @@map("communications")
 }
 
@@ -543,23 +549,22 @@ model ApprovalPolicy {
   @@map("approval_policies")
 }
 
-
 model ActiveWork {
-  id               String    @id @default(cuid())
-  organizationId   String    @map("organization_id")
-  conversationId   String?   @map("conversation_id")
-  domain           String
-  goal             String
-  brief            String
-  slots            String    @default("{}")
-  missingSlots     String    @default("[]") @map("missing_slots")
-  status           String    @default("clarifying")
-  lastQuestion     String?   @map("last_question")
-  evidence         String? 
-  linkedIds        String    @default("{}") @map("linked_ids")
-  createdAt        DateTime  @default(now()) @map("created_at")
-  updatedAt        DateTime  @updatedAt @map("updated_at")
-  completedAt      DateTime? @map("completed_at")
+  id             String    @id @default(cuid())
+  organizationId String    @map("organization_id")
+  conversationId String?   @map("conversation_id")
+  domain         String
+  goal           String
+  brief          String
+  slots          String    @default("{}")
+  missingSlots   String    @default("[]") @map("missing_slots")
+  status         String    @default("clarifying")
+  lastQuestion   String?   @map("last_question")
+  evidence       String?
+  linkedIds      String    @default("{}") @map("linked_ids")
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
+  completedAt    DateTime? @map("completed_at")
 
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
@@ -568,25 +573,24 @@ model ActiveWork {
   @@map("active_works")
 }
 
-
 model Conversation {
-  id             String   @id @default(cuid())
-  organizationId String   @map("organization_id")
+  id             String    @id @default(cuid())
+  organizationId String    @map("organization_id")
   title          String?
   origin         String
-  externalId     String?  @map("external_id")
+  externalId     String?   @map("external_id")
   checksum       String?
   importedAt     DateTime? @map("imported_at")
-  startedAt      DateTime @default(now()) @map("started_at")
-  lastActivityAt DateTime @default(now()) @map("last_activity_at")
-  status         String   @default("active")
-  projectId      String?  @map("project_id")
-  companyId      String?  @map("company_id")
-  contactId      String?  @map("contact_id")
-  jobId          String?  @map("job_id")
+  startedAt      DateTime  @default(now()) @map("started_at")
+  lastActivityAt DateTime  @default(now()) @map("last_activity_at")
+  status         String    @default("active")
+  projectId      String?   @map("project_id")
+  companyId      String?   @map("company_id")
+  contactId      String?   @map("contact_id")
+  jobId          String?   @map("job_id")
   metadata       String?
-  createdAt      DateTime @default(now()) @map("created_at")
-  updatedAt      DateTime @updatedAt @map("updated_at")
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
 
   organization Organization          @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   project      Project?              @relation(fields: [projectId], references: [id], onDelete: SetNull)
@@ -603,19 +607,19 @@ model Conversation {
 }
 
 model ConversationMessage {
-  id                String   @id @default(cuid())
-  organizationId    String   @map("organization_id")
-  conversationId    String   @map("conversation_id")
-  role              String
-  content           String
-  inputMode         String   @default("text") @map("input_mode")
-  status            String   @default("final")
-  visible           Boolean  @default(false)
-  fulltext          String   @default("")
-  metadata          String?
-  externalId        String?  @map("external_id")
-  parentExternalId  String?  @map("parent_external_id")
-  createdAt         DateTime @default(now()) @map("created_at")
+  id               String   @id @default(cuid())
+  organizationId   String   @map("organization_id")
+  conversationId   String   @map("conversation_id")
+  role             String
+  content          String
+  inputMode        String   @default("text") @map("input_mode")
+  status           String   @default("final")
+  visible          Boolean  @default(false)
+  fulltext         String   @default("")
+  metadata         String?
+  externalId       String?  @map("external_id")
+  parentExternalId String?  @map("parent_external_id")
+  createdAt        DateTime @default(now()) @map("created_at")
 
   organization  Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   conversation  Conversation  @relation(fields: [conversationId], references: [id], onDelete: Cascade)
@@ -797,40 +801,40 @@ model CursorSession {
 }
 
 model KnowledgeSource {
-  id                  String    @id @default(cuid())
-  organizationId      String    @map("organization_id")
-  sourceType          String    @map("source_type")
-  name                String
-  originalPath        String?   @map("original_path")
-  mimeType            String?   @map("mime_type")
-  checksum            String
-  size                Int
-  createdAt           DateTime  @default(now()) @map("created_at")
-  importedAt          DateTime? @map("imported_at")
-  modifiedAt          DateTime? @map("modified_at")
-  projectId           String?   @map("project_id")
-  companyId           String?   @map("company_id")
-  contactId           String?   @map("contact_id")
-  conversationId      String?   @map("conversation_id")
-  parentSourceId      String?   @map("parent_source_id")
-  versionGroupId      String?   @map("version_group_id")
-  versionLabel        String?   @map("version_label")
-  versionNumber       Int       @default(1) @map("version_number")
-  metadata            String?
-  status              String    @default("DISCOVERED")
-  error               String?
-  jobId               String?   @map("job_id")
-  importId            String?   @map("import_id")
-  language            String?
-  ocrRequired         Boolean   @default(false) @map("ocr_required")
-  injectionSuspected  Boolean   @default(false) @map("injection_suspected")
-  skippedReason       String?   @map("skipped_reason")
-  duplicateOfId       String?   @map("duplicate_of_id")
+  id                 String    @id @default(cuid())
+  organizationId     String    @map("organization_id")
+  sourceType         String    @map("source_type")
+  name               String
+  originalPath       String?   @map("original_path")
+  mimeType           String?   @map("mime_type")
+  checksum           String
+  size               Int
+  createdAt          DateTime  @default(now()) @map("created_at")
+  importedAt         DateTime? @map("imported_at")
+  modifiedAt         DateTime? @map("modified_at")
+  projectId          String?   @map("project_id")
+  companyId          String?   @map("company_id")
+  contactId          String?   @map("contact_id")
+  conversationId     String?   @map("conversation_id")
+  parentSourceId     String?   @map("parent_source_id")
+  versionGroupId     String?   @map("version_group_id")
+  versionLabel       String?   @map("version_label")
+  versionNumber      Int       @default(1) @map("version_number")
+  metadata           String?
+  status             String    @default("DISCOVERED")
+  error              String?
+  jobId              String?   @map("job_id")
+  importId           String?   @map("import_id")
+  language           String?
+  ocrRequired        Boolean   @default(false) @map("ocr_required")
+  injectionSuspected Boolean   @default(false) @map("injection_suspected")
+  skippedReason      String?   @map("skipped_reason")
+  duplicateOfId      String?   @map("duplicate_of_id")
 
-  organization Organization            @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  project      Project?                @relation(fields: [projectId], references: [id], onDelete: SetNull)
-  job          Job?                    @relation(fields: [jobId], references: [id], onDelete: SetNull)
-  import       KnowledgeImport?        @relation(fields: [importId], references: [id], onDelete: SetNull)
+  organization Organization             @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  project      Project?                 @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  job          Job?                     @relation(fields: [jobId], references: [id], onDelete: SetNull)
+  import       KnowledgeImport?         @relation(fields: [importId], references: [id], onDelete: SetNull)
   parsed       KnowledgeParsedDocument?
   items        KnowledgeItem[]
   embeddings   KnowledgeEmbedding[]
@@ -898,10 +902,10 @@ model KnowledgeItem {
   createdAt             DateTime @default(now()) @map("created_at")
   updatedAt             DateTime @updatedAt @map("updated_at")
 
-  organization Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  source       KnowledgeSource @relation(fields: [sourceId], references: [id], onDelete: Cascade)
-  project      Project?        @relation(fields: [projectId], references: [id], onDelete: SetNull)
-  memoryEntry  MemoryEntry?    @relation(fields: [memoryEntryId], references: [id], onDelete: SetNull)
+  organization Organization         @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  source       KnowledgeSource      @relation(fields: [sourceId], references: [id], onDelete: Cascade)
+  project      Project?             @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  memoryEntry  MemoryEntry?         @relation(fields: [memoryEntryId], references: [id], onDelete: SetNull)
   embeddings   KnowledgeEmbedding[]
 
   @@index([organizationId])
@@ -953,31 +957,31 @@ model KnowledgeEmbedding {
 }
 
 model KnowledgeImport {
-  id              String    @id @default(cuid())
-  organizationId  String    @map("organization_id")
-  jobId           String?   @map("job_id")
-  userRequest     String    @map("user_request")
-  rootPath        String?   @map("root_path")
-  status          String    @default("DISCOVERING")
-  cancelRequested Boolean   @default(false) @map("cancel_requested")
-  progressJson    String?   @map("progress_json")
-  filesTotal      Int       @default(0) @map("files_total")
-  filesSuccess    Int       @default(0) @map("files_success")
-  filesSkipped    Int       @default(0) @map("files_skipped")
-  filesFailed     Int       @default(0) @map("files_failed")
-  itemsCreated    Int       @default(0) @map("items_created")
-  memoryUpdates   Int       @default(0) @map("memory_updates")
-  relevantFiles     Int       @default(0) @map("relevant_files")
-  kind              String    @default("document")
-  tokensPrompt      Int       @default(0) @map("tokens_prompt")
-  tokensCompletion  Int       @default(0) @map("tokens_completion")
-  startedAt         DateTime  @default(now()) @map("started_at")
-  finishedAt        DateTime? @map("finished_at")
-  error             String?
-  metadata          String?
+  id               String    @id @default(cuid())
+  organizationId   String    @map("organization_id")
+  jobId            String?   @map("job_id")
+  userRequest      String    @map("user_request")
+  rootPath         String?   @map("root_path")
+  status           String    @default("DISCOVERING")
+  cancelRequested  Boolean   @default(false) @map("cancel_requested")
+  progressJson     String?   @map("progress_json")
+  filesTotal       Int       @default(0) @map("files_total")
+  filesSuccess     Int       @default(0) @map("files_success")
+  filesSkipped     Int       @default(0) @map("files_skipped")
+  filesFailed      Int       @default(0) @map("files_failed")
+  itemsCreated     Int       @default(0) @map("items_created")
+  memoryUpdates    Int       @default(0) @map("memory_updates")
+  relevantFiles    Int       @default(0) @map("relevant_files")
+  kind             String    @default("document")
+  tokensPrompt     Int       @default(0) @map("tokens_prompt")
+  tokensCompletion Int       @default(0) @map("tokens_completion")
+  startedAt        DateTime  @default(now()) @map("started_at")
+  finishedAt       DateTime? @map("finished_at")
+  error            String?
+  metadata         String?
 
-  organization Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  job          Job?             @relation(fields: [jobId], references: [id], onDelete: SetNull)
+  organization Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  job          Job?              @relation(fields: [jobId], references: [id], onDelete: SetNull)
   sources      KnowledgeSource[]
 
   @@index([organizationId, status])
@@ -1157,16 +1161,16 @@ model MailMessage {
 }
 
 model MailAttachment {
-  id                String  @id @default(cuid())
-  organizationId    String  @map("organization_id")
-  messageId         String  @map("message_id")
+  id                String   @id @default(cuid())
+  organizationId    String   @map("organization_id")
+  messageId         String   @map("message_id")
   filename          String
-  mimeType          String  @map("mime_type")
+  mimeType          String   @map("mime_type")
   size              Int
-  contentId         String? @map("content_id")
-  knowledgeSourceId String? @map("knowledge_source_id")
-  status            String  @default("pending")
-  skipReason        String? @map("skip_reason")
+  contentId         String?  @map("content_id")
+  knowledgeSourceId String?  @map("knowledge_source_id")
+  status            String   @default("pending")
+  skipReason        String?  @map("skip_reason")
   createdAt         DateTime @default(now()) @map("created_at")
 
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
@@ -1177,15 +1181,15 @@ model MailAttachment {
 }
 
 model MailFollowUp {
-  id             String    @id @default(cuid())
-  organizationId String    @map("organization_id")
-  threadId       String    @map("thread_id")
-  expectedFrom   String?   @map("expected_from")
-  dueAt          DateTime  @map("due_at")
+  id             String   @id @default(cuid())
+  organizationId String   @map("organization_id")
+  threadId       String   @map("thread_id")
+  expectedFrom   String?  @map("expected_from")
+  dueAt          DateTime @map("due_at")
   reason         String
-  status         String    @default("open")
-  createdAt      DateTime  @default(now()) @map("created_at")
-  updatedAt      DateTime  @updatedAt @map("updated_at")
+  status         String   @default("open")
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
 
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   thread       MailThread   @relation(fields: [threadId], references: [id], onDelete: Cascade)
@@ -1347,4 +1351,30 @@ model WorkEffect {
   @@unique([organizationId, idempotencyKey])
   @@index([workItemId])
   @@map("work_effects")
+}
+
+/// Eine Mail-Kampagne: eine Vorlage, eine Kontaktliste, ein Abstand, eine Freigabe.
+model Campaign {
+  id             String    @id @default(cuid())
+  organizationId String    @map("organization_id")
+  name           String
+  vorlage        String
+  liste          String
+  absender       String
+  abstandMinuten Int       @map("abstand_minuten")
+  /// wartet_auf_freigabe | laeuft | fertig | abgebrochen
+  status         String    @default("wartet_auf_freigabe")
+  approvalId     String?   @map("approval_id")
+  /// JSON: [{ zeile, firma, email, grund }] – Zeilen der Liste, die nicht verschickt werden.
+  ungueltig      String    @default("[]")
+  startedAt      DateTime? @map("started_at")
+  finishedAt     DateTime? @map("finished_at")
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
+
+  organization   Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  communications Communication[]
+
+  @@index([organizationId, status])
+  @@map("campaigns")
 }

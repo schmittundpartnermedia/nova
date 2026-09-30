@@ -1,0 +1,74 @@
+NOVA Phase-3-Nachweis Kampagne – 2026-09-30T07:47:31.362Z
+Modell: gpt-6-astra (echte API). Postfach: Test-Postfach (kein Apple Mail). Vorlage: Kopie von ~/Nova/vorlagen/sponsoren.md.
+
+Joachim: Schreib die Firmen aus der Liste test mit der Sponsoren-Vorlage an, eine Mail pro Minute, von joachim@rankpilot.de.
+Werkzeuge: [{"name":"vorlage_liste","executed":false},{"name":"kampagne_planen","executed":true}]
+NOVA: Vorbereitet: 3 Mails an die Firmen aus „test“ mit der Vorlage „sponsoren“, von joachim@rankpilot.de. Eine Mail pro Minute, insgesamt etwa 2 Minuten. Keine ungültigen Adressen. Noch nichts gesendet – los?
+  ✓ Kampagne geplant
+  ✓ noch nicht gestartet
+  ✓ Zusammenfassung mit Anzahl und Rückfrage
+  ✓ nichts gesendet
+
+Joachim: Ja, los.
+Werkzeuge: [{"name":"kampagne_starten","executed":true}]
+NOVA: Die Kampagne läuft: 3 Mails von joachim@rankpilot.de, eine pro Minute. Der Versand läuft im Hintergrund weiter, auch wenn du Nova schließt.
+  ✓ Kampagne gestartet
+  ✓ 3 Work-Items im Minutenabstand
+
+— Hintergrund-Läufer verschickt (Handler direkt aufgerufen) —
+  mail.send cmunsyz7q000e59att643cgrp: ok – Test-Postfach: angenommen.
+  mail.send cmunsyz7s000g59atd3rf8461: ok – Test-Postfach: angenommen.
+  mail.send cmunsyz7w000i59at08aoxip4: ok – Test-Postfach: angenommen.
+  ✓ 3 Mails an das Postfach übergeben
+  ✓ alle Platzhalter gefüllt
+  ✓ Mail an B personalisiert
+  Beispiel an test-a@example.com: „Partnerships & Affinity Business I rankPilot Alliance Partnerschaft mit Testfirma A“
+  ✓ Abschlussmeldung: „Kampagne „sponsoren → test“ ist durch: Alle 3 Mails sind raus. Antworten lege ich dir vor, sobald sie eingehen.“
+
+Joachim: Wie ist der Stand der Kampagne?
+Werkzeuge: [{"name":"kampagne_status","executed":false}]
+NOVA: Die Kampagne „sponsoren → test“ ist abgeschlossen: **3 von 3 Mails versendet**, keine offenen Mails, keine Fehler.
+
+— Antwort von Testfirma B geht ein, Postfach-Wache läuft —
+  ✓ Antwort erkannt
+  ✓ Nutzer wird angesprochen
+NOVA (Meldung): Antwort von Testfirma B: Maria Berg möchte Unterlagen zu den Paketen und könnte nächste Woche ein Gespräch führen. Mein Vorschlag:
+
+Von: joachim@rankpilot.de  
+An: test-b@example.com
+
+Hallo Frau Berg,
+
+vielen Dank für Ihr Interesse. Gerne stelle ich Ihnen die Unterlagen zu den Paketen zusammen.
+
+Für ein Gespräch nächste Woche: Welcher Tag und welche Uhrzeit würden Ihnen passen?
+
+So senden oder ergänzen?
+  ✓ Meldung nennt Firma und fragt „senden oder ergänzen?“
+  ✓ Wache hat nichts gesendet
+
+Joachim: Ergänze noch, dass ich die Unterlagen bis Freitag schicke.
+Werkzeuge: [{"name":"mail_antworten","executed":true}]
+NOVA: Entwurf aktualisiert, noch nicht gesendet.
+
+**Von:** joachim@rankpilot.de  
+**An:** test-b@example.com
+
+Hallo Frau Berg,
+
+vielen Dank für Ihr Interesse. Gerne stelle ich Ihnen die Unterlagen zu den Paketen zusammen und schicke sie Ihnen bis Freitag.
+
+Für ein Gespräch nächste Woche: Welcher Tag und welche Uhrzeit würden Ihnen passen?
+
+Joachim: Senden.
+Werkzeuge: [{"name":"mail_senden","executed":false}]
+NOVA: An test-b@example.com, Betreff „Re: Partnerships & Affinity Business I rankPilot Alliance Partnerschaft mit Testfirma B“ – senden?
+
+Joachim: Ja.
+Werkzeuge: [{"name":"mail_senden","executed":true}]
+NOVA: Die Antwort an test-b@example.com ist gesendet – mit der Zusage, die Unterlagen bis Freitag zu schicken.
+  ✓ Antwort an Testfirma B raus
+  ✓ Ergänzung ist drin
+
+ERGEBNIS: Phase-3-Kopf-Nachweis bestanden (echte API, Test-Postfach, Worker-Handler direkt aufgerufen).
+Nicht geprüft: Apple Mail, echter Hintergrund-Läufer mit Wartezeiten, Neustart der App – das prüft Joachim in NOVA.app.

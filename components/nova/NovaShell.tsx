@@ -418,6 +418,55 @@ export function NovaShell() {
     notifyProcessing,
   ]);
 
+  const [kampagnenZeile, setKampagnenZeile] = useState<string | null>(null);
+  const meldungRef = useRef({ busy: false, speaking: false, voiceEnabled: false, beginTurn, flush, keepComm, clipWindow, scheduleCommHide });
+  useEffect(() => {
+    meldungRef.current = { busy, speaking: speechPlaying, voiceEnabled, beginTurn, flush, keepComm, clipWindow, scheduleCommHide };
+  }, [beginTurn, busy, clipWindow, flush, keepComm, scheduleCommHide, speechPlaying, voiceEnabled]);
+
+  // Meldungen aus dem Hintergrund (Kampagne fertig, Antwort eingegangen, Neustart) und Kampagnen-Fortschritt.
+  useEffect(() => {
+    let stopped = false;
+    const poll = async () => {
+      try {
+        const response = await fetch("/api/nova/status", { cache: "no-store" });
+        const data = (await response.json()) as {
+          meldungen?: Array<{ id: string; text: string }>;
+          kampagnen?: Array<{ name: string; gesamt: number; gesendet: number }>;
+        };
+        if (stopped) return;
+        const laufend = data.kampagnen ?? [];
+        setKampagnenZeile(
+          laufend.length ? laufend.map((k) => `arbeite: Kampagne ${k.gesendet}/${k.gesamt}`).join(" · ") : null,
+        );
+        const meldungen = data.meldungen ?? [];
+        if (!meldungen.length) return;
+        const ui = meldungRef.current;
+        ui.keepComm();
+        setVisibleLines((current) =>
+          ui.clipWindow([
+            ...current.filter((line) => !line.pending),
+            ...meldungen.map((meldung) => ({ id: meldung.id, speaker: "NOVA" as const, text: meldung.text })),
+          ]),
+        );
+        const text = meldungen.map((meldung) => meldung.text).join("\n\n");
+        if (ui.voiceEnabled && !ui.busy && !ui.speaking) {
+          ui.beginTurn(text, "idle");
+          ui.flush(text);
+        }
+        ui.scheduleCommHide(COMM_HIDE_MS * 2);
+      } catch {
+        // Statusabfrage ist optional; der nächste Durchlauf versucht es wieder.
+      }
+    };
+    void poll();
+    const id = window.setInterval(() => void poll(), 15_000);
+    return () => {
+      stopped = true;
+      window.clearInterval(id);
+    };
+  }, []);
+
   useEffect(() => {
     sendVoiceTurnRef.current = (turn) => {
       void sendMessage(turn.transcript, "voice", turn);
@@ -518,7 +567,9 @@ export function NovaShell() {
           ? "Ich höre zu"
           : sessionSnap.state === "LISTENING" || sessionSnap.state === "SILENCE_WAIT" || sessionSnap.state === "STARTING"
             ? "Zuhören"
-            : humanStatus(uiState, status);
+            : uiState === "IDLE" && kampagnenZeile
+              ? kampagnenZeile
+              : humanStatus(uiState, status);
 
   return (
     <div className="nova-stage" data-state={uiState}>

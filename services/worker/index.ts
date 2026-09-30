@@ -35,6 +35,13 @@ async function main() {
   process.on("SIGINT", shutdown);
   process.on("SIGTERM", shutdown);
 
+  const { nachNeustart } = await import("@/services/kampagnen");
+  try {
+    await nachNeustart();
+  } catch (error) {
+    console.error(error instanceof Error ? error.message : "Kampagnen-Neustart fehlgeschlagen");
+  }
+
   writeWorkerHeartbeat();
   const heartbeat = setInterval(() => writeWorkerHeartbeat(), 5_000);
 
