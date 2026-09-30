@@ -192,9 +192,15 @@ Tests: mail 17/17, kunden 9/9, kopf 10, kampagne 9, tagesbetrieb 13, claude 8.
 
 **01.10.2026, 01:00 – Fehler aus Joachims Test-Entwurf behoben:** Der Entwurf enthielt noch zwei Befunde („Ihre Website … und Ihre Website …“), weil die Pforzheim-Liste die Feststellung mit der alten Regel gespeichert hatte und der Kopf sie übernahm. Jetzt wird `feststellung` nie gespeichert, sondern beim Lesen einer Liste (`leseKontaktliste`) frisch aus `befunde` gebildet; eine alte Spalte wird überschrieben. Test dafür ergänzt; kunden 9/9, kampagne 9/9, tagesbetrieb 13/13.
 
+**01.10.2026, 01:15 – Test-Mail bestätigt:** Joachim: Fettdruck, Absender, Abstände passen. Der große Abstand vor der Signatur kam aus Leerzeilen oben in seiner Apple-Mail-Signatur; Joachim hat sie entfernt („passt“).
+
 ## Dran
 
-**Joachim:** Test-Mail in NOVA.app an die eigene Adresse (z. B. „Schreib der Schreinerei Zimmermann aus der Pforzheim-Liste mit der Kunden-Vorlage, aber an schmittundpartnermedia@gmail.com“ → „Senden“ → „Ja“). Prüfen: Absender „rankPilot Joachim Schmitt“, Fettdruck, Abstände, Signatur. Danach Rest der Phase-4-Abnahme (Sponsor aufnehmen und anschreiben), dann Phase 7.
+**Erster echter Versand (01.10., Joachims Plan):**
+1. Kampagne mit der Liste `kunden-schreinereien-pforzheim-2026-09-30` (9 Betriebe mit E-Mail), Vorlage „kunden“, alle 5 Minuten: „Schreib die Schreinereien aus Pforzheim mit der Kunden-Vorlage an, alle 5 Minuten.“ → NOVA fasst zusammen → „Ja“.
+2. Antworten beobachten (Postfach-Wache legt Vorschläge vor).
+3. Danach entscheiden: Tagesbetrieb einschalten (braucht Dauerfreigabe Scanner, kostet Google-API; Tagesbetrieb lief noch nie echt).
+Danach: Phase 7 (Browser/Plattformen).
 
 ## Was Joachim liefert (siehe Auftrag, Anhang)
 
