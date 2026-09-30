@@ -99,10 +99,6 @@ void main() {
     float faeden = pow(max(0.0, 1.0 - abs(f2 - 0.1) * 5.0), 3.0) * 0.28;
     vec3 inner = mix(uC, uA * 1.05, rauch * 0.9) + uB * faeden * (0.8 + uEnergy);
     inner *= 0.55 + 0.45 * z;
-    // Überlagerte Blase unten links, nur als feiner Rand.
-    vec2 blase = uv / edge - vec2(-0.42, -0.28);
-    float blasenRand = exp(-pow((length(blase) - 0.42) * 55.0, 2.0)) * 0.16;
-    inner += uB * blasenRand;
     // Feine Sterne im Inneren.
     inner += uB * stern(uv / edge + vec2(t * 0.01, 0.0), 26.0) * (0.35 + 0.3 * z);
     // Heller Rand und Glanzlicht oben links.
