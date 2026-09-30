@@ -188,14 +188,11 @@ Auf Joachims ausdrückliches Wort gelöscht: fünf archivierte Testgespräche au
 Tests: mail 17/17, kunden 9/9, kopf 10, kampagne 9, tagesbetrieb 13, claude 8.
 **Nicht geprüft:** ob Apple Mail den Fettdruck und den Anzeigenamen wirklich so verschickt – braucht eine echte Test-Mail. Der große Abstand vor der Signatur kommt nicht aus NOVAs Text (endet ohne Leerzeilen); vermutlich aus der Signatur in Apple Mail selbst, nicht geprüft.
 
+**01.10.2026, 00:45 – Kunden-Mail gekürzt (Joachims Entscheidung „1 nehmen“):** Vorlage rund 100 Wörter: Problem KI-Suche zuerst, dann ein Befund, dann Check-Link, Vorstellung mit Buch am Ende. Nur noch **ein** Befund, Vorrang nach Verständlichkeit (Bewertungen, keine Website, Bewertungsschnitt, Smartphone, HTTPS, …; technische Punkte zuletzt). Ohne Befund fällt der ganze mittlere Absatz weg. `test:kunden` 9/9, `test:tagesbetrieb` 13/13.
+
 ## Dran
 
-**Joachim: Abnahme Phase 4 in NOVA.app** (vorher NOVA.app einmal neu starten, damit der Hintergrund-Läufer den neuen Code hat):
-1. „Such mir 10 Schreinereien in Pforzheim.“ → NOVA nennt Kosten und fragt → „Ja.“ → nach einigen Minuten Meldung mit Anzahl, E-Mails, Ansprechpartnern; Liste in `~/Nova/kampagnen/`.
-2. „Zeig mir, wie die Mail an den ersten aussehen würde.“ → Entwurf mit Feststellung als Karte im Chat (nicht senden).
-3. Sponsor: „Nimm als Sponsor auf: … (eigene Test-Adresse)“ → „Schreib ihn an.“ → Zusammenfassung → „Ja“ → Mail in „Gesendet“.
-4. Tagesbetrieb erst danach und nur auf Joachims Wort: braucht Dauerfreigabe Scanner (kostet Google-API).
-Danach: Phase 7 (Browser/Plattformen). Später: Vergleich Kopf OpenAI/Claude.
+**Joachim:** Test-Mail in NOVA.app an die eigene Adresse (z. B. „Schreib der Schreinerei Zimmermann aus der Pforzheim-Liste mit der Kunden-Vorlage, aber an schmittundpartnermedia@gmail.com“ → „Senden“ → „Ja“). Prüfen: Absender „rankPilot Joachim Schmitt“, Fettdruck, Abstände, Signatur. Danach Rest der Phase-4-Abnahme (Sponsor aufnehmen und anschreiben), dann Phase 7.
 
 ## Was Joachim liefert (siehe Auftrag, Anhang)
 

@@ -53,14 +53,19 @@ async function main() {
 
   const tests: Array<[string, () => Promise<void>]> = [
     [
-      "Feststellung aus Scanner-Befunden: wichtigste zwei, lesbar, nichts erfunden; ohne Befund fällt der Abschnitt weg",
+      "Feststellung aus Scanner-Befunden: verständlichster zuerst, lesbar, nichts erfunden; ohne Befund fällt der Abschnitt weg",
       async () => {
         assert.equal(
           feststellungAus("keine Meta-Description; nur 4 Bewertungen (< 10); kein SSL/HTTPS"),
+          "Ihr Google-Profil bisher nur 4 Bewertungen hat",
+          "Standard: nur ein Befund, der verständlichste",
+        );
+        assert.equal(
+          feststellungAus("keine Meta-Description; nur 4 Bewertungen (< 10); kein SSL/HTTPS", 2),
           "Ihr Google-Profil bisher nur 4 Bewertungen hat und Ihre Website ohne sichere HTTPS-Verbindung läuft",
         );
         assert.equal(
-          feststellungAus("Website ohne LocalBusiness-Schema (JSON-LD); kein SSL/HTTPS"),
+          feststellungAus("Website ohne LocalBusiness-Schema (JSON-LD); kein SSL/HTTPS", 2),
           "Ihre Website ohne sichere HTTPS-Verbindung läuft und sie Google keine strukturierten Firmendaten wie Adresse und Öffnungszeiten mitliefert",
         );
         assert.equal(feststellungAus("nur eine GMB-Kategorie gepflegt"), "in Ihrem Google-Unternehmensprofil nur eine Kategorie gepflegt ist");
