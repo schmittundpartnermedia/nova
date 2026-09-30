@@ -175,7 +175,11 @@ export function Orb({ state, level = null }: { state: OrbState; level?: number |
     };
 
     const resize = () => {
-      const size = Math.max(260, Math.min(560, Math.floor(window.innerWidth * 0.38)));
+      // Ecke (schmales Fenster): Orb füllt die Breite; sonst wie bisher ein gutes Drittel.
+      const size =
+        window.innerWidth < 560
+          ? Math.max(150, Math.floor(Math.min(window.innerWidth * 0.86, window.innerHeight * 0.66)))
+          : Math.max(260, Math.min(560, Math.floor(window.innerWidth * 0.38)));
       const dpr = Math.min(window.devicePixelRatio || 1, 2);
       canvas.style.width = `${size}px`;
       canvas.style.height = `${size}px`;

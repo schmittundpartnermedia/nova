@@ -159,13 +159,27 @@ Nicht geprüft: echter Auftrag an rankpilot.de, echtes `deploy-rpw`/`deploy-rp`,
 
 **30.09.2026, 22:40 – Abnahme Phase 5:** Joachim hat Phase 5 in NOVA.app abgenommen („hat geklappt, ist live“). Echter Auftrag 2026-09-30-c0ef15c6: Telefonnummer mit Anruf-Link in den Footer von rankpilot.de (d3c55e5), von NOVA geprüft, nach Joachims Ja übernommen (93ec883) und über das Live-Skript veröffentlicht. Direkt danach hat Joachim per Sprache einen zweiten Auftrag gegeben (2026-09-30-62993ae5: Nummer wieder entfernen, noch nicht veröffentlichen) – lief beim Schreiben dieser Zeilen noch.
 
+**30.09.2026, spät – Phase 6 gebaut (Claude Code), Abnahme steht aus.**
+
+Was jetzt real im Code steht:
+- Fenster (`macos/launcher/Sources/Windows.swift`): zwei Größen. **Ecke** (Standard, 280×340, unten rechts, immer im Vordergrund, auf allen Schreibtischen): Orb, Statuszeile, Sprechknopf, Zahnrad, Chat-Knopf. **Chat** (1120×760, normales Fenster): bisherige Ansicht, im Chat-Kopf „In die Ecke“. Wechsel per Knopf oder Menü „Fenster → Chat ein/aus“ (⌘K); Größe, Ort und Modus werden gemerkt. Die Seite und die App reden über `window.__novaApp` / `webkit.messageHandlers.nova` (`features/app/bruecke.ts`).
+- Statuszeile: „Höre“, „Rückfrage“, „arbeite: Kampagne x/y“, neu „arbeite: Claude an <projekt>“ / „stelle live: …“ (aus `/api/nova/status`), „Sprechtaste braucht Freigabe“, wenn die Taste nur bei vorderem NOVA-Fenster wirkt.
+- Sprechtaste (`Einstellungen.swift`): Einstellungsfenster (Menü „Einstellungen …“ ⌘, oder Zahnrad) mit Tastenwahl (rechte/linke Option, rechte Befehlstaste, Fn, F5) und Zustand von Bedienungshilfen und Mikrofon, Knopf „Freigabe öffnen“ führt zur Systemeinstellung. Beim allerersten Start fragt NOVA einmal nach der Freigabe Bedienungshilfen; kommt oder geht die Freigabe, legt NOVA den Tastenbeobachter neu an. Der alte Umweg über `NOVA_PTT_KEY` ist weg.
+- Entfernt: Menüpunkt „Voice Session starten“ (klickte einen Knopf, den es nicht mehr gab), Datei-Auswahl-Dialog (Upload war schon gelöscht), Sprach-Diagnose beim Laden, doppelter PTT-Aufruf (Ereignis **und** Funktion – die Taste löste zweimal aus).
+
+Nachweise: `tsc`, `eslint`, `next build`, `macos:build` grün; alle Tests grün (kopf 10, mail 15, kampagne 9, kunden 8, tagesbetrieb 13, claude 8). Ecke und Chat im eingebauten Browser angesehen, keine Konsolenfehler → `docs/nachweis-phase6.txt`.
+
+Nicht geprüft: NOVA.app selbst (Eckfenster, immer vorne, Wechsel, Einstellungsfenster, Freigabe-Dialog, Tastenwahl) – gebaut, nicht gestartet.
+
 ## Dran
 
-**Joachim entscheidet, was als Nächstes kommt:**
-- Abnahme Phase 4 (Kundensuche, Sponsoren, Tagesbetrieb) – dafür fehlt noch die Kunden-Vorlage `~/Nova/vorlagen/kunden.md`.
-- Phase 6 (Oberfläche in der Ecke, PTT-Einstellungen) – in Arbeit (Claude Code, 30.09. abends).
-- Phase 7 (Browser/Plattformen) angehängt am 30.09., kommt nach Phase 6.
-- Später: Vergleich Kopf OpenAI gegen Claude mit denselben Nachweisen (braucht Anthropic-API-Schlüssel).
+**Joachim:** NOVA.app starten und Phase 6 abnehmen:
+1. NOVA erscheint klein unten rechts und bleibt vor anderen Fenstern.
+2. In einem anderen Programm die rechte Option-Taste halten und sprechen → NOVA antwortet.
+3. Chat-Knopf → großes Fenster; „In die Ecke“ → wieder klein.
+4. Zahnrad → Einstellungen: andere Taste wählen, ausprobieren.
+5. Danach „einen Vormittag mit NOVA in der Ecke arbeiten“ (Abnahme laut Auftrag).
+Danach: Phase 7 (Browser/Plattformen), angehängt am 30.09. Offen: Abnahme Phase 4 und die Kunden-Vorlage. Später: Vergleich Kopf OpenAI/Claude.
 
 ## Was Joachim liefert (siehe Auftrag, Anhang)
 

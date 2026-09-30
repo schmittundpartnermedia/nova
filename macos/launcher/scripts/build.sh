@@ -37,6 +37,7 @@ swiftc -O \
   "$SRC"/ProcessControl.swift \
   "$SRC"/HealthMonitor.swift \
   "$SRC"/ProcessSupervisor.swift \
+  "$SRC"/Einstellungen.swift \
   "$SRC"/Windows.swift \
   "$SRC"/MailConsent.swift \
   "$SRC"/AppDelegate.swift \

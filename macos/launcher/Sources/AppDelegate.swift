@@ -16,11 +16,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var mailConsent: MailConsentBridge?
     private let workQueue = DispatchQueue(label: "io.elevum.nova.supervisor", qos: .userInitiated)
     private var pushToTalkMonitor: Any?
+    private var pushToTalkLocalMonitor: Any?
     private var pushToTalkHeld = false
+    private var einstellungen: EinstellungenWindowController?
+    private var freigabeTimer: Timer?
+    private var tastenfreigabe = Tastenfreigabe.erteilt
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         buildMenu()
         installPushToTalkMonitor()
+        Tastenfreigabe.beimErstenStartAnfragen()
+        beobachteTastenfreigabe()
         if let existing = SingleInstance.existing(bundleIdentifier: LaunchConfig.defaultBundleIdentifier) {
             existing.activate(options: [.activateIgnoringOtherApps])
             didShutdown = true
@@ -154,7 +160,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 webWindow = nil
             }
             if webWindow == nil {
-                webWindow = NovaWebWindowController(startURL: config.webURL, log: log)
+                let fenster = NovaWebWindowController(startURL: config.webURL, log: log)
+                fenster.onEinstellungen = { [weak self] in self?.zeigeEinstellungen() }
+                webWindow = fenster
             }
             uiReady = true
             webWindow?.loadUI()
@@ -269,8 +277,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let appMenu = NSMenu()
         appMenu.addItem(withTitle: "Über NOVA", action: #selector(NSApplication.orderFrontStandardAboutPanel(_:)), keyEquivalent: "")
         appMenu.addItem(NSMenuItem.separator())
+        appMenu.addItem(withTitle: "Einstellungen …", action: #selector(zeigeEinstellungen), keyEquivalent: ",")
+        appMenu.addItem(NSMenuItem.separator())
         appMenu.addItem(withTitle: "NOVA ausblenden", action: #selector(NSApplication.hide(_:)), keyEquivalent: "h")
-        appMenu.addItem(withTitle: "Voice Session starten", action: #selector(startVoiceSession), keyEquivalent: "")
         appMenu.addItem(withTitle: "NOVA beenden", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
         appItem.submenu = appMenu
         mainMenu.addItem(appItem)
@@ -284,73 +293,81 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         editItem.submenu = editMenu
         mainMenu.addItem(editItem)
 
+        let fensterItem = NSMenuItem()
+        let fensterMenu = NSMenu(title: "Fenster")
+        fensterMenu.addItem(withTitle: "Chat ein/aus", action: #selector(wechsleFenster), keyEquivalent: "k")
+        fensterItem.submenu = fensterMenu
+        mainMenu.addItem(fensterItem)
+
         NSApp.mainMenu = mainMenu
     }
 
-    /// Systemweiter Push-to-Talk: Taste halten = Mikro an, loslassen = verarbeiten. Kein Dauerhören.
-    private func installPushToTalkMonitor() {
-        if pushToTalkMonitor != nil { return }
-        pushToTalkMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.flagsChanged, .keyDown, .keyUp]) { [weak self] event in
-            self?.handlePushToTalk(event)
+    @objc private func wechsleFenster() {
+        webWindow?.wechsleModus()
+        webWindow?.window?.makeKeyAndOrderFront(nil)
+    }
+
+    @objc private func zeigeEinstellungen() {
+        if einstellungen == nil {
+            einstellungen = EinstellungenWindowController { [weak self] in
+                self?.pushToTalkHeld = false
+                self?.webWindow?.sendeAppZustand()
+                self?.log?.info("Sprechtaste geändert", fields: ["taste": Sprechtaste.aktuell.rawValue])
+            }
         }
-        NSEvent.addLocalMonitorForEvents(matching: [.flagsChanged, .keyDown, .keyUp]) { [weak self] event in
-            self?.handlePushToTalk(event)
-            return event
+        einstellungen?.zeigen()
+    }
+
+    /// Die Freigabe „Bedienungshilfen“ kann jederzeit in den Systemeinstellungen kommen oder gehen.
+    /// Dann den globalen Beobachter neu anlegen und der Seite Bescheid geben.
+    private func beobachteTastenfreigabe() {
+        freigabeTimer = Timer.scheduledTimer(withTimeInterval: 2, repeats: true) { [weak self] _ in
+            guard let self else { return }
+            let jetzt = Tastenfreigabe.erteilt
+            guard jetzt != self.tastenfreigabe else { return }
+            self.tastenfreigabe = jetzt
+            self.log?.info("Tastenfreigabe geändert", fields: ["erteilt": jetzt ? "true" : "false"])
+            if let monitor = self.pushToTalkMonitor { NSEvent.removeMonitor(monitor) }
+            self.pushToTalkMonitor = nil
+            self.installPushToTalkMonitor()
+            self.webWindow?.sendeAppZustand()
         }
     }
 
-    private func pushToTalkKeyCode() -> UInt16 {
-        let raw = (UserDefaults.standard.string(forKey: "novaPushToTalkKey")
-            ?? ProcessInfo.processInfo.environment["NOVA_PTT_KEY"]
-            ?? "rightOption").lowercased()
-        switch raw {
-        case "leftoption", "option", "alt": return 58
-        case "rightcommand", "rcommand": return 54
-        case "leftcommand", "command", "cmd": return 55
-        case "fn": return 63
-        case "f5": return 96
-        default: return 61 // rightOption
+    /// Systemweiter Push-to-Talk: Taste halten = Mikro an, loslassen = verarbeiten. Kein Dauerhören.
+    /// Außerhalb von NOVA wirkt die Taste nur mit der Freigabe „Bedienungshilfen“.
+    private func installPushToTalkMonitor() {
+        if pushToTalkMonitor == nil {
+            pushToTalkMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.flagsChanged, .keyDown, .keyUp]) { [weak self] event in
+                self?.handlePushToTalk(event)
+            }
+        }
+        if pushToTalkLocalMonitor == nil {
+            pushToTalkLocalMonitor = NSEvent.addLocalMonitorForEvents(matching: [.flagsChanged, .keyDown, .keyUp]) { [weak self] event in
+                self?.handlePushToTalk(event)
+                return event
+            }
         }
     }
 
     private func handlePushToTalk(_ event: NSEvent) {
-        let code = pushToTalkKeyCode()
-        let isModifierKey = [58, 61, 54, 55, 63].contains(code)
-        if isModifierKey {
-            guard event.type == .flagsChanged, event.keyCode == code else { return }
-            let held: Bool
-            switch code {
-            case 58: held = event.modifierFlags.contains(.option) && !event.modifierFlags.contains(.function)
-            case 61: held = event.modifierFlags.contains(.option)
-            case 54, 55: held = event.modifierFlags.contains(.command)
-            case 63: held = event.modifierFlags.contains(.function)
-            default: held = false
-            }
-            // rightOption vs leftOption: keyCode distinguishes
-            if code == 61 || code == 58 {
-                // flagsChanged with matching keyCode is enough
-            }
-            if held && !pushToTalkHeld {
-                pushToTalkHeld = true
-                DispatchQueue.main.async { self.webWindow?.pushToTalkDown() }
-            } else if !held && pushToTalkHeld {
-                pushToTalkHeld = false
-                DispatchQueue.main.async { self.webWindow?.pushToTalkUp() }
-            }
-            return
+        let taste = Sprechtaste.aktuell
+        guard event.keyCode == taste.keyCode else { return }
+        let held: Bool
+        if taste.istModifier {
+            guard event.type == .flagsChanged else { return }
+            held = taste.gehalten(event.modifierFlags)
+        } else {
+            guard event.type == .keyDown || event.type == .keyUp, !event.isARepeat else { return }
+            held = event.type == .keyDown
         }
-        if event.keyCode != code { return }
-        if event.type == .keyDown && !event.isARepeat && !pushToTalkHeld {
+        if held && !pushToTalkHeld {
             pushToTalkHeld = true
             DispatchQueue.main.async { self.webWindow?.pushToTalkDown() }
-        } else if event.type == .keyUp && pushToTalkHeld {
+        } else if !held && pushToTalkHeld {
             pushToTalkHeld = false
             DispatchQueue.main.async { self.webWindow?.pushToTalkUp() }
         }
-    }
-
-    @objc private func startVoiceSession() {
-        webWindow?.startVoiceFromPage()
     }
 
     private func microphoneTccLabel(_ status: AVAuthorizationStatus) -> String {

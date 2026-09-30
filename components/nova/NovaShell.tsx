@@ -9,6 +9,7 @@ import { NovaStatus } from "@/components/nova/NovaStatus";
 import { NovaVoiceWave } from "@/components/nova/NovaVoiceWave";
 import { useVoiceSession } from "@/features/voice/useVoiceSession";
 import { useNovaVoice } from "@/features/voice/useNovaVoice";
+import { anApp, useNovaApp, useSchmal } from "@/features/app/bruecke";
 import type { VoiceTurn } from "@/features/voice/session-types";
 import type { OrbState } from "@/types";
 import type { ProviderMode } from "@/types/ai";
@@ -17,6 +18,7 @@ const IDLE_STATUS = "Bereit für deine Anfrage";
 
 function humanStatus(state: OrbState, text: string): string {
   if (state === "LISTENING") return text || "Zuhören";
+  if (state === "WAITING_FOR_APPROVAL") return "Rückfrage";
   if (state === "THINKING") return text || "Ich denke nach …";
   if (state === "ERROR") return text?.trim() ? text : "Fehler";
   if (state === "WORKING") {
@@ -139,27 +141,14 @@ export function NovaShell() {
       if (phase === "down") {
         clearIdleTimer();
         setOrbState("LISTENING");
-        setStatus("Zuhören (Push-to-Talk)");
+        setStatus("Höre");
         pressPushToTalk();
       } else if (phase === "up") {
         releasePushToTalk();
       }
     };
     window.addEventListener("nova-ptt", onPtt as EventListener);
-    (window as unknown as { __novaPushToTalkDown?: () => void }).__novaPushToTalkDown = () => {
-      clearIdleTimer();
-      setOrbState("LISTENING");
-      setStatus("Zuhören (Push-to-Talk)");
-      pressPushToTalk();
-    };
-    (window as unknown as { __novaPushToTalkUp?: () => void }).__novaPushToTalkUp = () => {
-      releasePushToTalk();
-    };
-    return () => {
-      window.removeEventListener("nova-ptt", onPtt as EventListener);
-      delete (window as unknown as { __novaPushToTalkDown?: () => void }).__novaPushToTalkDown;
-      delete (window as unknown as { __novaPushToTalkUp?: () => void }).__novaPushToTalkUp;
-    };
+    return () => window.removeEventListener("nova-ptt", onPtt as EventListener);
   }, [clearIdleTimer, pressPushToTalk, releasePushToTalk]);
 
   useEffect(() => {
@@ -352,12 +341,14 @@ export function NovaShell() {
         const data = (await response.json()) as {
           meldungen?: Array<{ id: string; text: string }>;
           kampagnen?: Array<{ name: string; gesamt: number; gesendet: number }>;
+          arbeit?: string[];
         };
         if (stopped) return;
-        const laufend = data.kampagnen ?? [];
-        setKampagnenZeile(
-          laufend.length ? laufend.map((k) => `arbeite: Kampagne ${k.gesendet}/${k.gesamt}`).join(" · ") : null,
-        );
+        const zeilen = [
+          ...(data.kampagnen ?? []).map((k) => `arbeite: Kampagne ${k.gesendet}/${k.gesamt}`),
+          ...(data.arbeit ?? []),
+        ];
+        setKampagnenZeile(zeilen.length ? zeilen.join(" · ") : null);
         const meldungen = data.meldungen ?? [];
         if (!meldungen.length) return;
         const ui = meldungRef.current;
@@ -425,6 +416,9 @@ export function NovaShell() {
     stopVoiceSession,
   ]);
 
+  const app = useNovaApp();
+  const ecke = useSchmal();
+
   let uiState: OrbState = orbState;
   if (speechPlaying) {
     uiState = "SPEAKING";
@@ -444,7 +438,58 @@ export function NovaShell() {
             ? "Zuhören"
             : uiState === "IDLE" && kampagnenZeile
               ? kampagnenZeile
-              : humanStatus(uiState, status);
+              : uiState === "IDLE" && app && !app.tasteUeberall
+                ? "Sprechtaste braucht Freigabe"
+                : humanStatus(uiState, status);
+
+  if (ecke) {
+    return (
+      <div className="nova-stage nova-ecke" data-state={uiState}>
+        <div className="nova-ecke-orb">
+          <Orb state={uiState} level={sessionSnap.capturing ? sessionSnap.level : null} />
+        </div>
+        <NovaStatus text={shownStatus} />
+        <div className="nova-ecke-knoepfe">
+          {app ? (
+            <button type="button" className="nova-ecke-knopf" onClick={() => anApp({ art: "einstellungen" })} aria-label="Einstellungen">
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <circle cx="12" cy="12" r="3.2" />
+                <path d="M12 2.8v2.6M12 18.6v2.6M21.2 12h-2.6M5.4 12H2.8M18.5 5.5l-1.8 1.8M7.3 16.7l-1.8 1.8M18.5 18.5l-1.8-1.8M7.3 7.3 5.5 5.5" />
+              </svg>
+            </button>
+          ) : null}
+          <button
+            type="button"
+            className={`nova-ecke-knopf mic${sessionSnap.capturing ? " an" : ""}`}
+            onPointerDown={pressPushToTalk}
+            onPointerUp={releasePushToTalk}
+            onPointerLeave={() => sessionSnap.capturing && releasePushToTalk()}
+            aria-label={app ? `Halten und sprechen (oder ${app.taste} halten)` : "Halten und sprechen"}
+            title={app ? `Halten und sprechen – oder ${app.taste} halten` : "Halten und sprechen"}
+          >
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <rect x="9" y="3" width="6" height="11" rx="3" />
+              <path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21" />
+            </svg>
+          </button>
+          {speechPlaying ? (
+            <button type="button" className="nova-ecke-knopf" onClick={stopSpeech} aria-label="Stopp">
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <rect x="7" y="7" width="10" height="10" rx="1.5" />
+              </svg>
+            </button>
+          ) : null}
+          {app ? (
+            <button type="button" className="nova-ecke-knopf" onClick={() => anApp({ art: "modus", modus: "chat" })} aria-label="Chat öffnen">
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M4.5 5.5h15v10h-9l-4.5 3.5v-3.5H4.5z" />
+              </svg>
+            </button>
+          ) : null}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="nova-stage" data-state={uiState}>
@@ -487,7 +532,13 @@ export function NovaShell() {
           <div className="nova-horizont" aria-hidden="true" />
         </main>
 
-        <NovaChat version={chatVersion} live={liveZeilen} busy={busy} onSend={(text) => void sendMessage(text, "text")} />
+        <NovaChat
+          version={chatVersion}
+          live={liveZeilen}
+          busy={busy}
+          onSend={(text) => void sendMessage(text, "text")}
+          onEcke={app ? () => anApp({ art: "modus", modus: "ecke" }) : undefined}
+        />
       </div>
     </div>
   );

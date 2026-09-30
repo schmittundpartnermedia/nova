@@ -926,3 +926,98 @@
 .nova-command-dock {
   z-index: 5;
 }
+
+/* ---- Phase 6: NOVA klein in der Bildschirmecke (Orb, Statuszeile, Knöpfe) ---- */
+
+.nova-ecke {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  height: 100dvh;
+  min-height: 0;
+  padding: 0 12px 14px;
+}
+
+.nova-ecke-orb {
+  display: grid;
+  place-items: center;
+  flex: 0 1 auto;
+}
+
+.nova-ecke .nova-status-copy {
+  margin: 0 0 18px;
+  max-width: 100%;
+  font-size: 10px;
+  letter-spacing: 0.24em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.nova-ecke-knoepfe {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.nova-ecke-knopf {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.04);
+  color: rgba(255, 255, 255, 0.8);
+  cursor: pointer;
+}
+
+.nova-ecke-knopf:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.nova-ecke-knopf svg {
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.nova-ecke-knopf.mic {
+  width: 44px;
+  height: 44px;
+  background: #ffffff;
+  color: #000000;
+}
+
+.nova-ecke-knopf.mic.an {
+  box-shadow: 0 0 0 4px rgba(255, 255, 255, 0.18), 0 0 22px rgba(255, 255, 255, 0.5);
+}
+
+.nova-chat-kopf {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.nova-chat-ecke {
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  border-radius: 999px;
+  padding: 4px 10px;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 10px;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
+.nova-chat-ecke:hover {
+  color: #ffffff;
+  border-color: rgba(255, 255, 255, 0.5);
+}

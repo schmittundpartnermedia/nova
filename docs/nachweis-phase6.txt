@@ -1,0 +1,30 @@
+Nachweis Phase 6 – 30.09.2026 22:47
+
+## NOVA.app gebaut (npm run macos:build)
+Identifier=io.elevum.nova
+TeamIdentifier=RTG4TKJJPT
+
+## Im Binary enthalten (strings):
+Bedienungshilfen
+Sprechtaste
+novaFensterModus
+novaTastenfreigabeGefragt
+
+## Menüpunkt „Voice Session starten“ entfernt:
+0
+
+## Tests
+test:kopf alle 10 bestanden
+test:mail alle 15 bestanden
+test:kampagne alle 9 bestanden
+test:kunden alle 8 bestanden
+test:tagesbetrieb alle 13 bestanden
+test:claude alle 8 bestanden
+
+## Oberfläche im eingebauten Browser (Dev-Server, echte DB)
+- 280×340 (Ecke): Orb, Statuszeile, Sprechknopf; mit simuliertem App-Zustand zusätzlich Zahnrad und Chat-Knopf, Statuszeile „Sprechtaste braucht Freigabe“.
+- 1200×760 (Chat): bisherige Ansicht, im Chat-Kopf „In die Ecke“.
+- Keine Konsolenfehler.
+
+## NICHT geprüft
+- NOVA.app selbst: Fenster in der Ecke, immer vorne, Wechsel Ecke/Chat, Einstellungsfenster, Freigabe-Dialog Bedienungshilfen, Tastenwahl – nur gebaut, nicht gestartet.

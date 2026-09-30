@@ -76,11 +76,14 @@ export function NovaChat({
   live,
   busy,
   onSend,
+  onEcke,
 }: {
   version: number;
   live: LiveZeile[];
   busy: boolean;
   onSend: (text: string) => void;
+  /** Nur in NOVA.app: Fenster wieder klein in die Ecke. */
+  onEcke?: () => void;
 }) {
   const [nachrichten, setNachrichten] = useState<ChatNachricht[]>([]);
   const [fehler, setFehler] = useState<string | null>(null);
@@ -115,7 +118,14 @@ export function NovaChat({
 
   return (
     <aside className="nova-chat" aria-label="Gespräch mit NOVA">
-      <div className="nova-chat-kopf">Gespräch</div>
+      <div className="nova-chat-kopf">
+        <span>Gespräch</span>
+        {onEcke ? (
+          <button type="button" className="nova-chat-ecke" onClick={onEcke}>
+            In die Ecke
+          </button>
+        ) : null}
+      </div>
       <div className="nova-chat-verlauf" ref={scroller}>
         {fehler ? <p className="nova-chat-hinweis">{fehler}</p> : null}
         {!fehler && nachrichten.length === 0 && live.length === 0 ? (
