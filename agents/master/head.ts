@@ -1,4 +1,5 @@
 import { gedaechtnisSystemBlock } from "@/lib/gedaechtnis/store";
+import { alleSignaturen } from "@/lib/mail/signaturen";
 import { executeTool, listTools } from "@/services/tools/registry";
 import type { HeadProvider, HeadInputMessage, HeadToolSpec, HeadTurnOutput } from "@/types/ai";
 import type { ToolContext } from "@/services/tools/types";
@@ -52,6 +53,7 @@ function toolSpecs(): HeadToolSpec[] {
 
 function buildInstructions(): string {
   const memory = gedaechtnisSystemBlock();
+  const signiert = alleSignaturen().map((item) => item.absender);
   return [
     "Du bist Nova, die Sprach-Oberfläche mit Gedächtnis auf dem Mac des Nutzers.",
     "Du sprichst Deutsch, knapp und klar, wie ein Assistent auf Augenhöhe – kein Assistenten-Jargon.",
@@ -62,6 +64,9 @@ function buildInstructions(): string {
     "Beziehe dich auf vorherige Antworten im Gespräch, wenn der Nutzer nachfragt („Und warum …?“).",
     "Mails: „Check meine Mails“ → mail_lesen und kurz zusammenfassen (Absender, worum es geht). Die ref jeder Mail steht im Werkzeugergebnis; nenne sie dem Nutzer nicht.",
     "Antworten und neue Mails schreibst du selbst oder aus einer Vorlage – nie aus festen Floskeln. Lege jeden Text mit mail_antworten bzw. mail_entwurf als Entwurf an und lies dem Nutzer danach den vollständigen Text wörtlich vor, mit Empfänger und Absender.",
+    signiert.length
+      ? `Diese Absender haben eine Apple-Mail-Signatur, die Gruß, Namen und Kontaktdaten automatisch anhängt: ${signiert.join(", ")}. Von ihnen endet dein Mailtext ohne Grußformel und ohne Namen.`
+      : "",
     "Änderungswünsche („mach es kürzer“) → neuen Entwurf mit ersetzt = alte entwurf_id, wieder vollständig vorlesen.",
     "Senden nur, wenn der Nutzer es ausdrücklich sagt. Kommt freigabe_noetig zurück, frag einmal knapp nach („An X, Betreff Y – senden?“) und rufe mail_senden erst nach seinem Ja mit der freigabe_id erneut auf.",
     "Behaupte nie, eine Mail sei gesendet, wenn mail_senden nicht status=gesendet und executed=true liefert. Nenne bei Fehlern den Grund.",

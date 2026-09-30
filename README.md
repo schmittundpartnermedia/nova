@@ -11,6 +11,7 @@ Sprach-Oberfläche mit Gedächtnis auf dem Mac. Auftrag und Phasen: [docs/AUFTRA
 - **Hintergrund-Läufer** (`services/worker/`): Queue mit Handlern `system.ping` und `mail.send`.
 - **Apple Mail** (`connectors/mail/apple.ts`): liest live den gemeinsamen Posteingang (höchstens 15 Mails je Abruf), sendet und antwortet über den Swift-Helfer (`services/desktop-service/native/main.swift`, Befehle `app.launch`, `automation.mail`, `applescript.run`). Gesendet gilt erst, wenn die Mail im Ordner „Gesendet“ des Absenderkontos gefunden wird. Absender nur aus `lib/mail/steerable.ts` (info@elevum.io, joachim@rankpilot.de; per `NOVA_MAIL_STEERABLE` änderbar).
 - **Entwürfe** (`services/mail/entwuerfe.ts`): liegen in der Datenbank (`communications`), nicht in Apple Mail. Senden nur mit Einzelfreigabe für genau diesen Entwurf oder mit Dauerfreigabe `mail.send`; deren Tageslimit zählt nur tatsächlich gesendete Mails.
+- **Signaturen**: `~/Nova/signaturen.txt` ordnet Absendern eine in Apple Mail gespeicherte Signatur zu (`adresse = Name`); sie wird beim Senden und Antworten gesetzt. Fehlt die Signatur in Apple Mail, scheitert der Versand sichtbar.
 - **Vorlagen**: `~/Nova/vorlagen/<name>.md`, erste Zeile optional `Betreff: …`, Platzhalter `{{…}}`. Fehlende Werte werden gemeldet, nicht erfunden.
 
 ## Einrichten

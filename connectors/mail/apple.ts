@@ -1,4 +1,5 @@
 import { isSteerableMailAddress, steerableMailAddresses } from "@/lib/mail/steerable";
+import { signaturFuer } from "@/lib/mail/signaturen";
 import {
   accountListScript,
   deliveryFromVerification,
@@ -135,7 +136,7 @@ export class AppleMailPostfach implements Postfach {
     const konto = await this.kontoFuer(input.absender);
     if (!konto) return fehlgeschlagen(`Kein Apple-Mail-Konto mit der Adresse ${input.absender}.`);
     const sent = await runMailAppleScript(
-      newSendScript({ sender: konto.email, to: input.an, subject: input.betreff, body: input.text }),
+      newSendScript({ sender: konto.email, to: input.an, subject: input.betreff, body: input.text, signature: signaturFuer(konto.email) }),
       40_000,
     );
     if (!sent.ok) return fehlgeschlagen(sent.error);
@@ -160,6 +161,7 @@ export class AppleMailPostfach implements Postfach {
         body: input.text,
         replyAll: false,
         sender: konto.email,
+        signature: signaturFuer(konto.email),
       }),
       40_000,
     );

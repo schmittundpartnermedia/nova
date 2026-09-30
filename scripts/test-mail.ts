@@ -249,6 +249,19 @@ async function main() {
       assert.equal(data.betreff, "Partnerschaft mit Elektro Maier");
       assert.equal(data.text, "Sehr geehrter Herr Maier,\n\nwir suchen Partner wie Elektro Maier.");
     }],
+    ["Signatur: je Absender aus ~/Nova/signaturen.txt, landet im Sende- und Antwort-Skript", async () => {
+      const { signaturFuer } = await import("@/lib/mail/signaturen");
+      const { newSendScript, replySendScript } = await import("@/lib/mail/apple");
+      fs.writeFileSync(path.join(process.env.NOVA_HOME!, "signaturen.txt"), "# Kommentar\njoachim@rankpilot.de = rankpilot Joachim\n");
+      assert.equal(signaturFuer("Joachim@Rankpilot.de"), "rankpilot Joachim");
+      assert.equal(signaturFuer("info@elevum.io"), undefined);
+      const neu = newSendScript({ sender: "joachim@rankpilot.de", to: "a@b.de", subject: "S", body: "T", signature: "rankpilot Joachim" });
+      assert.match(neu, /set message signature of msg to signature "rankpilot Joachim"/);
+      assert.ok(neu.indexOf("message signature") < neu.indexOf("send msg"), "Signatur vor dem Senden setzen");
+      const antwort = replySendScript({ accountId: "K", mailbox: "INBOX", messageId: "1", body: "T", replyAll: false, sender: "joachim@rankpilot.de", signature: "rankpilot Joachim" });
+      assert.match(antwort, /set message signature of theReply to signature "rankpilot Joachim"/);
+      assert.ok(!newSendScript({ sender: "x@y.de", to: "a@b.de", subject: "S", body: "T" }).includes("message signature"));
+    }],
   ];
 
   let failed = 0;

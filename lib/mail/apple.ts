@@ -287,6 +287,7 @@ export function replySendScript(input: {
   replyAll: boolean;
   sender: string;
   internetMessageId?: string;
+  signature?: string;
 }): string {
   return `${SCRIPT_HELPER}
 tell application "Mail"
@@ -297,18 +298,30 @@ tell application "Mail"
   try
     set sender of theReply to ${quoted(input.sender)}
   end try
+${signaturZeilen("theReply", input.signature)}
   set accepted to send theReply
   return accepted as text
 end tell`;
 }
 
-export function newSendScript(input: { sender: string; to: string; subject: string; body: string }): string {
+/**
+ * Hängt eine in Apple Mail gespeicherte Signatur an. Ohne try: Fehlt die Signatur, scheitert der Versand
+ * sichtbar, statt die Mail ohne Signatur zu verschicken.
+ */
+function signaturZeilen(variable: string, signature?: string): string {
+  if (!signature?.trim()) return "";
+  return `  set message signature of ${variable} to signature ${quoted(signature.trim())}
+  delay 1`;
+}
+
+export function newSendScript(input: { sender: string; to: string; subject: string; body: string; signature?: string }): string {
   return `${SCRIPT_HELPER}
 tell application "Mail"
   set msg to make new outgoing message with properties {subject:${quoted(input.subject)}, content:${quoted(input.body)}, visible:false, sender:${quoted(input.sender)}}
   tell msg
     make new to recipient at end of to recipients with properties {address:${quoted(input.to)}}
   end tell
+${signaturZeilen("msg", input.signature)}
   set accepted to send msg
   return accepted as text
 end tell`;

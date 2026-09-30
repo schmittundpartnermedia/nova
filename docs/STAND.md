@@ -83,6 +83,7 @@ Nicht geprüft / offen:
 Von Joachim geliefert (30.09.2026):
 - Vorlage `~/Nova/vorlagen/sponsoren.md` (nur für Sponsoren; eine Kunden-Vorlage folgt später). Platzhalter: `{{anrede}}` (ganze Anredezeile, z. B. „Guten Tag Herr Wolf“), `{{firma}}`, `{{bereich}}`. Gegenüber seinem Text geändert: Anrede, Firma (an beiden Stellen) und Bereich als Platzhalter, Tippfehler „Nutzermit“ korrigiert, Markdown-Link in der Signatur als reiner Text, Punkt nach der Hausnummer entfernt.
 - Kampagnen-Absender: **immer joachim@rankpilot.de**.
+- Betreff der Sponsoren-Vorlage endet auf „… mit {{firma}}“. Signaturblock aus der Vorlage entfernt: Stattdessen setzt NOVA die Apple-Mail-Signatur „rankpilot Joachim“ für joachim@rankpilot.de (`~/Nova/signaturen.txt`, `lib/mail/signaturen.ts`). Der Kopf weiß, dass bei diesem Absender Gruß und Name aus der Signatur kommen. **Nicht live geprüft**: ob Apple Mail die Signatur bei unsichtbar erzeugten Mails wirklich anhängt – Testmail steht aus.
 - Drei Test-Adressen für die Abnahme: lokal in `~/Nova/kampagnen/testadressen.txt` (nicht im Repo).
 
 ## Was Joachim liefert (siehe Auftrag, Anhang)
