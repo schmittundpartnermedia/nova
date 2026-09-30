@@ -754,3 +754,14 @@
     overflow: auto;
   }
 }
+
+.nova-orb {
+  position: relative;
+  display: grid;
+  place-items: center;
+}
+
+.nova-orb-canvas {
+  display: block;
+  background: transparent;
+}

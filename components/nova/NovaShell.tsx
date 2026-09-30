@@ -445,7 +445,7 @@ export function NovaShell() {
         <main className="nova-center">
           <div className="nova-hero">
             <div className="nova-hero-stage">
-              <Orb state={uiState} />
+              <Orb state={uiState} level={sessionSnap.capturing ? sessionSnap.level : null} />
             </div>
           </div>
 
