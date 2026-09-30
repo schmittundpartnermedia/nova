@@ -474,6 +474,10 @@ model Communication {
   /// Kampagne, zu der dieser Entwurf / diese Antwort gehört, und der Name des Empfängers (Firma).
   campaignId        String?   @map("campaign_id")
   recipientName     String?   @map("recipient_name")
+  /// Werte, mit denen die Vorlage gefüllt wurde (JSON) – für die Nachfass-Mail.
+  vorlagenWerte     String?   @map("vorlagen_werte")
+  /// Nachfass-Mail: id der ersten Mail, zu der sie nachfasst.
+  nachfassZu        String?   @map("nachfass_zu")
   mailThreadId      String?   @map("mail_thread_id")
   inReplyTo         String?   @map("in_reply_to")
   referencesHeader  String?   @map("references_header")
@@ -1356,24 +1360,27 @@ model WorkEffect {
 
 /// Eine Mail-Kampagne: eine Vorlage, eine Kontaktliste, ein Abstand, eine Freigabe.
 model Campaign {
-  id             String    @id @default(cuid())
-  organizationId String    @map("organization_id")
-  name           String
-  vorlage        String
-  liste          String
-  absender       String
-  abstandMinuten Int       @map("abstand_minuten")
+  id              String    @id @default(cuid())
+  organizationId  String    @map("organization_id")
+  name            String
+  vorlage         String
+  liste           String
+  absender        String
+  abstandMinuten  Int       @map("abstand_minuten")
   /// kampagne (Liste auf einmal) | tagesbetrieb (Kunden-Tagesbetrieb, Mails kommen im Lauf des Tages dazu)
-  art            String    @default("kampagne")
+  art             String    @default("kampagne")
   /// wartet_auf_freigabe | laeuft | fertig | abgebrochen
-  status         String    @default("wartet_auf_freigabe")
-  approvalId     String?   @map("approval_id")
+  status          String    @default("wartet_auf_freigabe")
+  approvalId      String?   @map("approval_id")
+  /// Nachfass-Mail: so viele Tage nach der ersten Mail ohne Antwort, mit dieser Vorlage (null = kein Nachfassen).
+  nachfassTage    Int?      @map("nachfass_tage")
+  nachfassVorlage String?   @map("nachfass_vorlage")
   /// JSON: [{ zeile, firma, email, grund }] – Zeilen der Liste, die nicht verschickt werden.
-  ungueltig      String    @default("[]")
-  startedAt      DateTime? @map("started_at")
-  finishedAt     DateTime? @map("finished_at")
-  createdAt      DateTime  @default(now()) @map("created_at")
-  updatedAt      DateTime  @updatedAt @map("updated_at")
+  ungueltig       String    @default("[]")
+  startedAt       DateTime? @map("started_at")
+  finishedAt      DateTime? @map("finished_at")
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
 
   organization   Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   communications Communication[]

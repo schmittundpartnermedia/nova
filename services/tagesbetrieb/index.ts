@@ -8,11 +8,12 @@ import { erstelleEntwurf, sendeEntwurf } from "@/services/mail/entwuerfe";
 import type { Postfach } from "@/services/mail/postfach";
 import { enqueueWorkItem } from "@/services/worker/queue";
 import { kuerzlichGemeldet, meldeNutzer } from "@/services/meldungen";
-import { planePostfachWache } from "@/services/kampagnen";
+import { nachfassEinstellung, planePostfachWache } from "@/services/kampagnen";
 import { schreibeTagesbericht } from "@/services/tagesbericht";
 import type { TageslaufRunner } from "@/lib/leads/scanner";
 import { leseEinstellungen, lokalesDatum, zeitfenster, type TagesbetriebEinstellungen } from "@/services/tagesbetrieb/einstellungen";
 import { feststellungAus } from "@/lib/leads/feststellung";
+import { planeNachfass } from "@/services/nachfass";
 import { pruefeAdresse, type MxPruefer } from "@/services/tagesbetrieb/pruefen";
 
 /**
@@ -168,6 +169,7 @@ async function naechsterEntwurf(input: {
       text: gefuellt.text,
       kampagneId: input.kampagneId,
       empfaengerName: lead.firma,
+      vorlagenWerte: werteAus(lead),
     });
     await prisma.lead.update({ where: { id: lead.id }, data: { campaignId: input.kampagneId, entwurfId: entwurf.id } });
     return { entwurfId: entwurf.id, leadId: lead.id };
@@ -249,6 +251,7 @@ export async function tagesbetriebTick(input: {
 
   // Morgens: Tageskampagne mit Beispiel-Mail zur Freigabe vorlegen.
   if (!kampagne) {
+    const nachfass = nachfassEinstellung(cfg.vorlage, cfg.nachfassTage, false);
     const neu = await prisma.campaign.create({
       data: {
         organizationId,
@@ -258,6 +261,8 @@ export async function tagesbetriebTick(input: {
         liste: "lead-scanner",
         absender: cfg.absender,
         abstandMinuten: cfg.abstandMinuten,
+        nachfassTage: nachfass?.tage ?? null,
+        nachfassVorlage: nachfass?.vorlage ?? null,
       },
     });
     const beispiel = await naechsterEntwurf({ organizationId, cfg, kampagneId: neu.id, mx: input.mx });
@@ -268,7 +273,9 @@ export async function tagesbetriebTick(input: {
     const approval = await createApprovalRequest({
       organizationId,
       actionType: "mail.campaign",
-      description: `${kampagnenName(datum)}: bis ${cfg.maxProTag} Mails von ${cfg.absender}, ${cfg.start}–${cfg.ende} Uhr, alle ${cfg.abstandMinuten} Minuten`,
+      description:
+        `${kampagnenName(datum)}: bis ${cfg.maxProTag} Mails von ${cfg.absender}, ${cfg.start}–${cfg.ende} Uhr, alle ${cfg.abstandMinuten} Minuten` +
+        (nachfass ? `; Nachfass-Mail nach ${nachfass.tage} Tagen ohne Antwort (Vorlage „${nachfass.vorlage}“)` : ""),
       payload: { kampagneId: neu.id, tagesbetrieb: true },
     });
     await prisma.campaign.update({ where: { id: neu.id }, data: { approvalId: approval.id } });
@@ -279,6 +286,7 @@ export async function tagesbetriebTick(input: {
       text:
         `Kunden-Tagesbetrieb heute: bis zu ${cfg.maxProTag} Mails von ${cfg.absender}, ${cfg.start}–${cfg.ende} Uhr, ` +
         `alle ${cfg.abstandMinuten} Minuten, Vorlage „${cfg.vorlage}“. Jede Adresse wird vorher geprüft. ` +
+        (nachfass ? `Wer nach ${nachfass.tage} Tagen nicht antwortet, bekommt eine kurze Nachfass-Mail. ` : "") +
         `Hier die erste Mail als Beispiel (an ${entwurf.recipientName}, ${entwurf.toAddress}). Soll ich heute so starten?`,
       werkzeugNotiz: `kampagne_planen: ${JSON.stringify({
         ok: true,
@@ -332,6 +340,7 @@ export async function tagesbetriebFreigeben(input: { organizationId: string; fre
   if (kampagne.status !== "wartet_auf_freigabe") throw new Error(`Die Tageskampagne ist bereits ${kampagne.status}.`);
   await decideApproval({ organizationId: input.organizationId, approvalId: input.freigabeId, status: "approved" });
   await prisma.campaign.update({ where: { id: kampagne.id }, data: { status: "laeuft", startedAt: new Date() } });
+  if (kampagne.nachfassTage) await planeNachfass(input.organizationId, new Date(Date.now() + 60_000));
   return { kampagne_id: kampagne.id, name: kampagne.name, status: "laeuft" };
 }
 

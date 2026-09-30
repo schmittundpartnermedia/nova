@@ -4,6 +4,7 @@ import { isSteerableMailAddress, steerableMailAddresses } from "@/lib/mail/steer
 import { authorizeExternalAction, decideApproval } from "@/services/approvals";
 import { gedankenstrichIn } from "@/lib/mail/stil";
 import { aufSperrliste } from "@/lib/mail/sperrliste";
+import { hatGeantwortet } from "@/services/mail/antworten";
 import { decodeMailRef, type Postfach } from "@/services/mail/postfach";
 
 /**
@@ -59,6 +60,10 @@ export async function erstelleEntwurf(input: {
   ersetzt?: string;
   kampagneId?: string;
   empfaengerName?: string;
+  /** Werte, mit denen die Vorlage gefüllt wurde; die Nachfass-Mail braucht sie später. */
+  vorlagenWerte?: Record<string, string>;
+  /** Nachfass-Mail: id der ersten Mail. */
+  nachfassZu?: string;
 }): Promise<Entwurf> {
   assertOrganizationId(input.organizationId);
   const absender = input.absender.trim().toLowerCase();
@@ -95,6 +100,8 @@ export async function erstelleEntwurf(input: {
       replyRef: input.antwortAuf ?? null,
       campaignId: input.kampagneId ?? null,
       recipientName: input.empfaengerName ?? null,
+      vorlagenWerte: input.vorlagenWerte ? JSON.stringify(input.vorlagenWerte) : null,
+      nachfassZu: input.nachfassZu ?? null,
     },
   });
   return toEntwurf(row);
@@ -156,8 +163,19 @@ export async function sendeEntwurf(input: {
     const kampagne = await prisma.campaign.findFirst({
       where: { id: entwurf.kampagneId, organizationId: input.organizationId },
     });
-    if (!kampagne || kampagne.status !== "laeuft" || !kampagne.approvalId) {
+    // Die Nachfass-Mail gehört zu einer Kampagne, deren erste Runde schon durch sein darf („fertig“).
+    const istNachfass = Boolean(zeile.nachfassZu);
+    const darf =
+      kampagne?.status === "laeuft" || (istNachfass && kampagne?.status === "fertig" && kampagne.nachfassTage !== null);
+    if (!kampagne || !darf || !kampagne.approvalId) {
       return { status: "fehlgeschlagen", executed: false, grund: "Die Kampagne läuft nicht (nicht freigegeben oder abgebrochen)." };
+    }
+    if (istNachfass) {
+      const erste = await prisma.communication.findUnique({ where: { id: zeile.nachfassZu! } });
+      if (erste && (await hatGeantwortet(erste))) {
+        await prisma.communication.update({ where: { id: entwurf.id }, data: { status: "cancelled" } });
+        return { status: "fehlgeschlagen", executed: false, grund: "Inzwischen kam eine Antwort, die Nachfass-Mail entfällt." };
+      }
     }
     actionType = "mail.campaign";
     approvalToken = kampagne.approvalId;

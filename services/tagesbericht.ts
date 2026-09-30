@@ -74,7 +74,7 @@ export async function schreibeTagesbericht(input: { organizationId: string; datu
   if (gesendet.length) {
     zeilen.push("| Zeit | Firma | An | Betreff | Kampagne |", "|---|---|---|---|---|");
     for (const mail of gesendet) {
-      zeilen.push(`| ${zeit(mail.sentAt)} | ${mail.recipientName ?? ""} | ${mail.toAddress ?? ""} | ${mail.subject.replace(/\|/g, "/")} | ${mail.campaign?.name ?? "einzeln"} |`);
+      zeilen.push(`| ${zeit(mail.sentAt)} | ${mail.recipientName ?? ""} | ${mail.toAddress ?? ""} | ${mail.subject.replace(/\|/g, "/")} | ${mail.campaign?.name ?? "einzeln"}${mail.nachfassZu ? " (Nachfass)" : ""} |`);
     }
   } else zeilen.push("Keine.");
   zeilen.push("", "## Fehlgeschlagen", "");

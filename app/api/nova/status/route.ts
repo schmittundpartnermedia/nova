@@ -21,8 +21,8 @@ export async function GET() {
     const kampagnen = await Promise.all(
       laufend.map(async (kampagne) => {
         const [gesamt, gesendet] = await Promise.all([
-          prisma.communication.count({ where: { campaignId: kampagne.id, direction: "outbound" } }),
-          prisma.communication.count({ where: { campaignId: kampagne.id, direction: "outbound", status: "sent" } }),
+          prisma.communication.count({ where: { campaignId: kampagne.id, direction: "outbound", nachfassZu: null } }),
+          prisma.communication.count({ where: { campaignId: kampagne.id, direction: "outbound", status: "sent", nachfassZu: null } }),
         ]);
         return { id: kampagne.id, name: kampagne.name, gesamt, gesendet };
       }),

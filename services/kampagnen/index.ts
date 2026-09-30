@@ -1,13 +1,14 @@
 import { prisma } from "@/lib/prisma";
 import { assertOrganizationId } from "@/services/tenant";
 import { isSteerableMailAddress, steerableMailAddresses } from "@/lib/mail/steerable";
-import { fuelleVorlage } from "@/lib/mail/vorlagen";
+import { fuelleVorlage, leseVorlagen } from "@/lib/mail/vorlagen";
 import { leseKontaktliste } from "@/lib/mail/kontaktlisten";
 import { createApprovalRequest, decideApproval } from "@/services/approvals";
 import { erstelleEntwurf } from "@/services/mail/entwuerfe";
 import { scheduleMailSendBatch } from "@/services/mail/schedule";
 import { enqueueWorkItem } from "@/services/worker/queue";
 import { aufSperrliste, leseSperrliste } from "@/lib/mail/sperrliste";
+import { NACHFASS_INTERVALL_MS, planeNachfass } from "@/services/nachfass";
 import { kuerzlichGemeldet, meldeNutzer } from "@/services/meldungen";
 
 /**
@@ -36,9 +37,35 @@ export type KampagnenStand = {
   gesperrt: Array<{ firma: string; email: string }>;
   /** Gesendet, aber als unzustellbar zurückgekommen. */
   unzustellbar: Array<{ firma: string; email: string }>;
+  nachfass: { nach_tagen: number; vorlage: string; gesendet: number; geplant: number } | null;
   ungueltig: Ungueltig[];
   naechste_mail: string | null;
 };
+
+/** Standard-Abstand der Nachfass-Mail, wenn es eine Nachfass-Vorlage gibt. */
+export const NACHFASS_STANDARD_TAGE = 6;
+
+/**
+ * Nachfass-Einstellung einer Kampagne: Vorlage „<vorlage>-nachfass“ muss es geben.
+ * tage weggelassen → Standard; 0 → kein Nachfassen.
+ */
+export function nachfassEinstellung(
+  vorlage: string,
+  tage?: number,
+  /** Ausdrücklich gewünscht (Werkzeug): fehlende Vorlage ist ein Fehler. Tagesbetrieb: dann eben ohne Nachfass. */
+  vorlagePflicht = true,
+): { tage: number; vorlage: string } | null {
+  if (tage === 0) return null;
+  const name = `${vorlage}-nachfass`;
+  const gibtEs = leseVorlagen().some((item) => item.name.toLowerCase() === name.toLowerCase());
+  if (!gibtEs) {
+    if (tage !== undefined && vorlagePflicht) throw new Error(`Für eine Nachfass-Mail fehlt die Vorlage „${name}“ in ~/Nova/vorlagen/.`);
+    return null;
+  }
+  const clean = tage === undefined ? NACHFASS_STANDARD_TAGE : Math.round(tage);
+  if (!Number.isFinite(clean) || clean < 2 || clean > 30) throw new Error("Nachfass nach 2 bis 30 Tagen.");
+  return { tage: clean, vorlage: name };
+}
 
 function firmaAus(werte: Record<string, string>): string {
   return werte.firma || werte.unternehmen || werte.email || "";
@@ -51,6 +78,8 @@ export async function planeKampagne(input: {
   absender: string;
   abstandMinuten: number;
   name?: string;
+  /** Nachfass nach so vielen Tagen ohne Antwort; 0 = keins; weggelassen = Standard (wenn es „<vorlage>-nachfass“ gibt). */
+  nachfassTage?: number;
 }) {
   assertOrganizationId(input.organizationId);
   const absender = input.absender.trim().toLowerCase();
@@ -64,7 +93,7 @@ export async function planeKampagne(input: {
   const zeilen = leseKontaktliste(input.liste);
   if (!zeilen.length) throw new Error(`Die Kontaktliste „${input.liste}“ ist leer.`);
 
-  const gueltig: Array<{ firma: string; email: string; betreff: string; text: string }> = [];
+  const gueltig: Array<{ firma: string; email: string; betreff: string; text: string; werte: Record<string, string> }> = [];
   const ungueltig: Ungueltig[] = [];
   const gesehen = new Set<string>();
   const sperrliste = leseSperrliste();
@@ -89,9 +118,10 @@ export async function planeKampagne(input: {
       continue;
     }
     gesehen.add(email.toLowerCase());
-    gueltig.push({ firma, email, betreff: gefuellt.betreff, text: gefuellt.text });
+    gueltig.push({ firma, email, betreff: gefuellt.betreff, text: gefuellt.text, werte });
   }
   if (!gueltig.length) throw new Error("Keine Zeile der Liste ist versendbar.");
+  const nachfass = nachfassEinstellung(input.vorlage, input.nachfassTage);
 
   const kampagne = await prisma.campaign.create({
     data: {
@@ -102,6 +132,8 @@ export async function planeKampagne(input: {
       absender,
       abstandMinuten: abstand,
       ungueltig: JSON.stringify(ungueltig),
+      nachfassTage: nachfass?.tage ?? null,
+      nachfassVorlage: nachfass?.vorlage ?? null,
     },
   });
   for (const mail of gueltig) {
@@ -113,12 +145,15 @@ export async function planeKampagne(input: {
       text: mail.text,
       kampagneId: kampagne.id,
       empfaengerName: mail.firma,
+      vorlagenWerte: mail.werte,
     });
   }
   const approval = await createApprovalRequest({
     organizationId: input.organizationId,
     actionType: "mail.campaign",
-    description: `Kampagne „${kampagne.name}“: ${gueltig.length} Mails von ${absender}, alle ${abstand} Minuten`,
+    description:
+      `Kampagne „${kampagne.name}“: ${gueltig.length} Mails von ${absender}, alle ${abstand} Minuten` +
+      (nachfass ? `; wer nach ${nachfass.tage} Tagen nicht geantwortet hat, bekommt eine Nachfass-Mail (Vorlage „${nachfass.vorlage}“)` : ""),
     payload: { kampagneId: kampagne.id, anzahl: gueltig.length },
   });
   await prisma.campaign.update({ where: { id: kampagne.id }, data: { approvalId: approval.id } });
@@ -131,6 +166,9 @@ export async function planeKampagne(input: {
     absender,
     abstand_minuten: abstand,
     dauer_minuten: (gueltig.length - 1) * abstand,
+    nachfass: nachfass
+      ? { nach_tagen: nachfass.tage, vorlage: nachfass.vorlage, hinweis: "Nur an Empfänger ohne Antwort; in der Zusammenfassung nennen." }
+      : "keine Nachfass-Mail",
     empfaenger: gueltig.map((mail) => `${mail.firma} <${mail.email}>`),
     ungueltig,
     beispiel: { an: gueltig[0]!.email, betreff: gueltig[0]!.betreff, text: gueltig[0]!.text },
@@ -162,15 +200,19 @@ export async function starteKampagne(input: { organizationId: string; kampagneId
     intervalMs: kampagne.abstandMinuten * 60_000,
   });
   await planePostfachWache(input.organizationId, new Date(start.getTime() + WACHE_INTERVALL_MS));
+  if (kampagne.nachfassTage) await planeNachfass(input.organizationId, new Date(start.getTime() + NACHFASS_INTERVALL_MS));
   return kampagnenStand(input.organizationId, kampagne.id);
 }
 
 export async function kampagnenStand(organizationId: string, kampagneId: string): Promise<KampagnenStand> {
   const kampagne = await prisma.campaign.findFirstOrThrow({ where: { id: kampagneId, organizationId } });
-  const mails = await prisma.communication.findMany({
+  const alle = await prisma.communication.findMany({
     where: { campaignId: kampagne.id, direction: "outbound" },
     orderBy: { createdAt: "asc" },
   });
+  // Erste Mails und Nachfass-Mails getrennt zählen.
+  const mails = alle.filter((row) => !row.nachfassZu);
+  const nachfassMails = alle.filter((row) => row.nachfassZu);
   const gesendet = mails.filter((row) => row.status === "sent").length;
   const fehlgeschlagen = mails.filter((row) => row.status === "failed");
   const offen = mails.filter((row) => row.status === "draft").length;
@@ -183,7 +225,7 @@ export async function kampagnenStand(organizationId: string, kampagneId: string)
       organizationId,
       kind: "mail.send",
       status: { in: ["queued", "leased", "running"] },
-      payload: { in: mails.map((row) => JSON.stringify({ entwurfId: row.id })) },
+      payload: { in: alle.map((row) => JSON.stringify({ entwurfId: row.id })) },
     },
     orderBy: { runAt: "asc" },
   });
@@ -205,6 +247,14 @@ export async function kampagnenStand(organizationId: string, kampagneId: string)
     })),
     gesperrt,
     unzustellbar,
+    nachfass: kampagne.nachfassTage
+      ? {
+          nach_tagen: kampagne.nachfassTage,
+          vorlage: kampagne.nachfassVorlage ?? "",
+          gesendet: nachfassMails.filter((row) => row.status === "sent").length,
+          geplant: nachfassMails.filter((row) => row.status === "draft").length,
+        }
+      : null,
     ungueltig: JSON.parse(kampagne.ungueltig || "[]") as Ungueltig[],
     naechste_mail: kampagne.status === "laeuft" && naechste ? naechste.runAt.toISOString() : null,
   };
@@ -306,8 +356,15 @@ export async function planePostfachWache(organizationId: string, runAt: Date) {
   });
 }
 
-/** Beim Start des Hintergrund-Läufers: laufende Kampagnen melden und die Wache sicherstellen. */
+/** Beim Start des Hintergrund-Läufers: laufende Kampagnen melden, Wache und Nachfass sicherstellen. */
 export async function nachNeustart(): Promise<number> {
+  const mitNachfass = await prisma.campaign.findMany({
+    where: { nachfassTage: { not: null }, status: { in: ["laeuft", "fertig"] } },
+    select: { organizationId: true },
+    distinct: ["organizationId"],
+  });
+  for (const { organizationId } of mitNachfass) await planeNachfass(organizationId, new Date(Date.now() + 60_000));
+
   const laufend = await prisma.campaign.findMany({ where: { status: "laeuft", art: "kampagne" } });
   for (const kampagne of laufend) {
     const anlass = `kampagne-neustart:${kampagne.id}`;

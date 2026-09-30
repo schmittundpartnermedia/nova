@@ -13,7 +13,7 @@ function fehler(error: unknown): NovaToolResult {
 export const kampagnePlanenTool: NovaToolDefinition = {
   name: "kampagne_planen",
   description:
-    "Plant eine Mail-Kampagne: Vorlage (vorlage_liste) × Kontaktliste (Datei in ~/Nova/kampagnen/, Spalten wie email, anrede, firma, bereich). Legt alle Entwürfe an und eine Freigabe – sendet nichts. Danach dem Nutzer einmal zusammenfassen (Anzahl, Vorlage, Abstand, Absender, Dauer, ungültige Adressen) und fragen: „… – los?“.",
+    "Plant eine Mail-Kampagne: Vorlage (vorlage_liste) × Kontaktliste (Datei in ~/Nova/kampagnen/, Spalten wie email, anrede, firma, bereich). Legt alle Entwürfe an und eine Freigabe – sendet nichts. Danach dem Nutzer einmal zusammenfassen (Anzahl, Vorlage, Abstand, Absender, Dauer, ungültige Adressen, Nachfass-Mail) und fragen: „… – los?“.",
   parameters: {
     type: "object",
     properties: {
@@ -21,8 +21,13 @@ export const kampagnePlanenTool: NovaToolDefinition = {
       liste: { type: "string", description: "Name der Kontaktliste ohne .csv. Leer lassen, um die vorhandenen Listen zu sehen." },
       abstand_minuten: { type: "integer" },
       absender: { type: "string" },
+      nachfass_tage: {
+        type: "integer",
+        description:
+          "Nachfass-Mail an alle ohne Antwort nach so vielen Tagen (2–30). -1 = Standard (6 Tage, wenn es die Vorlage „<vorlage>-nachfass“ gibt), 0 = keine Nachfass-Mail.",
+      },
     },
-    required: ["vorlage", "liste", "abstand_minuten", "absender"],
+    required: ["vorlage", "liste", "abstand_minuten", "absender", "nachfass_tage"],
     additionalProperties: false,
   },
   async execute(args, ctx) {
@@ -36,6 +41,7 @@ export const kampagnePlanenTool: NovaToolDefinition = {
         liste: str(args.liste),
         absender: str(args.absender),
         abstandMinuten: Number(args.abstand_minuten),
+        nachfassTage: typeof args.nachfass_tage === "number" && args.nachfass_tage >= 0 ? args.nachfass_tage : undefined,
       });
       return { ok: true, executed: true, data: { ...plan, status: "wartet_auf_freigabe" } };
     } catch (error) {

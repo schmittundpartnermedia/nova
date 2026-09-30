@@ -19,6 +19,10 @@ export type TagesbetriebEinstellungen = {
   wochentage: number[];
   /** Unter so vielen geprüften Adressen startet NOVA den nächsten Scanner-Tageslauf. */
   vorratMindestens: number;
+  /** Nachfass-Mail nach so vielen Tagen ohne Antwort (0 = aus; braucht die Vorlage „<vorlage>-nachfass“). */
+  nachfassTage: number;
+  /** Höchstens so viele Nachfass-Mails am Tag (über alle Kampagnen). */
+  nachfassMaxProTag: number;
 };
 
 export const STANDARD: TagesbetriebEinstellungen = {
@@ -31,6 +35,8 @@ export const STANDARD: TagesbetriebEinstellungen = {
   ende: "17:00",
   wochentage: [1, 2, 3, 4, 5],
   vorratMindestens: 5,
+  nachfassTage: 6,
+  nachfassMaxProTag: 30,
 };
 
 export function einstellungenDatei(): string {
