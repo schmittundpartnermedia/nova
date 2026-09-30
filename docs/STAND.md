@@ -180,6 +180,14 @@ Auf Joachims ausdrückliches Wort gelöscht: fünf archivierte Testgespräche au
 
 **30.09.2026, 23:55 – Keine Gedankenstriche in Mails (Joachims Vorgabe):** `lib/mail/stil.ts`. `erstelleEntwurf` (einziger Weg für alle Entwürfe: Kopf, Kampagne, Tagesbetrieb) lehnt Betreff/Text mit – oder — ab; `fuelleVorlage` lehnt Vorlagen mit Gedankenstrich ab und macht aus Gedankenstrichen in eingesetzten Werten (z. B. Firmennamen) Bindestriche. Kopf-Anweisung ergänzt. Kunden-Vorlage bereinigt. `test:mail` 16/16 (neu), übrige Tests grün.
 
+**01.10.2026, 00:30 – Mail-Gestaltung nach Joachims Test-Mail (Claude Code):** Joachims Test über NOVA.app kam an (Gmail), aber: Absender hieß nur „joachim“, Absätze zu weit, nichts fett.
+- Anzeigename je Absender: `~/Nova/absendernamen.txt` (`joachim@rankpilot.de = rankPilot Joachim Schmitt`), gesendet als „Name <adresse>“ (`lib/mail/absendernamen.ts`).
+- Fettdruck: `**so**` in Vorlage oder Kopf-Text; beim Senden Sternchen raus, Bereiche per AppleScript `set font of characters i thru j … to "Helvetica-Bold"` (`lib/mail/fett.ts`, `lib/mail/apple.ts`). HTML kann Apple Mail per Skript nicht (`html content` laut Apple „does nothing“). Chat-Karte zeigt Fettdruck.
+- Optionale Abschnitte jetzt `{{#name}} … {{/name}}` (auch mitten im Absatz), ersetzt `{{?name}}`. Vorlage `kunden.md` mit weniger Absätzen, Link direkt unter dem Satz.
+- Feststellung: „Ihre Website … und sie …“ statt doppelt „Ihre Website“.
+Tests: mail 17/17, kunden 9/9, kopf 10, kampagne 9, tagesbetrieb 13, claude 8.
+**Nicht geprüft:** ob Apple Mail den Fettdruck und den Anzeigenamen wirklich so verschickt – braucht eine echte Test-Mail. Der große Abstand vor der Signatur kommt nicht aus NOVAs Text (endet ohne Leerzeilen); vermutlich aus der Signatur in Apple Mail selbst, nicht geprüft.
+
 ## Dran
 
 **Joachim: Abnahme Phase 4 in NOVA.app** (vorher NOVA.app einmal neu starten, damit der Hintergrund-Läufer den neuen Code hat):

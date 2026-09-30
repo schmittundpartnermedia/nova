@@ -19,6 +19,8 @@ import {
   readMailAutomationState,
   runMailAppleScript,
 } from "@/services/mail/apple-events";
+import { absenderMitName } from "@/lib/mail/absendernamen";
+import { ohneFett, zerlegeFett } from "@/lib/mail/fett";
 import {
   decodeMailRef,
   encodeMailRef,
@@ -30,6 +32,12 @@ import {
 } from "@/services/mail/postfach";
 
 const KONTEN_TTL_MS = 60_000;
+
+/** Mailtext für Apple Mail: Sternchen raus, markierte Stellen fett. */
+function inhalt(markiert: string): { body: string; fett: ReturnType<typeof zerlegeFett>["fett"] } {
+  const { text, fett } = zerlegeFett(markiert);
+  return { body: text, fett };
+}
 
 function fehlgeschlagen(grund: string): VersandErgebnis {
   return { ok: false, executed: false, grund };
@@ -136,11 +144,17 @@ export class AppleMailPostfach implements Postfach {
     const konto = await this.kontoFuer(input.absender);
     if (!konto) return fehlgeschlagen(`Kein Apple-Mail-Konto mit der Adresse ${input.absender}.`);
     const sent = await runMailAppleScript(
-      newSendScript({ sender: konto.email, to: input.an, subject: input.betreff, body: input.text, signature: signaturFuer(konto.email) }),
+      newSendScript({
+        sender: absenderMitName(konto.email),
+        to: input.an,
+        subject: ohneFett(input.betreff),
+        ...inhalt(input.text),
+        signature: signaturFuer(konto.email),
+      }),
       40_000,
     );
     if (!sent.ok) return fehlgeschlagen(sent.error);
-    return this.bestaetigen(konto.appleId, input.betreff, input.an, sent.output);
+    return this.bestaetigen(konto.appleId, ohneFett(input.betreff), input.an, sent.output);
   }
 
   async antworten(input: { absender: string; ref: string; an: string; betreff: string; text: string }): Promise<VersandErgebnis> {
@@ -158,15 +172,15 @@ export class AppleMailPostfach implements Postfach {
         mailbox: original.postfach,
         messageId: original.nachrichtId,
         internetMessageId: original.messageId,
-        body: input.text,
+        ...inhalt(input.text),
         replyAll: false,
-        sender: konto.email,
+        sender: absenderMitName(konto.email),
         signature: signaturFuer(konto.email),
       }),
       40_000,
     );
     if (!sent.ok) return fehlgeschlagen(sent.error);
-    return this.bestaetigen(konto.appleId, input.betreff, input.an, sent.output);
+    return this.bestaetigen(konto.appleId, ohneFett(input.betreff), input.an, sent.output);
   }
 
   /** Gesendet heißt: im Ordner „Gesendet“ des Absenderkontos gefunden. */

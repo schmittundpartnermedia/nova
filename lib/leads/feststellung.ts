@@ -1,9 +1,9 @@
 /**
  * Macht aus den Befunden des Lead-Scanners einen Satzteil für die Kunden-Vorlage:
- * „Dabei ist mir aufgefallen, dass {{?feststellung}}. …“ (optionale Zeile)
+ * „{{#feststellung}}Dabei ist mir aufgefallen, dass {{feststellung}}. …{{/feststellung}}“ (optionaler Abschnitt)
  * Grundlage sind die festen Befund-Texte aus lead-scanner/src/scoring.ts (Spalte `befunde`, getrennt mit „; “).
  * Genommen werden höchstens zwei, die wichtigsten zuerst (Reihenfolge = Punkte im Scanner).
- * Ohne verwertbaren Befund bleibt die Feststellung leer – dann fällt die Zeile weg, erfunden wird nichts.
+ * Ohne verwertbaren Befund bleibt die Feststellung leer – dann fällt der Abschnitt weg, erfunden wird nichts.
  */
 
 type Regel = { beginnt: string; satz: (befund: string) => string | null };
@@ -53,9 +53,17 @@ export function feststellungAus(befunde: string | null | undefined, hoechstens =
     const satz = passend?.regel.satz(befund);
     if (passend && satz) saetze.push({ rang: passend.rang, satz });
   }
-  return saetze
+  const gewaehlt = saetze
     .sort((a, b) => a.rang - b.rang)
     .slice(0, hoechstens)
-    .map((eintrag) => eintrag.satz)
+    .map((eintrag) => eintrag.satz);
+  // „Ihre Website … und Ihre Website …“ → „Ihre Website … und sie …“
+  const subjekt = (satz: string) => satz.split(" ").slice(0, 2).join(" ");
+  return gewaehlt
+    .map((satz, index) =>
+      index > 0 && subjekt(satz) === subjekt(gewaehlt[index - 1]!) && subjekt(satz).startsWith("Ihre ")
+        ? `sie ${satz.split(" ").slice(2).join(" ")}`
+        : satz,
+    )
     .join(" und ");
 }

@@ -97,7 +97,7 @@ function buildInstructions(): string {
     "- Nachrichten, die mit [Postfach-Wache] beginnen, kommen vom Hintergrund-Läufer, nicht von Joachim: Entwurf anlegen, nie senden.",
     "- „Merk dir …“ → immer gedaechtnis_schreiben (Datei firma, kunden oder projekte). Fragen zum Gemerkten beantwortest du aus dem Dauergedächtnis und dem Gespräch.",
     "- Mails: „Check meine Mails“ → mail_lesen. Die ref jeder Mail steht im Werkzeugergebnis; nenne sie Joachim nicht.",
-    "- Mailtexte schreibst du selbst oder aus einer Vorlage, nie aus festen Floskeln, und legst sie mit mail_antworten bzw. mail_entwurf an. In Mails (Betreff und Text) nie Gedankenstriche (– oder —): Sätze mit Punkt oder Komma trennen; Entwürfe mit Gedankenstrich lehnt das Werkzeug ab. Änderungswünsche („mach es kürzer“) → neuer Entwurf mit ersetzt = alte entwurf_id.",
+    "- Mailtexte schreibst du selbst oder aus einer Vorlage, nie aus festen Floskeln, und legst sie mit mail_antworten bzw. mail_entwurf an. In Mails (Betreff und Text) nie Gedankenstriche (– oder —): Sätze mit Punkt oder Komma trennen; Entwürfe mit Gedankenstrich lehnt das Werkzeug ab. Was wirklich wichtig ist, darfst du sparsam mit **fett** markieren; die Sternchen werden beim Senden zu Fettdruck. Absätze kurz halten, keine Leerzeile vor einem Link. Änderungswünsche („mach es kürzer“) → neuer Entwurf mit ersetzt = alte entwurf_id.",
     signiert.length
       ? `- Diese Absender haben eine Apple-Mail-Signatur, die Gruß, Namen und Kontaktdaten automatisch anhängt: ${signiert.join(", ")}. Von ihnen endet dein Mailtext ohne Grußformel und ohne Namen.`
       : "",

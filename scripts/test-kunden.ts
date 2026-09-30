@@ -53,24 +53,30 @@ async function main() {
 
   const tests: Array<[string, () => Promise<void>]> = [
     [
-      "Feststellung aus Scanner-Befunden: wichtigste zwei, lesbar, nichts erfunden; ohne Befund fällt die Zeile weg",
+      "Feststellung aus Scanner-Befunden: wichtigste zwei, lesbar, nichts erfunden; ohne Befund fällt der Abschnitt weg",
       async () => {
         assert.equal(
           feststellungAus("keine Meta-Description; nur 4 Bewertungen (< 10); kein SSL/HTTPS"),
           "Ihr Google-Profil bisher nur 4 Bewertungen hat und Ihre Website ohne sichere HTTPS-Verbindung läuft",
+        );
+        assert.equal(
+          feststellungAus("Website ohne LocalBusiness-Schema (JSON-LD); kein SSL/HTTPS"),
+          "Ihre Website ohne sichere HTTPS-Verbindung läuft und sie Google keine strukturierten Firmendaten wie Adresse und Öffnungszeiten mitliefert",
         );
         assert.equal(feststellungAus("nur eine GMB-Kategorie gepflegt"), "in Ihrem Google-Unternehmensprofil nur eine Kategorie gepflegt ist");
         assert.equal(feststellungAus("Bewertungsschnitt 3.7 (< 4,0)"), "Ihr Bewertungsschnitt bei Google aktuell bei 3,7 Sternen liegt");
         assert.equal(feststellungAus("langsame Ladezeit (TTFB 2.4s > 1,5s)"), "Ihre Website erst nach 2,4 Sekunden antwortet");
         assert.equal(feststellungAus("Domain-Wechsel: a.de -> b.de; Redirect nicht auflösbar"), "");
         assert.equal(feststellungAus(""), "");
-        // Optionale Zeile: mit Befund drin, ohne Befund fällt sie ganz weg (kein Loch, keine erfundene Feststellung).
-        const vorlage = "A\n\nDabei ist mir aufgefallen, dass {{?feststellung}}. Das zählt.\n\nB {{firma}}";
+        // Optionaler Abschnitt: mit Befund drin (auch mitten im Absatz), ohne Befund fällt er ganz weg.
+        const vorlage = "A {{firma}} ist da. {{#feststellung}}Dabei ist mir aufgefallen, dass **{{feststellung}}**. Das zählt.{{/feststellung}}\n\nB {{firma}}";
         const mit = fillMailTemplate(vorlage, { firma: "X", feststellung: feststellungAus("kein SSL/HTTPS") });
-        assert.equal(mit.text, "A\n\nDabei ist mir aufgefallen, dass Ihre Website ohne sichere HTTPS-Verbindung läuft. Das zählt.\n\nB X");
+        assert.equal(mit.text, "A X ist da. Dabei ist mir aufgefallen, dass **Ihre Website ohne sichere HTTPS-Verbindung läuft**. Das zählt.\n\nB X");
         const ohne = fillMailTemplate(vorlage, { firma: "X", feststellung: feststellungAus("") });
-        assert.equal(ohne.text, "A\n\nB X");
+        assert.equal(ohne.text, "A X ist da.\n\nB X");
         assert.deepEqual(ohne.fehlend, []);
+        // Ein ganzer Absatz als Abschnitt hinterlässt keine Leerzeilen-Lücke.
+        assert.equal(fillMailTemplate("A\n\n{{#f}}Satz {{f}}.{{/f}}\n\nB", {}).text, "A\n\nB");
         // Pflicht-Platzhalter bleiben Pflicht.
         assert.deepEqual(fillMailTemplate(vorlage, {}).fehlend, ["firma"]);
       },

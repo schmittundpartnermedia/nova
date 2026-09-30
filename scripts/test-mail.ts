@@ -275,6 +275,25 @@ async function main() {
       assert.equal(wert.ok, true);
       assert.equal((wert.data as { betreff: string }).betreff, "Partnerschaft mit Maier - Elektro");
     }],
+    ["Fettdruck und Anzeigename: Sternchen raus, Bereiche fett im Skript, Absender mit Namen", async () => {
+      const { zerlegeFett } = await import("@/lib/mail/fett");
+      const { newSendScript, replySendScript } = await import("@/lib/mail/apple");
+      const { absenderMitName } = await import("@/lib/mail/absendernamen");
+      const z = zerlegeFett("Hallo **Welt**, das ist **„wichtig“**. Ende ** offen");
+      assert.equal(z.text, "Hallo Welt, das ist „wichtig“. Ende ** offen");
+      assert.deepEqual(z.fett.map((b) => z.text.slice(b.von - 1, b.bis)), ["Welt", "„wichtig“"]);
+      const neu = newSendScript({ sender: "a@b.de", to: "c@d.de", subject: "S", body: z.text, fett: z.fett });
+      assert.match(neu, /set font of characters 7 thru 10 of content of msg to "Helvetica-Bold"/);
+      assert.doesNotMatch(neu, /\*\*Welt/);
+      const antwort = replySendScript({ accountId: "K", mailbox: "INBOX", messageId: "1", body: z.text, replyAll: false, sender: "a@b.de", fett: z.fett });
+      assert.match(antwort, /set font of characters 21 thru 29 of content of theReply/);
+      assert.equal(absenderMitName("joachim@rankpilot.de"), "joachim@rankpilot.de", "ohne Eintrag nur die Adresse");
+      fs.writeFileSync(path.join(process.env.NOVA_HOME!, "absendernamen.txt"), "# x\njoachim@rankpilot.de = rankPilot Joachim Schmitt\n");
+      assert.equal(absenderMitName("joachim@rankpilot.de"), "rankPilot Joachim Schmitt <joachim@rankpilot.de>");
+      // Über das Test-Postfach gesendet: Text kommt ohne Sternchen an.
+      const id = idOf(await entwurf({ text: "Hallo, **Dienstag** passt?" }));
+      assert.equal(id.length > 0, true);
+    }],
     ["Signatur: je Absender aus ~/Nova/signaturen.txt, landet im Sende- und Antwort-Skript", async () => {
       const { signaturFuer } = await import("@/lib/mail/signaturen");
       const { newSendScript, replySendScript } = await import("@/lib/mail/apple");

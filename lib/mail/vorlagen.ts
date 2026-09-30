@@ -11,7 +11,7 @@ import { gedankenstrichIn, ohneGedankenstrich } from "@/lib/mail/stil";
  * Beim Auflisten werden sie in `mail_templates` übernommen (Name = Dateiname).
  */
 
-/** platzhalter: Pflicht ({{name}}); optional: Absatz fällt ohne Wert weg ({{?name}}). */
+/** platzhalter: Pflicht ({{name}}); optional: Abschnitt {{#name}} … {{/name}} fällt ohne Wert weg. */
 export type Vorlage = { name: string; betreff: string; text: string; platzhalter: string[]; optional: string[] };
 
 export function vorlagenDir(): string {

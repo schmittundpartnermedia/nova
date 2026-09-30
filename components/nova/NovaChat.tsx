@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { HudMarkdown } from "@/lib/hud-markdown";
+import { zerlegeFett } from "@/lib/mail/fett";
 import type { ChatKarte, ChatNachricht } from "@/services/chat";
 
 /** Live-Zeilen der laufenden Anfrage, bis sie gespeichert im Verlauf stehen. */
@@ -24,6 +25,20 @@ const STATUS_TEXT: Record<string, string> = {
   abgebrochen: "Abgebrochen",
 };
 
+/** Zeigt **fett** markierte Stellen so, wie sie beim Empfänger ankommen. */
+function MitFett({ text }: { text: string }) {
+  const { text: rein, fett } = zerlegeFett(text);
+  const teile: React.ReactNode[] = [];
+  let pos = 0;
+  fett.forEach((bereich, index) => {
+    teile.push(rein.slice(pos, bereich.von - 1));
+    teile.push(<strong key={index}>{rein.slice(bereich.von - 1, bereich.bis)}</strong>);
+    pos = bereich.bis;
+  });
+  teile.push(rein.slice(pos));
+  return <>{teile}</>;
+}
+
 function Karte({ karte, onSend, busy }: { karte: ChatKarte; onSend: (text: string) => void; busy: boolean }) {
   if (karte.typ === "entwurf") {
     return (
@@ -40,7 +55,9 @@ function Karte({ karte, onSend, busy }: { karte: ChatKarte; onSend: (text: strin
           <dt>Betreff</dt>
           <dd>{karte.betreff}</dd>
         </dl>
-        <pre className="nova-chat-karte-text">{karte.text}</pre>
+        <pre className="nova-chat-karte-text">
+          <MitFett text={karte.text} />
+        </pre>
         {karte.status === "draft" && !karte.teilVonKampagne ? (
           <div className="nova-chat-karte-aktionen">
             <button type="button" disabled={busy} onClick={() => onSend("Senden.")}>

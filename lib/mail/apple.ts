@@ -1,3 +1,4 @@
+import type { FettBereich } from "@/lib/mail/fett";
 export type MailAutomationState = "granted" | "denied" | "required" | "unavailable";
 
 const RECORD = String.fromCharCode(30);
@@ -288,6 +289,7 @@ export function replySendScript(input: {
   sender: string;
   internetMessageId?: string;
   signature?: string;
+  fett?: FettBereich[];
 }): string {
   return `${SCRIPT_HELPER}
 tell application "Mail"
@@ -295,6 +297,7 @@ tell application "Mail"
   ${messageResolver(input.mailbox, input.messageId, input.internetMessageId)}
   set theReply to reply m opening window false reply to all ${input.replyAll ? "true" : "false"}
   set content of theReply to ${quoted(input.body)}
+${fettZeilen("theReply", input.fett)}
   try
     set sender of theReply to ${quoted(input.sender)}
   end try
@@ -308,19 +311,38 @@ end tell`;
  * Hängt eine in Apple Mail gespeicherte Signatur an. Ohne try: Fehlt die Signatur, scheitert der Versand
  * sichtbar, statt die Mail ohne Signatur zu verschicken.
  */
+/**
+ * Fett gesetzte Bereiche (siehe lib/mail/fett.ts). Ohne try: Klappt das nicht, scheitert der Versand sichtbar,
+ * statt die Mail ohne Hervorhebung zu verschicken.
+ */
+function fettZeilen(variable: string, fett?: FettBereich[]): string {
+  if (!fett?.length) return "";
+  return fett
+    .map((bereich) => `  set font of characters ${bereich.von} thru ${bereich.bis} of content of ${variable} to "Helvetica-Bold"`)
+    .join("\n");
+}
+
 function signaturZeilen(variable: string, signature?: string): string {
   if (!signature?.trim()) return "";
   return `  set message signature of ${variable} to signature ${quoted(signature.trim())}
   delay 1`;
 }
 
-export function newSendScript(input: { sender: string; to: string; subject: string; body: string; signature?: string }): string {
+export function newSendScript(input: {
+  sender: string;
+  to: string;
+  subject: string;
+  body: string;
+  signature?: string;
+  fett?: FettBereich[];
+}): string {
   return `${SCRIPT_HELPER}
 tell application "Mail"
   set msg to make new outgoing message with properties {subject:${quoted(input.subject)}, content:${quoted(input.body)}, visible:false, sender:${quoted(input.sender)}}
   tell msg
     make new to recipient at end of to recipients with properties {address:${quoted(input.to)}}
   end tell
+${fettZeilen("msg", input.fett)}
 ${signaturZeilen("msg", input.signature)}
   set accepted to send msg
   return accepted as text
