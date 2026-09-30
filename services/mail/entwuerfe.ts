@@ -2,6 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { assertOrganizationId } from "@/services/tenant";
 import { isSteerableMailAddress, steerableMailAddresses } from "@/lib/mail/steerable";
 import { authorizeExternalAction, decideApproval } from "@/services/approvals";
+import { gedankenstrichIn } from "@/lib/mail/stil";
 import { decodeMailRef, type Postfach } from "@/services/mail/postfach";
 
 /**
@@ -67,6 +68,9 @@ export async function erstelleEntwurf(input: {
   if (!EMAIL.test(an)) throw new Error(`Empfänger „${an}“ ist keine gültige Mail-Adresse.`);
   if (!input.betreff.trim()) throw new Error("Betreff fehlt.");
   if (!input.text.trim()) throw new Error("Text fehlt.");
+  if (gedankenstrichIn(`${input.betreff}\n${input.text}`)) {
+    throw new Error("Betreff oder Text enthält einen Gedankenstrich (– oder —). Mails gehen ohne Gedankenstrich raus: bitte mit Punkt oder Komma umformulieren.");
+  }
   if (input.antwortAuf && !decodeMailRef(input.antwortAuf)) throw new Error("Bezug auf die Originalmail ist ungültig.");
 
   if (input.ersetzt) {

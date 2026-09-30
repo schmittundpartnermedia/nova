@@ -3,6 +3,7 @@ import path from "node:path";
 import { prisma } from "@/lib/prisma";
 import { novaHomeDir } from "@/lib/gedaechtnis/paths";
 import { fillMailTemplate, optionalePlatzhalterIn, platzhalterIn } from "@/lib/mail/templates";
+import { gedankenstrichIn, ohneGedankenstrich } from "@/lib/mail/stil";
 
 /**
  * Mail-Vorlagen des Nutzers: Dateien `~/Nova/vorlagen/<name>.md`.
@@ -64,8 +65,12 @@ export function fuelleVorlage(
 ): { betreff: string; text: string; fehlend: string[] } {
   const vorlage = leseVorlagen().find((item) => item.name.toLowerCase() === name.trim().toLowerCase());
   if (!vorlage) throw new Error(`Vorlage „${name}“ gibt es nicht in ${vorlagenDir()}.`);
-  const betreff = fillMailTemplate(vorlage.betreff, werte);
-  const text = fillMailTemplate(vorlage.text, werte);
+  if (gedankenstrichIn(`${vorlage.betreff}\n${vorlage.text}`)) {
+    throw new Error(`Die Vorlage „${vorlage.name}“ enthält einen Gedankenstrich (– oder —). Mails gehen ohne Gedankenstrich raus, bitte die Vorlage anpassen.`);
+  }
+  const saubereWerte = Object.fromEntries(Object.entries(werte).map(([key, value]) => [key, ohneGedankenstrich(String(value ?? ""))]));
+  const betreff = fillMailTemplate(vorlage.betreff, saubereWerte);
+  const text = fillMailTemplate(vorlage.text, saubereWerte);
   return {
     betreff: betreff.text,
     text: text.text,

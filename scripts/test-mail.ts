@@ -250,6 +250,31 @@ async function main() {
       assert.equal(data.betreff, "Partnerschaft mit Elektro Maier");
       assert.equal(data.text, "Sehr geehrter Herr Maier,\n\nwir suchen Partner wie Elektro Maier.");
     }],
+    ["Keine Gedankenstriche in Mails: Entwurf abgelehnt, Vorlage abgelehnt, Werte werden Bindestrich", async () => {
+      const vorher = await prisma.communication.count();
+      for (const strich of ["\u2013", "\u2014"]) {
+        const result = await entwurf({ text: `Hallo ${strich} passt Dienstag?` });
+        assert.equal(result.ok, false);
+        assert.match(result.error ?? "", /Gedankenstrich/);
+        assert.equal((await entwurf({ betreff: `Termin ${strich} Dienstag` })).ok, false);
+      }
+      assert.equal(await prisma.communication.count(), vorher, "abgelehnte Entwürfe werden nicht gespeichert");
+      assert.equal((await entwurf({ text: "Hallo aus Baden-Württemberg, passt Dienstag?" })).ok, true, "Bindestrich bleibt erlaubt");
+
+      const dir = path.join(process.env.NOVA_HOME!, "vorlagen");
+      fs.writeFileSync(path.join(dir, "strich.md"), "Betreff: Hallo {{firma}}\n\nWir sind da \u2013 für {{firma}}.\n");
+      const mitStrich = await run("vorlage_fuellen", { name: "strich", werte: [{ platzhalter: "firma", wert: "X" }] });
+      assert.equal(mitStrich.ok, false);
+      assert.match(mitStrich.error ?? "", /Gedankenstrich/);
+      fs.rmSync(path.join(dir, "strich.md"));
+
+      const wert = await run("vorlage_fuellen", {
+        name: "sponsoren",
+        werte: [{ platzhalter: "firma", wert: "Maier \u2013 Elektro" }, { platzhalter: "anrede", wert: "Guten Tag" }],
+      });
+      assert.equal(wert.ok, true);
+      assert.equal((wert.data as { betreff: string }).betreff, "Partnerschaft mit Maier - Elektro");
+    }],
     ["Signatur: je Absender aus ~/Nova/signaturen.txt, landet im Sende- und Antwort-Skript", async () => {
       const { signaturFuer } = await import("@/lib/mail/signaturen");
       const { newSendScript, replySendScript } = await import("@/lib/mail/apple");
