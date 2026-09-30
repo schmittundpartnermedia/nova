@@ -163,7 +163,8 @@ Nicht geprüft: echter Auftrag an rankpilot.de, echtes `deploy-rpw`/`deploy-rp`,
 
 **Joachim entscheidet, was als Nächstes kommt:**
 - Abnahme Phase 4 (Kundensuche, Sponsoren, Tagesbetrieb) – dafür fehlt noch die Kunden-Vorlage `~/Nova/vorlagen/kunden.md`.
-- Phase 6 (Oberfläche in der Ecke, PTT-Einstellungen).
+- Phase 6 (Oberfläche in der Ecke, PTT-Einstellungen) – in Arbeit (Claude Code, 30.09. abends).
+- Phase 7 (Browser/Plattformen) angehängt am 30.09., kommt nach Phase 6.
 - Später: Vergleich Kopf OpenAI gegen Claude mit denselben Nachweisen (braucht Anthropic-API-Schlüssel).
 
 ## Was Joachim liefert (siehe Auftrag, Anhang)

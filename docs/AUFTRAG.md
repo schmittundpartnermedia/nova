@@ -145,6 +145,28 @@ Abnahme: Nutzer arbeitet einen Vormittag mit Nova in der Ecke; alle Aufträge au
 
 ---
 
+## Phase 7 – Plattform-Einträge über den Browser (angehängt 30.09.2026, wird erst nach Abschluss von Phase 6 gebaut)
+
+Ziel: „Nova, trag rankpilot auf den relevanten Software-Verzeichnissen und Bewertungsplattformen ein.“ Nova sucht, registriert, füllt aus, legt vor – der Nutzer klickt nur dort, wo eine Maschine nicht verlässlich kann.
+
+Werkzeuge:
+- `browser.oeffnen`, `browser.lesen`, `browser.ausfuellen`, `browser.klicken` – über den vorhandenen Playwright-Browser mit dauerhaftem Profil (`services/desktop-service/adapters/browser.ts`). Das Modell liest die Seite als Text und entscheidet, was in welches Feld gehört.
+  *Hinweis (Claude Code, 30.09.): Der Adapter und `playwright` wurden in Phase 1 mit der Klick-Steuerung gelöscht (Commit 29f323f); aus der Historie holbar oder neu zu bauen.*
+- `browser.braucht_nutzer` – bei Captcha, Bestätigungsmail, Zwei-Faktor oder dem finalen „Speichern“ hält Nova an und sagt per Stimme: „Bei Capterra brauche ich dich – Captcha.“ Der Nutzer erledigt es, sagt „weiter“, Nova macht weiter.
+- `zugangsdaten.speichern` / `zugangsdaten.holen` – Konten im macOS-Schlüsselbund (`security add-generic-password` / `find-generic-password`). Nova speichert keine Passwörter in Datenbank oder Dateien.
+- `plattformen.liste` – Tabelle in der DB: Plattform, URL, Konto angelegt (ja/nein), Profil ausgefüllt, Status, letzter Schritt, nächster Schritt.
+
+Ablauf:
+1. Nutzer: „Such mir die Plattformen, auf denen rankpilot eingetragen sein sollte.“ → Nova recherchiert (Websuche), legt die Liste an, legt sie vor.
+2. Nutzer: „Fang mit den ersten fünf an.“ → Pro Plattform: Registrierung ausfüllen; bei Captcha/Mail den Nutzer rufen; Profil aus `~/Nova/gedaechtnis/firma.md` ausfüllen (Beschreibung, Kategorien, Link, Logo aus `~/Nova/assets/`); Ergebnis vorlegen; Nutzer speichert; Status in der Liste.
+3. Nova meldet nach jeder Plattform kurz, am Ende die Übersicht.
+
+Nicht enthalten: Kommentare mit Links, Forenbeiträge, selbst verfasste Bewertungen. Bewertungen echter Kunden werden über die Mail-Kampagne (Phase 3) angefragt.
+
+Abnahme: Nutzer sagt den Satz aus Schritt 1, dann Schritt 2 mit zwei Plattformen seiner Wahl. Beide Profile sind angelegt und vom Nutzer gespeichert, die Zugangsdaten liegen im Schlüsselbund, die Liste zeigt den Stand.
+
+---
+
 ## Anhang: Was der Nutzer einmal liefert
 
 - Inhalt für `firma.md` (diktiert an Nova in Phase 1).
