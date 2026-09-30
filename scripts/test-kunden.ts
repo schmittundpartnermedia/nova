@@ -82,6 +82,13 @@ async function main() {
         assert.deepEqual(ohne.fehlend, []);
         // Ein ganzer Absatz als Abschnitt hinterlässt keine Leerzeilen-Lücke.
         assert.equal(fillMailTemplate("A\n\n{{#f}}Satz {{f}}.{{/f}}\n\nB", {}).text, "A\n\nB");
+        // Alte, gespeicherte Feststellung in einer Liste gilt nicht: beim Lesen frisch aus den Befunden.
+        const { leseKontaktliste: lese } = await import("@/lib/mail/kontaktlisten");
+        const dir = path.join(process.env.NOVA_HOME!, "kampagnen");
+        fs.mkdirSync(dir, { recursive: true });
+        fs.writeFileSync(path.join(dir, "alt.csv"), "firma;email;befunde;feststellung\nA;a@b.de;\"kein SSL/HTTPS; nur 2 Bewertungen (< 10)\";ALTER SATZ\n");
+        assert.equal(lese("alt")[0]!.werte.feststellung, "Ihr Google-Profil bisher nur 2 Bewertungen hat");
+        fs.rmSync(path.join(dir, "alt.csv"));
         // Pflicht-Platzhalter bleiben Pflicht.
         assert.deepEqual(fillMailTemplate(vorlage, {}).fehlend, ["firma"]);
       },

@@ -5,7 +5,6 @@ import { authorizeExternalAction, decideApproval } from "@/services/approvals";
 import { enqueueWorkItem } from "@/services/worker/queue";
 import { meldeNutzer } from "@/services/meldungen";
 import { parseKontaktliste, schreibeKontaktliste } from "@/lib/mail/kontaktlisten";
-import { feststellungAus } from "@/lib/leads/feststellung";
 import { geschaetzteKostenUsd, type ScannerAuftrag, type ScannerRunner } from "@/lib/leads/scanner";
 
 /**
@@ -123,7 +122,6 @@ export async function fuehreKundensucheAus(input: {
       website,
       score: (werte.score ?? "").trim(),
       befunde: (werte.befunde ?? "").trim(),
-      feststellung: feststellungAus(werte.befunde),
       aufhaenger: (werte.aufhaenger ?? "").trim(),
     });
 
@@ -165,7 +163,7 @@ export async function fuehreKundensucheAus(input: {
   const datum = (input.heute ?? new Date()).toISOString().slice(0, 10);
   const liste = schreibeKontaktliste(
     `kunden-${slug(auftrag.branche)}-${slug(auftrag.ort)}-${datum}`,
-    ["firma", "ansprechpartner", "anrede", "email", "telefon", "ort", "branche", "website", "score", "befunde", "feststellung", "aufhaenger"],
+    ["firma", "ansprechpartner", "anrede", "email", "telefon", "ort", "branche", "website", "score", "befunde", "aufhaenger"],
     kunden,
   );
   const mitEmail = kunden.filter((kunde) => kunde.email).length;

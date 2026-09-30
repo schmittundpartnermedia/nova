@@ -190,6 +190,8 @@ Tests: mail 17/17, kunden 9/9, kopf 10, kampagne 9, tagesbetrieb 13, claude 8.
 
 **01.10.2026, 00:45 – Kunden-Mail gekürzt (Joachims Entscheidung „1 nehmen“):** Vorlage rund 100 Wörter: Problem KI-Suche zuerst, dann ein Befund, dann Check-Link, Vorstellung mit Buch am Ende. Nur noch **ein** Befund, Vorrang nach Verständlichkeit (Bewertungen, keine Website, Bewertungsschnitt, Smartphone, HTTPS, …; technische Punkte zuletzt). Ohne Befund fällt der ganze mittlere Absatz weg. `test:kunden` 9/9, `test:tagesbetrieb` 13/13.
 
+**01.10.2026, 01:00 – Fehler aus Joachims Test-Entwurf behoben:** Der Entwurf enthielt noch zwei Befunde („Ihre Website … und Ihre Website …“), weil die Pforzheim-Liste die Feststellung mit der alten Regel gespeichert hatte und der Kopf sie übernahm. Jetzt wird `feststellung` nie gespeichert, sondern beim Lesen einer Liste (`leseKontaktliste`) frisch aus `befunde` gebildet; eine alte Spalte wird überschrieben. Test dafür ergänzt; kunden 9/9, kampagne 9/9, tagesbetrieb 13/13.
+
 ## Dran
 
 **Joachim:** Test-Mail in NOVA.app an die eigene Adresse (z. B. „Schreib der Schreinerei Zimmermann aus der Pforzheim-Liste mit der Kunden-Vorlage, aber an schmittundpartnermedia@gmail.com“ → „Senden“ → „Ja“). Prüfen: Absender „rankPilot Joachim Schmitt“, Fettdruck, Abstände, Signatur. Danach Rest der Phase-4-Abnahme (Sponsor aufnehmen und anschreiben), dann Phase 7.

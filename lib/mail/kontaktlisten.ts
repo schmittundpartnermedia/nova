@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
+import { feststellungAus } from "@/lib/leads/feststellung";
 import { novaHomeDir } from "@/lib/gedaechtnis/paths";
 
 /**
@@ -72,7 +73,16 @@ export function leseKontaktliste(name: string): KontaktZeile[] {
   if (!clean || path.dirname(file) !== kampagnenDir() || !fs.existsSync(file)) {
     throw new Error(`Kontaktliste „${name}“ gibt es nicht. Vorhanden: ${kontaktlistenNamen().join(", ") || "keine"}.`);
   }
-  return parseKontaktliste(fs.readFileSync(file, "utf8"));
+  return parseKontaktliste(fs.readFileSync(file, "utf8")).map(mitFeststellung);
+}
+
+/**
+ * Kundenlisten tragen die Scanner-Befunde; der Satz für die Vorlage ({{feststellung}}) wird beim Lesen
+ * immer frisch daraus gebildet, nie gespeichert – sonst gelten alte Formulierungen weiter.
+ */
+function mitFeststellung(zeile: KontaktZeile): KontaktZeile {
+  if (!("befunde" in zeile.werte)) return zeile;
+  return { ...zeile, werte: { ...zeile.werte, feststellung: feststellungAus(zeile.werte.befunde) } };
 }
 
 function csvFeld(value: string): string {
