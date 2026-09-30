@@ -136,6 +136,12 @@ Nicht geprüft / offen:
 - `npm run macos:build` in dieser Runde nicht ausgeführt (Launcher unverändert, App lief).
 - Beobachtet: Eine Sponsoren-Mail an stefan.briegel@konzept54.de ging vor der Anrede-Regel mit „Stefan Briegel,“ statt „Sehr geehrter Herr Briegel“ raus.
 
+**30.09.2026, abends – Antwortverhalten und Gestaltung nach Joachims Vorgaben (Claude Code), Abnahme steht aus.**
+
+- NOVA antwortet gesprochen-natürlich und kurz; Entwürfe/Mails liest sie nicht mehr vor (volle Texte als Karte im Chat). Werkzeug `nova_status`: sagt aus dem echten Zustand, was sie kann, was läuft und was fehlt (z. B. Kunden-Vorlage, Scanner-Freigabe). Nachweis gegen echte API: `docs/nachweis-antworten.txt`.
+- Sofort-Ansage: Beim Start eines langsamen Werkzeugs sagt NOVA sofort z. B. „Moment, ich schaue in deine Mails.“ und zeigt es im Chat; danach die Fakten. Die Ansage kommt nach der ersten Modellentscheidung (typisch 1–3 s), nicht vor ihr.
+- Gestaltung nach Joachims Bildvorlage: runde Kugel schwarz-weiß (Rauch, Leuchtsaum, Glanzlicht, feine Sterne, überlagerte Blase), kreisende Bahnen mit Punkten, gesperrte Statuszeile, Pillen-Eingabe mit Wellen-Symbol, Lautsprecher, großem Mikro und Senden, Wellenform mit Punkt-Ausläufern, Lichthorizont. Außerhalb der Kugel ist die Zeichenfläche exakt durchsichtig (vorher als Kasten sichtbar). Im eingebauten Browser angesehen; in NOVA.app selbst (WebKit) nicht.
+
 ## Dran
 
 **Joachim:** Kunden-Vorlage liefern. Dann NOVA.app neu starten und abnehmen:

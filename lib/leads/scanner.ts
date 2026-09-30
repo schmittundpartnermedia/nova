@@ -27,7 +27,7 @@ export function geschaetzteKostenUsd(anzahl: number): number {
 function fuehreAus(args: string[], csvMuster: RegExp, timeoutMs: number): Promise<ScannerLauf> {
   return new Promise((resolve, reject) => {
     const dir = scannerDir();
-    if (!fs.existsSync(path.join(dir, args[0]!))) {
+    if (!fs.existsSync(path.join(/*turbopackIgnore: true*/ dir, args[0]!))) {
       reject(new Error(`Lead-Scanner nicht gefunden unter ${dir}.`));
       return;
     }

@@ -1,3 +1,7 @@
+const BALKEN = 25;
+const PUNKTE = 9;
+
+/** Wellenform unter der Eingabe: symmetrische Balken mit gepunkteten Ausläufern; beim Zuhören folgt sie dem Pegel. */
 export function NovaVoiceWave({
   listening,
   amplitude = null,
@@ -7,21 +11,28 @@ export function NovaVoiceWave({
   amplitude?: number | null;
   sessionLabel?: string | null;
 }) {
-  const measured = typeof amplitude === "number";
+  const mitte = (BALKEN - 1) / 2;
+  const pegel = listening && typeof amplitude === "number" ? Math.min(1, amplitude * 1.6) : null;
+  const punkte = (seite: "links" | "rechts") => (
+    <span className={`nova-wave-punkte ${seite}`}>
+      {Array.from({ length: PUNKTE }, (_, index) => (
+        <i key={index} style={{ opacity: seite === "links" ? 0.15 + (index / PUNKTE) * 0.5 : 0.65 - (index / PUNKTE) * 0.5 }} />
+      ))}
+    </span>
+  );
   return (
     <div className={`nova-voice ${listening ? "session-on" : ""}`} aria-hidden="true">
-      <span className="nova-voice-label">{sessionLabel ?? "Sprich mit mir"}</span>
       <div className={`nova-wave ${listening ? "listening" : "idle"}`}>
-        {Array.from({ length: 18 }, (_, index) => (
-          <span
-            key={index}
-            style={{
-              animationDelay: `${index * 0.08}s`,
-              height: measured && listening ? `${6 + amplitude * (8 + ((index * 7) % 10))}px` : `${6 + ((index * 7) % 10)}px`,
-            }}
-          />
-        ))}
+        {punkte("links")}
+        {Array.from({ length: BALKEN }, (_, index) => {
+          const huelle = Math.pow(1 - Math.abs(index - mitte) / (mitte + 1), 1.6);
+          const basis = 5 + huelle * 34;
+          const hoehe = pegel == null ? basis : 4 + huelle * (10 + pegel * 40);
+          return <span key={index} style={{ height: `${hoehe}px`, animationDelay: `${Math.abs(index - mitte) * 0.07}s` }} />;
+        })}
+        {punkte("rechts")}
       </div>
+      <span className="nova-voice-label">{sessionLabel ?? "Sprich mit mir"}</span>
     </div>
   );
 }

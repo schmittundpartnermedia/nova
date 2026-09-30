@@ -47,8 +47,11 @@ export function NovaCommandBar({
       : 0;
   const micClass = [
     "nova-icon-btn",
+    "mic",
     sessionActive ? "session-active" : listening ? "listening" : "",
-    sessionState === "USER_SPEAKING" || sessionState === "INTERRUPTED" ? "user-speaking" : "",
+    sessionState === "USER_SPEAKING" || sessionState === "INTERRUPTED"
+      ? "user-speaking"
+      : "",
     sessionState === "SILENCE_WAIT" ? "silence-wait" : "",
   ]
     .filter(Boolean)
@@ -65,6 +68,22 @@ export function NovaCommandBar({
         setValue("");
       }}
     >
+      <span className="nova-command-mark" aria-hidden="true">
+        <svg width="26" height="22" viewBox="0 0 26 22" fill="none">
+          {[4, 10, 16, 20, 14, 8, 4].map((hoehe, index) => (
+            <rect
+              key={index}
+              x={index * 4}
+              y={11 - hoehe / 2}
+              width="1.6"
+              height={hoehe}
+              rx="0.8"
+              fill="currentColor"
+            />
+          ))}
+        </svg>
+      </span>
+      <span className="nova-command-trenner" aria-hidden="true" />
       <input
         value={shown}
         onChange={(event) => {
@@ -87,98 +106,147 @@ export function NovaCommandBar({
         }
         autoComplete="off"
       />
-      <div className="nova-command-row">
-        {speaking ? (
-          <button type="button" className="nova-chip stop" onClick={onStopSpeech} aria-label="Stopp">
-            Stop
-          </button>
-        ) : null}
-        <span className="nova-command-tools">
-          <button
-            type="button"
-            onClick={onToggleVoice}
-            className={`nova-icon-btn ${voiceEnabled ? "" : "voice-off"}`}
-            aria-label={voiceEnabled ? "NOVA Stimme aus" : "NOVA Stimme an"}
-            title={voiceEnabled ? "NOVA Stimme: An" : "NOVA Stimme: Aus"}
+      {speaking ? (
+        <button
+          type="button"
+          className="nova-chip stop"
+          onClick={onStopSpeech}
+          aria-label="Stopp"
+        >
+          Stop
+        </button>
+      ) : null}
+      <span className="nova-command-tools">
+        <button
+          type="button"
+          onClick={onToggleVoice}
+          className={`nova-icon-btn speaker ${voiceEnabled ? "" : "voice-off"}`}
+          aria-label={voiceEnabled ? "NOVA Stimme aus" : "NOVA Stimme an"}
+          title={voiceEnabled ? "NOVA Stimme: An" : "NOVA Stimme: Aus"}
+        >
+          <svg
+            width="18"
+            height="18"
+            viewBox="0 0 24 24"
+            fill="none"
+            aria-hidden="true"
           >
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <path
+              d="M4 10v4h3.2L12 18.5V5.5L7.2 10H4Z"
+              stroke="currentColor"
+              strokeWidth="1.6"
+              strokeLinejoin="round"
+            />
+            {voiceEnabled ? (
+              <>
+                <path
+                  d="M16 9.2a3.2 3.2 0 0 1 0 5.6"
+                  stroke="currentColor"
+                  strokeWidth="1.6"
+                  strokeLinecap="round"
+                />
+                <path
+                  d="M18.4 7a5.6 5.6 0 0 1 0 10"
+                  stroke="currentColor"
+                  strokeWidth="1.6"
+                  strokeLinecap="round"
+                />
+              </>
+            ) : (
               <path
-                d="M4 10v4h3.2L12 18.5V5.5L7.2 10H4Z"
-                stroke="currentColor"
-                strokeWidth="1.6"
-                strokeLinejoin="round"
-              />
-              {voiceEnabled ? (
-                <>
-                  <path d="M16 9.2a3.2 3.2 0 0 1 0 5.6" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
-                  <path d="M18.4 7a5.6 5.6 0 0 1 0 10" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
-                </>
-              ) : (
-                <path d="M16 9l5 6M21 9l-5 6" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
-              )}
-            </svg>
-          </button>
-          <button
-            type="button"
-            id="nova-mic-btn"
-            onClick={onMicDown || onMicUp ? undefined : onMic}
-            onPointerDown={(event) => {
-              if (!onMicDown) return;
-              event.preventDefault();
-              (event.currentTarget as HTMLButtonElement).setPointerCapture(event.pointerId);
-              onMicDown();
-            }}
-            onPointerUp={() => onMicUp?.()}
-            onPointerCancel={() => onMicUp?.()}
-            onPointerLeave={(event) => {
-              if (event.buttons === 0) return;
-              onMicUp?.();
-            }}
-            className={micClass}
-            style={{ ["--silence-progress" as string]: String(silenceProgress) }}
-            aria-label={
-              sessionActive
-                ? "Push-to-Talk gedrückt – loslassen zum Senden"
-                : voiceSupported
-                  ? "Push-to-Talk halten zum Sprechen"
-                  : "Spracheingabe vorbereitet"
-            }
-            title={
-              sessionActive
-                ? "Loslassen: Aufnahme verarbeiten"
-                : voiceSupported
-                  ? "Taste halten zum Sprechen (kein Dauerhören)"
-                  : "Spracheingabe vorbereitet"
-            }
-          >
-            <span className="nova-ax-label">
-              {sessionActive
-                ? "Push-to-Talk gedrückt – loslassen zum Senden"
-                : voiceSupported
-                  ? "Push-to-Talk halten zum Sprechen"
-                  : "Spracheingabe vorbereitet"}
-            </span>
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-              <path
-                d="M12 3a3.5 3.5 0 0 0-3.5 3.5v5a3.5 3.5 0 1 0 7 0v-5A3.5 3.5 0 0 0 12 3Z"
-                stroke="currentColor"
-                strokeWidth="1.6"
-              />
-              <path
-                d="M6.5 11.5a5.5 5.5 0 0 0 11 0M12 17v3.5"
+                d="M16 9l5 6M21 9l-5 6"
                 stroke="currentColor"
                 strokeWidth="1.6"
                 strokeLinecap="round"
               />
-            </svg>
-          </button>
-          <button type="submit" disabled={disabled || !value.trim()} className="nova-icon-btn send" aria-label="Senden">
-            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-              <path d="M12 19V5M6 11l6-6 6 6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-            </svg>
-          </button>
-        </span>
-      </div>
+            )}
+          </svg>
+        </button>
+        <button
+          type="button"
+          id="nova-mic-btn"
+          onClick={onMicDown || onMicUp ? undefined : onMic}
+          onPointerDown={(event) => {
+            if (!onMicDown) return;
+            event.preventDefault();
+            (event.currentTarget as HTMLButtonElement).setPointerCapture(
+              event.pointerId,
+            );
+            onMicDown();
+          }}
+          onPointerUp={() => onMicUp?.()}
+          onPointerCancel={() => onMicUp?.()}
+          onPointerLeave={(event) => {
+            if (event.buttons === 0) return;
+            onMicUp?.();
+          }}
+          className={micClass}
+          style={{ ["--silence-progress" as string]: String(silenceProgress) }}
+          aria-label={
+            sessionActive
+              ? "Push-to-Talk gedrückt – loslassen zum Senden"
+              : voiceSupported
+                ? "Push-to-Talk halten zum Sprechen"
+                : "Spracheingabe vorbereitet"
+          }
+          title={
+            sessionActive
+              ? "Loslassen: Aufnahme verarbeiten"
+              : voiceSupported
+                ? "Taste halten zum Sprechen (kein Dauerhören)"
+                : "Spracheingabe vorbereitet"
+          }
+        >
+          <span className="nova-ax-label">
+            {sessionActive
+              ? "Push-to-Talk gedrückt – loslassen zum Senden"
+              : voiceSupported
+                ? "Push-to-Talk halten zum Sprechen"
+                : "Spracheingabe vorbereitet"}
+          </span>
+          <svg
+            width="18"
+            height="18"
+            viewBox="0 0 24 24"
+            fill="none"
+            aria-hidden="true"
+          >
+            <path
+              d="M12 3a3.5 3.5 0 0 0-3.5 3.5v5a3.5 3.5 0 1 0 7 0v-5A3.5 3.5 0 0 0 12 3Z"
+              stroke="currentColor"
+              strokeWidth="1.6"
+            />
+            <path
+              d="M6.5 11.5a5.5 5.5 0 0 0 11 0M12 17v3.5"
+              stroke="currentColor"
+              strokeWidth="1.6"
+              strokeLinecap="round"
+            />
+          </svg>
+        </button>
+        <button
+          type="submit"
+          disabled={disabled || !value.trim()}
+          className="nova-icon-btn send"
+          aria-label="Senden"
+        >
+          <svg
+            width="17"
+            height="17"
+            viewBox="0 0 24 24"
+            fill="none"
+            aria-hidden="true"
+          >
+            <path
+              d="M12 19V5M6 11l6-6 6 6"
+              stroke="currentColor"
+              strokeWidth="1.8"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          </svg>
+        </button>
+      </span>
     </form>
   );
 }

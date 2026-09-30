@@ -66,37 +66,53 @@ float fbm(vec3 p) {
   return v;
 }
 
+float stern(vec2 p, float dichte) {
+  vec2 zelle = floor(p * dichte);
+  vec2 lokal = fract(p * dichte) - 0.5;
+  float h = fract(sin(dot(zelle, vec2(12.9898, 78.233))) * 43758.5453);
+  if (h < 0.965) return 0.0;
+  return smoothstep(0.18, 0.0, length(lokal)) * (h - 0.965) * 28.0;
+}
+
 void main() {
   vec2 uv = (gl_FragCoord.xy - 0.5 * uRes) / uRes.y;
   float t = uTime;
   float r = length(uv);
 
   // Runde Kugel, atmet nur leicht.
-  float edge = 0.34 + 0.008 * sin(t * 1.3) + 0.02 * uEnergy;
+  float edge = 0.3 + 0.006 * sin(t * 1.3) + 0.018 * uEnergy;
   float d = r / edge;
 
-  // Enger Schein direkt an der Kugel; ab 1,35 × Radius exakt nichts.
-  float glow = exp(-max(r - edge, 0.0) * 22.0) * (0.22 + 0.45 * uEnergy);
-  glow *= 1.0 - smoothstep(edge * 1.15, edge * 1.35, r);
+  // Leuchtender Saum direkt an der Kugel; ab 1,3 × Radius exakt nichts.
+  float glow = exp(-max(r - edge, 0.0) * 30.0) * (0.55 + 0.4 * uEnergy);
+  glow *= 1.0 - smoothstep(edge * 1.12, edge * 1.3, r);
   vec3 col = uB * glow;
 
   if (d < 1.0) {
     float z = sqrt(1.0 - d * d);
     vec3 n = normalize(vec3(uv / edge, z));
-    vec3 p = n * 1.55 + vec3(0.0, 0.0, t * 0.3);
-    float f1 = fbm(p + vec3(t * 0.22, -t * 0.16, 0.0));
-    float f2 = fbm(p * 1.7 + f1 * 1.6 + vec3(-t * 0.27, t * 0.12, t * 0.06));
-    vec3 base = mix(uC, uA, smoothstep(-0.35, 0.45, f2));
-    base = mix(base, uB, smoothstep(0.25, 0.9, f1 + f2 * 0.6));
-    float fresnel = pow(1.0 - z, 2.6);
-    vec3 rim = uB * fresnel * 1.2;
-    float spec = pow(max(dot(n, normalize(vec3(-0.35, 0.5, 0.8))), 0.0), 36.0) * 0.55;
-    vec3 inner = base * (0.45 + 0.55 * z) + rim + spec;
-    inner += uB * 0.18 * exp(-d * d * 3.0) * (0.5 + uEnergy);
+    vec3 p = n * 0.95 + vec3(0.0, 0.0, t * 0.2);
+    float f1 = fbm(p + vec3(t * 0.15, -t * 0.1, 0.0));
+    float f2 = fbm(p * 1.3 + f1 * 2.2 + vec3(-t * 0.18, t * 0.08, t * 0.04));
+    // Weicher Rauch: großflächige helle Wolken auf dunklem Grund, dazu wenige zarte Fäden.
+    float rauch = smoothstep(-0.05, 0.6, f2 + 0.4 * f1);
+    float faeden = pow(max(0.0, 1.0 - abs(f2 - 0.1) * 5.0), 3.0) * 0.28;
+    vec3 inner = mix(uC, uA * 1.05, rauch * 0.9) + uB * faeden * (0.8 + uEnergy);
+    inner *= 0.55 + 0.45 * z;
+    // Überlagerte Blase unten links, nur als feiner Rand.
+    vec2 blase = uv / edge - vec2(-0.42, -0.28);
+    float blasenRand = exp(-pow((length(blase) - 0.42) * 55.0, 2.0)) * 0.16;
+    inner += uB * blasenRand;
+    // Feine Sterne im Inneren.
+    inner += uB * stern(uv / edge + vec2(t * 0.01, 0.0), 26.0) * (0.35 + 0.3 * z);
+    // Heller Rand und Glanzlicht oben links.
+    float fresnel = pow(1.0 - z, 3.0);
+    inner += uB * fresnel * 1.8;
+    inner += uB * pow(max(dot(n, normalize(vec3(-0.45, 0.55, 0.7))), 0.0), 22.0) * 0.9;
     float innen = smoothstep(1.0, 0.985, d);
     float glowAlpha = clamp(max(max(col.r, col.g), col.b), 0.0, 1.0);
     vec3 glowFarbe = glowAlpha > 0.002 ? col / glowAlpha : vec3(0.0);
-    gl_FragColor = vec4(mix(glowFarbe, inner, innen), mix(glowAlpha, 1.0, innen));
+    gl_FragColor = vec4(mix(glowFarbe, min(inner, vec3(1.0)), innen), mix(glowAlpha, 1.0, innen));
     return;
   }
 
@@ -172,7 +188,7 @@ export function Orb({ state, level = null }: { state: OrbState; level?: number |
     };
 
     const resize = () => {
-      const size = Math.max(220, Math.min(520, Math.floor(window.innerWidth * 0.36)));
+      const size = Math.max(260, Math.min(560, Math.floor(window.innerWidth * 0.38)));
       const dpr = Math.min(window.devicePixelRatio || 1, 2);
       canvas.style.width = `${size}px`;
       canvas.style.height = `${size}px`;
@@ -231,6 +247,20 @@ export function Orb({ state, level = null }: { state: OrbState; level?: number |
     <div className="nova-orb" data-orb-state={state} aria-label={`NOVA-Zustand ${state}`} role="img">
       <span className="nova-ax-label">{`NOVA-Zustand ${state}`}</span>
       <canvas ref={canvasRef} className="nova-orb-canvas" />
+      <svg className="nova-orb-bahnen" viewBox="-100 -100 200 200" aria-hidden="true">
+        <g className="nova-orb-bahn a">
+          <ellipse cx="0" cy="0" rx="92" ry="80" transform="rotate(-18)" />
+          <circle cx="-62" cy="-62" r="1.6" className="punkt" />
+        </g>
+        <g className="nova-orb-bahn b">
+          <ellipse cx="0" cy="0" rx="80" ry="84" transform="rotate(12)" className="gepunktet" />
+          <circle cx="58" cy="58" r="1.3" className="punkt" />
+        </g>
+        <g className="nova-orb-bahn c">
+          <ellipse cx="0" cy="0" rx="98" ry="70" transform="rotate(28)" />
+          <circle cx="92" cy="12" r="1.4" className="punkt" />
+        </g>
+      </svg>
     </div>
   );
 }

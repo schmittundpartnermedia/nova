@@ -484,6 +484,7 @@ export function NovaShell() {
               sessionLabel={sessionSnap.label}
             />
           </div>
+          <div className="nova-horizont" aria-hidden="true" />
         </main>
 
         <NovaChat version={chatVersion} live={liveZeilen} busy={busy} onSend={(text) => void sendMessage(text, "text")} />
