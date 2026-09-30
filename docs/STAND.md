@@ -157,12 +157,14 @@ Nachweise: `tsc`, `eslint` grün; `test:claude` 7/7 (Wegwerf-Git-Projekt), alle 
 
 Nicht geprüft: echter Auftrag an rankpilot.de, echtes `deploy-rpw`/`deploy-rp`, Lauf im Worker von NOVA.app (braucht Neustart der App). `macos:build` nicht ausgeführt (App lief; Launcher unverändert).
 
+**30.09.2026, 22:40 – Abnahme Phase 5:** Joachim hat Phase 5 in NOVA.app abgenommen („hat geklappt, ist live“). Echter Auftrag 2026-09-30-c0ef15c6: Telefonnummer mit Anruf-Link in den Footer von rankpilot.de (d3c55e5), von NOVA geprüft, nach Joachims Ja übernommen (93ec883) und über das Live-Skript veröffentlicht. Direkt danach hat Joachim per Sprache einen zweiten Auftrag gegeben (2026-09-30-62993ae5: Nummer wieder entfernen, noch nicht veröffentlichen) – lief beim Schreiben dieser Zeilen noch.
+
 ## Dran
 
-**Joachim:** NOVA.app neu starten (damit der Hintergrund-Läufer die Claude-Aufträge kennt), dann abnehmen:
-1. „Gib Claude den Auftrag: auf rankpilot.de im Footer die Telefonnummer auf … ändern. Sag mir, wenn es fertig ist.“
-2. NOVA meldet sich, wenn Claude fertig ist und sie geprüft hat → „Ja, stell es live.“ → NOVA meldet „ist live“ → Seite prüfen.
-Offen: Abnahme Phase 4 (Kundensuche, Sponsoren, Tagesbetrieb) und die Kunden-Vorlage.
+**Joachim entscheidet, was als Nächstes kommt:**
+- Abnahme Phase 4 (Kundensuche, Sponsoren, Tagesbetrieb) – dafür fehlt noch die Kunden-Vorlage `~/Nova/vorlagen/kunden.md`.
+- Phase 6 (Oberfläche in der Ecke, PTT-Einstellungen).
+- Später: Vergleich Kopf OpenAI gegen Claude mit denselben Nachweisen (braucht Anthropic-API-Schlüssel).
 
 ## Was Joachim liefert (siehe Auftrag, Anhang)
 
