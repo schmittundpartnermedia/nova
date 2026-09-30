@@ -25,6 +25,7 @@ const FAEHIGKEITEN = [
   "mit deinem Lead-Scanner lokale Betriebe als Kunden suchen",
   "Kunden-Tagesbetrieb: werktags Kunden suchen, prüfen und nach deiner Morgen-Freigabe automatisch anschreiben",
   "Tagesbericht über alles, was ich an einem Tag gemacht habe",
+  "Tagesüberblick auf „Was liegt heute an?“: was auf dich wartet, was läuft, Zahlen seit gestern",
   "zeigen, was die Mails gebracht haben: Antworten, gestartete rankPilot Checks und neue Konten je Kampagne",
   "Adressen auf die Sperrliste setzen",
   "Claude Code Programmier-Aufträge an deinen Projekten geben (alle Git-Projekte unter Projekte/joachim), das Ergebnis prüfen und nach deinem Ja übernehmen bzw. live stellen",

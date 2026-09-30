@@ -1,6 +1,6 @@
 /**
  * Regressionstest „Was hat gewirkt?“ – ohne Netz, ohne App, ohne Apple Mail.
- * Kurzlink je Kampagnen-Mail, Zuordnung der Checks aus der App zu Mail und Kampagne, Tagesbericht.
+ * Kurzlink je Kampagnen-Mail, Zuordnung der Checks aus der App zu Mail und Kampagne, Tagesbericht, Tagesüberblick.
  */
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
@@ -89,6 +89,42 @@ async function main() {
       assert.match(inhalt, /Schreinerei A \(Schreinereien Pforzheim\), Konto angelegt/);
       assert.match(bericht.kurz, /2 Checks über meine Mails gestartet/);
       assert.match(inhalt, /1 Antworten eingegangen, 1 Abwesenheitsnotizen/);
+    }],
+    ["Tagesüberblick: was wartet, was läuft, Zahlen seit gestern; Apple Mail nicht lesbar wird ehrlich gesagt", async () => {
+      const { tagesueberblick } = await import("@/services/ueberblick");
+      type Postfach = import("@/services/mail/postfach").Postfach;
+      const ref = "ref-antwort-1";
+      await prisma.communication.create({
+        data: { organizationId: org.id, channel: "email", direction: "inbound", subject: "Re: Frage", body: "Interesse", status: "received", campaignId: kampagne.id, recipientName: "Schreinerei Z", replyRef: ref },
+      });
+      await prisma.communication.create({
+        data: { organizationId: org.id, channel: "email", direction: "outbound", subject: "Re: Frage", body: "Gern", status: "draft", campaignId: kampagne.id, toAddress: "z@z.de", replyRef: ref },
+      });
+      await prisma.approvalRequest.create({ data: { organizationId: org.id, actionType: "mail.send", description: "Mail an Revolut senden", payload: "{}" } });
+      await erstelleEntwurf({ organizationId: org.id, absender: "joachim@rankpilot.de", an: "info@revolut.com", betreff: "Termin", text: "Hallo, passt Dienstag?" });
+      const auftraege = path.join(process.env.NOVA_HOME!, "claude", "auftraege");
+      fs.mkdirSync(auftraege, { recursive: true });
+      fs.writeFileSync(path.join(auftraege, "a1.json"), JSON.stringify({
+        id: "a1", organizationId: org.id, projekt: "rankpilot-website", aufgabe: "Footer ändern", abnahmekriterium: "x", branch: "nova/a1", status: "fertig", erstellt: new Date().toISOString(),
+      }));
+      const postfach: Postfach = {
+        neueste: async () => [{ ref: "r", konto: "joachim@rankpilot.de", von: "Anna Muster <anna@x.de>", betreff: "Angebot", eingang: new Date().toISOString(), gelesen: false, textanfang: "" }],
+        eingang: async () => [], lesen: async () => null,
+        senden: async () => ({ ok: false, executed: false, grund: "" }), antworten: async () => ({ ok: false, executed: false, grund: "" }),
+      };
+      const u = await tagesueberblick({ organizationId: org.id, postfach, checkQuelle: async () => ({ eingerichtet: true, checks: [] }) });
+      assert.deepEqual(u.wartet_auf_dich.antworten_ohne_rueckmeldung, [{ firma: "Schreinerei Z", betreff: "Re: Frage", entwurf_bereit: true }]);
+      assert.deepEqual(u.wartet_auf_dich.offene_freigaben, ["Mail an Revolut senden"]);
+      // b@b.de stammt aus dem Test „einzelne Mail nicht“ weiter oben und ist ebenfalls ein offener Einzelentwurf.
+      assert.deepEqual(u.wartet_auf_dich.entwuerfe_nicht_gesendet, [{ an: "b@b.de", betreff: "B" }, { an: "info@revolut.com", betreff: "Termin" }]);
+      assert.equal(u.wartet_auf_dich.claude_auftraege[0]!.stand, "fertig und geprüft, wartet auf dein Ja zum Live-Stellen");
+      assert.deepEqual(u.postfach, { ungelesen: 1, neueste: [{ von: "Anna Muster", betreff: "Angebot" }] });
+      assert.equal(u.seit_gestern.mails_gesendet, 2);
+      assert.equal(u.laeuft.tagesbetrieb, "aus");
+
+      const kaputt: Postfach = { ...postfach, neueste: async () => { throw new Error("Mail antwortet nicht"); } };
+      const ohneMail = await tagesueberblick({ organizationId: org.id, postfach: kaputt, checkQuelle: async () => ({ eingerichtet: true, checks: [] }) });
+      assert.deepEqual(ohneMail.postfach, { fehler: "Apple Mail war nicht lesbar: Mail antwortet nicht" });
     }],
     ["Ohne Schlüssel: ehrlicher Hinweis statt Zahl, keine Netzabfrage", async () => {
       assert.deepEqual(await appCheckQuelle(new Date()), { eingerichtet: false, grund: "RANKPILOT_CHECKS_TOKEN fehlt in NOVAs .env" });

@@ -208,13 +208,19 @@ Tests: mail 17/17, kunden 9/9, kopf 10, kampagne 9, tagesbetrieb 13, claude 8.
 - App `rankPilot-app`, Zweig **`nova/check-herkunft`** (gepusht, **nicht live**): `GET /api/internal/nova/checks?seit=` mit dem Ingest-Schlüssel, ohne Kontaktdaten. tsc grün, vitest 1817/1817.
 - Damit gezählt wird, fehlt: (1) beide Zweige übernehmen und live stellen (Joachims Ja), (2) `RANKPILOT_CHECKS_TOKEN=<Wert von ADS_CHECK_INGEST_SECRET>` in NOVAs `.env` – trägt Joachim selbst ein. Bis dahin funktioniert der Kurzlink normal (der Check ignoriert `c`), gezählt wird nur noch nicht.
 
+**5. Tagesüberblick – gebaut.** Werkzeug `tagesueberblick` (`services/ueberblick.ts`): was wartet (Kampagnen-Antworten ohne gesendete Rückmeldung, ob ein Entwurf bereitliegt; offene Freigaben; nicht gesendete Einzelentwürfe; Claude-Aufträge fertig/mit Problem), was läuft (Kampagnen, geplante Nachfass-Mails, Tagesbetrieb), Zahlen seit gestern (gesendet, Antworten, Checks, Konten), ungelesene Mails (Apple Mail nicht lesbar → ehrlicher Hinweis). Kopf-Regel: „Was liegt heute an?“/„Guten Morgen“ → höchstens sechs gesprochene Sätze, Wartendes zuerst. Sofort-Ansagen für Überblick und Wirkung. Tests: `test:wirkung` 5/5 (inkl. Überblick). `npm run nachweis:ueberblick` → `docs/nachweis-ueberblick.txt`: echte API bestanden (Überblick nennt Ehrismann-Antwort, fertigen Claude-Auftrag, Steuerbüro-Mail; Wirkung sagt ehrlich, dass Checks noch nicht gezählt werden).
+
+Abschluss dieser Runde: `tsc`, `eslint`, `next build`, `npm run macos:build` grün; alle Tests grün (kopf 10, mail 18, kampagne 14, kunden 9, tagesbetrieb 13, claude 8, nachfass 6, wirkung 5). NOVA.app neu gebaut, nicht gestartet. **Nichts davon lief gegen das echte Apple Mail oder im echten Worker.**
+
 ## Dran
 
-**Erster echter Versand (01.10., Joachims Plan):**
-1. Kampagne mit der Liste `kunden-schreinereien-pforzheim-2026-09-30` (9 Betriebe mit E-Mail), Vorlage „kunden“, alle 5 Minuten: „Schreib die Schreinereien aus Pforzheim mit der Kunden-Vorlage an, alle 5 Minuten.“ → NOVA fasst zusammen → „Ja“.
-2. Antworten beobachten (Postfach-Wache legt Vorschläge vor).
-3. Danach entscheiden: Tagesbetrieb einschalten (braucht Dauerfreigabe Scanner, kostet Google-API; Tagesbetrieb lief noch nie echt).
-Danach: Phase 7 (Browser/Plattformen).
+**Joachim, wenn er zurück ist:**
+1. NOVA.app starten (Worker kennt die neuen Aufträge `nachfass.tick` erst dann).
+2. Nachfass-Vorlage lesen: `~/Nova/vorlagen/kunden-nachfass.md` (Vorschlag von Claude Code). Passt sie nicht: ändern oder löschen – ohne Datei keine Nachfass-Mail.
+3. Erster echter Versand wie geplant: „Schreib die Schreinereien aus Pforzheim mit der Kunden-Vorlage an, alle 5 Minuten.“ – die Zusammenfassung nennt jetzt auch die Nachfass-Mail nach 6 Tagen.
+4. Zählung der Checks freischalten (optional, später): Zweige `nova/check-kurzlink` (Webseite) und `nova/check-herkunft` (App) übernehmen und live stellen, danach `RANKPILOT_CHECKS_TOKEN` in NOVAs `.env` selbst eintragen.
+5. „Guten Morgen, was liegt heute an?“ ausprobieren.
+Danach: Phase 7 (Browser/Plattformen). Später: Kopf-Vergleich OpenAI/Claude, Kostenübersicht, Kalender (Punkt 6 der Liste, nicht beauftragt).
 
 ## Was Joachim liefert (siehe Auftrag, Anhang)
 

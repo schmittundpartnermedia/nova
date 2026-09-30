@@ -1,0 +1,19 @@
+NOVA Nachweis Tagesüberblick und Wirkung – 2026-09-30T22:08:44.384Z – Modell gpt-6-astra, Test-Postfach, ohne rankPilot-App
+
+Joachim: Guten Morgen, was liegt heute an?
+Werkzeuge: ["tagesueberblick"]
+NOVA: Guten Morgen, Joachim! Für Ehrismann liegt ein Antwortentwurf bereit, und die ergänzten Öffnungszeiten im Webseiten-Footer sind fertig geprüft und warten auf dein Ja zum Live-Stellen. Im Postfach liegt außerdem eine ungelesene Mail vom Steuerbüro Kern zum Thema Umsatzsteuer-Unterlagen. Die Kampagne „Schreinereien Pforzheim“ läuft, drei von vier Mails sind raus. Seit gestern wurden drei Mails gesendet und eine Antwort empfangen. Soll ich zuerst die Mail vom Steuerbüro öffnen?
+  ✓ Überblick aus dem echten Zustand geholt
+  ✓ nennt die offene Antwort von Ehrismann
+  ✓ nennt den fertigen Claude-Auftrag
+  ✓ gesprochene Antwort ohne Listen/Fettdruck
+  ✓ kurz genug zum Vorlesen (479 Zeichen)
+
+Joachim: Und was haben die Mails bisher gebracht?
+Werkzeuge: ["wirkung_anzeigen"]
+NOVA: In den letzten sieben Tagen wurden für „Schreinereien Pforzheim“ drei Mails verschickt, darauf kam eine Antwort. Neue Konten sind bisher nicht erfasst. Ob die Mails zu rankPilot-Checks geführt haben, lässt sich noch nicht sagen, weil die Check-Erfassung noch nicht eingerichtet ist.
+  ✓ Zahlen aus dem echten Zustand geholt
+  ✓ sagt ehrlich, dass Checks noch nicht gezählt werden
+  ✓ gesprochene Antwort ohne Listen/Fettdruck
+
+ERGEBNIS: Nachweis Tagesüberblick und Wirkung bestanden (echte API, Test-Postfach, ohne App).

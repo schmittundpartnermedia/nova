@@ -28,7 +28,8 @@
     "test:claude": "tsx scripts/test-claude.ts",
     "test:nachfass": "tsx scripts/test-nachfass.ts",
     "test:wirkung": "tsx scripts/test-wirkung.ts",
-    "nachweis:phase5": "tsx scripts/nachweis-phase5-claude.ts"
+    "nachweis:phase5": "tsx scripts/nachweis-phase5-claude.ts",
+    "nachweis:ueberblick": "tsx scripts/nachweis-ueberblick.ts"
   },
   "dependencies": {
     "@prisma/client": "^6.16.3",
