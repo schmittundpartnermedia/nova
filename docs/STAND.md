@@ -171,15 +171,14 @@ Nachweise: `tsc`, `eslint`, `next build`, `macos:build` grün; alle Tests grün 
 
 Nicht geprüft: NOVA.app selbst (Eckfenster, immer vorne, Wechsel, Einstellungsfenster, Freigabe-Dialog, Tastenwahl) – gebaut, nicht gestartet.
 
+**30.09.2026, 23:00 – Phase 6 in NOVA.app bestätigt:** Joachim: „passt alles“ – Eckfenster, immer vorne, Sprechtaste aus anderen Programmen, Wechsel Chat/Ecke, Einstellungen. Next-Entwicklersymbol („N“) ausgeblendet (facdf69), bestätigt. Offen aus dem Auftrag: der „Vormittag mit NOVA in der Ecke“ im echten Alltag.
+
 ## Dran
 
-**Joachim:** NOVA.app starten und Phase 6 abnehmen:
-1. NOVA erscheint klein unten rechts und bleibt vor anderen Fenstern.
-2. In einem anderen Programm die rechte Option-Taste halten und sprechen → NOVA antwortet.
-3. Chat-Knopf → großes Fenster; „In die Ecke“ → wieder klein.
-4. Zahnrad → Einstellungen: andere Taste wählen, ausprobieren.
-5. Danach „einen Vormittag mit NOVA in der Ecke arbeiten“ (Abnahme laut Auftrag).
-Danach: Phase 7 (Browser/Plattformen), angehängt am 30.09. Offen: Abnahme Phase 4 und die Kunden-Vorlage. Später: Vergleich Kopf OpenAI/Claude.
+**Joachim entscheidet:**
+- Phase 7 (Browser/Plattformen), angehängt am 30.09.
+- Abnahme Phase 4 (Kundensuche, Sponsoren, Tagesbetrieb) – braucht die Kunden-Vorlage `~/Nova/vorlagen/kunden.md`.
+- Später: Vergleich Kopf OpenAI/Claude.
 
 ## Was Joachim liefert (siehe Auftrag, Anhang)
 
