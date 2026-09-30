@@ -97,6 +97,8 @@ Nicht geprüft / offen:
 - Eine Antwort wird nur erkannt, wenn sie unter den 15 neuesten Mails im gemeinsamen Posteingang ist und vom angeschriebenen Absender kommt.
 - Rechtlicher Rahmen für Werbe-Mails an die echten Sponsoren-Firmen ist ungeklärt (siehe unten) – vor dem Versand der Liste `sponsoren-2026-09` klären.
 
+**30.09.2026, vormittags – Empfangsproblem, nicht im Code:** Joachims Test-Antwort an joachim@rankpilot.de kam nie an. Ursache: rankpilot.de hatte neben den IONOS-MX einen dritten MX gleicher Priorität (`inbound-smtp.eu-west-1.amazonaws.com`), etwa jede dritte Mail ging an Amazon SES statt ins Postfach. Joachim hat den Eintrag gelöscht; alle IONOS-Nameserver liefern nur noch mx00/mx01.ionos.de. Getrennt davon landen seit 29.09. neue Mails bei info@joachimschmitt.com und info@elevum.io im Papierkorb – kein NOVA-Code löscht oder verschiebt Mails (geprüft, auch in der Historie); Ursache vermutlich Server-Filter oder ein anderes Gerät/Programm, Joachim prüft.
+
 ## Dran
 
 **Abnahme Phase 3 durch Joachim in NOVA.app.** App öffnen, Taste halten:
