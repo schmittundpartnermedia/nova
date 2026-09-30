@@ -117,19 +117,38 @@ Nachweise:
 
 Nicht geprüft: echte Google-Places-Suche mit Impressum-Auslese (kostet API), Lauf im echten Worker, Sponsoren per Sprache in NOVA.app.
 
+**30.09.2026, nachmittags – Chatfenster, Kunden-Tagesbetrieb, neuer Orb (Claude Code), Abnahme steht aus.**
+
+Joachims Vorgaben: NOVA zeigt alles im Chat wie Claude; Kunden-Mails einmal am Tag als Beispiel vorlegen, dann automatisch; 50 Mails/Tag, alle 5 Minuten, 08–17 Uhr; am Tagesende Bericht/Archiv; Orb „modern 2026“.
+
+Was jetzt real im Code steht:
+- Chatfenster (`NovaChat`, `/api/nova/chat`): ganzer Verlauf, Schritte je Antwort aufklappbar, Karten für Entwürfe/Kampagnen mit Freigabe-Knopf. Alte ausblendende Gesprächszeile gelöscht.
+- Kunden-Tagesbetrieb (`services/tagesbetrieb/`, Einstellungen `~/Nova/tagesbetrieb.json`, Modell `Lead`, Migration `20260930150000_tagesbetrieb`): Worker-Takt alle 5 Min.; Vorrat über Scanner-Tageslauf (nur mit Dauerfreigabe `scanner.start`); Prüfung jeder Adresse (Form, MX/A, Sperrliste, nie angeschrieben – auch Firma/Domain); morgens eine Beispiel-Mail zur Freigabe, danach eine Mail pro Takt bis 50/Tag oder 17 Uhr; Tagesbericht als Meldung und `~/Nova/berichte/<datum>.md`. Werkzeuge `tagesbetrieb`, `tagesbetrieb_freigeben`, `tagesbericht`, `sperrliste_hinzufuegen`.
+- Orb: WebGL-Shader (Plasma, Leuchtrand, Halo, Farbe/Energie je Zustand, Mikrofon-Pegel beim Zuhören).
+- Liste `sponsoren` mit den 28 Firmen angelegt. Rechtliches laut Joachim geklärt.
+
+Nachweise: `tsc`, `eslint` grün; `test:kopf` 9/9, `test:mail` 15/15, `test:kampagne` 9/9, `test:kunden` 8/8, `test:tagesbetrieb` 13/13 (ganzer Arbeitstag; fand einen echten Fehler: Betriebe ohne E-Mail wurden doppelt eingelesen – behoben). Chatfenster und Orb im eingebauten Browser gegen die echte DB bzw. die laufende App angesehen (keine Konsolenfehler).
+
+Nicht geprüft / offen:
+- Tagesbetrieb nie echt gelaufen: kein echter Scanner-Tageslauf (kostet API: je Lauf bis zu `maxKombisProLauf` = 50 Suchanfragen ≈ 1,75 $), kein Versand über Apple Mail, kein ganzer Tag im echten Worker.
+- Kunden-Vorlage `~/Nova/vorlagen/kunden.md` fehlt – ohne sie startet der Tagesbetrieb nicht (meldet es).
+- Der laufende Worker in NOVA.app kennt die neuen Aufträge erst nach einem Neustart der App.
+- `npm run macos:build` in dieser Runde nicht ausgeführt (Launcher unverändert, App lief).
+- Beobachtet: Eine Sponsoren-Mail an stefan.briegel@konzept54.de ging vor der Anrede-Regel mit „Stefan Briegel,“ statt „Sehr geehrter Herr Briegel“ raus.
+
 ## Dran
 
-Kontaktliste `sponsoren` (30.09.) mit den 28 Firmen aus `sponsoren-2026-09` angelegt (lokal in `~/Nova/kampagnen/`).
-
-**Abnahme Phase 4 durch Joachim in NOVA.app:**
-1. „Such mir 10 Schreinereien in Pforzheim.“ → NOVA nennt Kosten und fragt → „Ja.“ → nach einigen Minuten Meldung mit Anzahl, E-Mails, Ansprechpartnern; Liste in `~/Nova/kampagnen/`.
-2. „Nimm als Sponsor auf: Zurich, Herr Thomas Wolf, thomas.wolf@zurich.com, Bereich Unternehmens- und Gewerbeversicherungen.“ (mit einer eigenen Test-Adresse) → Eintrag in Liste „sponsoren“.
-3. „Schreib die Sponsoren an.“ → Zusammenfassung → „Ja“ → Mail mit „Sehr geehrter Herr Wolf“ in „Gesendet“.
+**Joachim:** Kunden-Vorlage liefern. Dann NOVA.app neu starten und abnehmen:
+1. Chatfenster: Verlauf, Schritte, Karten; Orb in allen Zuständen.
+2. „Erteile die Dauerfreigabe für den Scanner, höchstens 5 Läufe am Tag.“ → „Schalte den Tagesbetrieb ein.“
+3. Am nächsten Werktag ab 07:00: Beispiel-Mail im Chat → „Ja“ → ab 08:00 alle 5 Minuten eine Mail (Statuszeile, Chat).
+4. Nach 17:00: Tagesbericht im Chat und in `~/Nova/berichte/`.
+Offen aus Phase 4: Abnahme Kundensuche/Sponsoren per Sprache.
 
 ## Was Joachim liefert (siehe Auftrag, Anhang)
 
 - Inhalt `firma.md` – diktiert in Phase 1
-- Mail-Vorlagen in `~/Nova/vorlagen/` – Sponsoren geliefert (30.09.), Kunden folgt
+- Mail-Vorlagen in `~/Nova/vorlagen/` – Sponsoren geliefert (30.09.), Kunden folgt (nötig für den Tagesbetrieb)
 - Drei Test-Adressen – geliefert (30.09.), liegen lokal in `~/Nova/kampagnen/testadressen.txt`
 - PTT-Taste – Standard rechte Option-Taste, bis er etwas anderes sagt
 
