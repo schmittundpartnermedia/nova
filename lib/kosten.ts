@@ -16,6 +16,8 @@ export type Buchung = {
   art: VerbrauchsArt;
   modell: string;
   eingabeTokens?: number;
+  /** Davon aus dem Zwischenspeicher (OpenAI rechnet sie deutlich billiger ab). */
+  gecachteTokens?: number;
   ausgabeTokens?: number;
   zeichen?: number;
   sekunden?: number;
@@ -25,6 +27,7 @@ export type Buchung = {
 /** Preise je Modell (Dollar). Jede Angabe optional; fehlt die passende, ist der Preis unbekannt. */
 export type Preis = {
   proMioEingabeTokens?: number;
+  proMioGecachteTokens?: number;
   proMioAusgabeTokens?: number;
   proMinute?: number;
   proMioZeichen?: number;
@@ -45,7 +48,8 @@ const BEKANNTE_PREISE: Record<string, Preis> = {
 export const GOOGLE_USD_PRO_ANFRAGE = 0.035;
 
 function kostenDir(): string {
-  return path.join(novaHomeDir(), "zustand", "kosten");
+  // NOVA_KOSTENBUCH_DIR nur für Vergleichsläufe (Nachweise mit Wegwerf-NOVA_HOME sollen ihren Verbrauch behalten).
+  return process.env.NOVA_KOSTENBUCH_DIR?.trim() || path.join(novaHomeDir(), "zustand", "kosten");
 }
 
 export function preisDatei(): string {
@@ -114,8 +118,11 @@ export function usdFuer(b: Buchung, preise: Record<string, Preis>): number | nul
     summe += (menge / teiler) * preis;
     return true;
   };
+  // Gecachte Eingabe-Tokens zum Cache-Preis (wenn bekannt), der Rest zum vollen Eingabepreis.
+  const gecacht = p.proMioGecachteTokens !== undefined ? Math.min(b.gecachteTokens ?? 0, b.eingabeTokens ?? 0) : 0;
   const ok =
-    teil(b.eingabeTokens, p.proMioEingabeTokens, 1_000_000) &&
+    teil(gecacht, p.proMioGecachteTokens, 1_000_000) &&
+    teil((b.eingabeTokens ?? 0) - gecacht, p.proMioEingabeTokens, 1_000_000) &&
     teil(b.ausgabeTokens, p.proMioAusgabeTokens, 1_000_000) &&
     teil(b.zeichen, p.proMioZeichen, 1_000_000) &&
     teil(b.sekunden, p.proMinute, 60) &&

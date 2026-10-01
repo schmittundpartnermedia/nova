@@ -66,6 +66,7 @@ export class OpenAIProvider implements HeadProvider {
         art: "kopf",
         modell: model,
         eingabeTokens: response.usage?.input_tokens,
+        gecachteTokens: response.usage?.input_tokens_details?.cached_tokens,
         ausgabeTokens: response.usage?.output_tokens,
       });
 

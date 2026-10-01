@@ -55,6 +55,10 @@ async function main() {
       assert.deepEqual(k.ohne_preis.sort(), ["NOVAs Kopf (OpenAI) – gpt-6-astra", "Websuche (OpenAI) – web_search"]);
       assert.equal(k.summe_usd, Math.round((0.42 + 3.605 + 0.006 + 0.15) * 100) / 100);
     }],
+    ["Gecachte Tokens werden zum Cache-Preis gerechnet", async () => {
+      const preise = { m: { proMioEingabeTokens: 10, proMioGecachteTokens: 1, proMioAusgabeTokens: 50 } };
+      assert.equal(usdFuer({ zeit: "", art: "kopf", modell: "m", eingabeTokens: 1_000_000, gecachteTokens: 800_000, ausgabeTokens: 0 }, preise), 2.8);
+    }],
     ["Eigene Preise in ~/Nova/preise.json schließen die Lücke", async () => {
       fs.writeFileSync(preisDatei(), JSON.stringify({ "gpt-6-astra": { proMioEingabeTokens: 2, proMioAusgabeTokens: 8 }, web_search: { proAnfrage: 0.01 } }));
       const { von, bis } = zeitraum("heute", jetzt);
