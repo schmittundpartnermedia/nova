@@ -69,7 +69,7 @@ export function alleAuftraege(): Auftrag[] {
 /** Befehl im Projektordner ausführen (Shell), Ausgabe gekürzt. */
 export function fuehreBefehlAus(befehl: string, ordner: string, timeoutMs = 15 * 60_000): Promise<{ ok: boolean; ausgabe: string }> {
   return new Promise((resolve) => {
-    const child = spawn("/bin/zsh", ["-lc", befehl], { cwd: ordner, env: { ...process.env, DATABASE_URL: undefined }, stdio: ["ignore", "pipe", "pipe"] });
+    const child = spawn("/bin/bash", ["-lc", befehl], { cwd: ordner, env: { ...process.env, DATABASE_URL: undefined }, stdio: ["ignore", "pipe", "pipe"] });
     let ausgabe = "";
     const sammle = (chunk: Buffer) => {
       ausgabe = (ausgabe + chunk.toString("utf8")).slice(-6000);

@@ -11,7 +11,7 @@ function fehler(error: unknown): NovaToolResult {
 
 export const claudeBeauftragenTool: NovaToolDefinition = {
   name: "claude_beauftragen",
-  description: `Gibt Claude Code einen Programmier-Auftrag an einem von Joachims Projekten unter /Volumes/ELEVUM/Projekte/joachim (Namen und Beschreibungen liefert nova_status; „webseite“ = rankpilot.de, „app“ = app.rankpilot.de). Claude arbeitet im Hintergrund auf einem eigenen Branch, NOVA prüft das Ergebnis und meldet sich; veröffentlicht wird erst nach Joachims Ja (claude_live). Formuliere die Aufgabe vollständig und konkret; frag nach, wenn Wesentliches fehlt (z. B. die neue Telefonnummer).`,
+  description: `Gibt Claude Code einen Programmier-Auftrag an einem von Joachims Projekten im Projektordner (Namen und Beschreibungen liefert nova_status; „webseite“ = rankpilot.de, „app“ = app.rankpilot.de). Claude arbeitet im Hintergrund auf einem eigenen Branch, NOVA prüft das Ergebnis und meldet sich; veröffentlicht wird erst nach Joachims Ja (claude_live). Formuliere die Aufgabe vollständig und konkret; frag nach, wenn Wesentliches fehlt (z. B. die neue Telefonnummer).`,
   parameters: {
     type: "object",
     properties: {

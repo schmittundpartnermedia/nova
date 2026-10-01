@@ -4,7 +4,7 @@ import path from "node:path";
 import { novaHomeDir } from "@/lib/gedaechtnis/paths";
 
 /**
- * Projekte, die NOVA an Claude Code geben kann: jeder Git-Ordner unter /Volumes/ELEVUM/Projekte/joachim
+ * Projekte, die NOVA an Claude Code geben kann: jeder Git-Ordner im Projektordner (Server: /home/nova/projekte)
  * (änderbar per NOVA_PROJEKTE_DIR), automatisch erkannt. Ausgenommen: NOVA selbst und Doppel (gleiches GitHub-Repo).
  * Zum Testen/Überschreiben: ~/Nova/claude/projekte.json.
  * pruefen: Befehle, mit denen NOVA das Ergebnis selbst prüft. live: Veröffentlichungs-Skript (nur nach Freigabe);

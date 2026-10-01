@@ -39,21 +39,35 @@ Die Kopien sind ein Stand von heute Nacht; bis zum Umschalten wird unten weiterg
 
 Postgres statt SQLite (Zweig `server/umzug`). Datenübernahme `scripts/umzug-daten.ts`: liest eine SQLite-Kopie, schreibt in einer Transaktion, vergleicht jede Zeile Feld für Feld. Für die Übernahme braucht die Rolle `nova` kurz Superuser (Fremdschlüssel aussetzen), danach wieder entzogen.
 
-## Stand der Probe (02.10., ~01:00)
+## Stand (02.10., ~01:20)
 
-- Läuft: Web-App unter pm2 (`nova-web`), Kopie der Daten von 00:41, Kopf antwortet aus Gedächtnis und Verlauf.
-- Läuft **nicht**: Hintergrund-Läufer (bewusst – sonst gingen Mails doppelt raus, solange der Mac die echte NOVA ist), Mail (Apple Mail gibt es auf dem Server nicht), Kalender, Claude-Aufträge, Lead-Scanner, Browser für Plattform-Einträge (bleibt auf dem Mac).
-- Nicht dauerhaft: Nach einem Neustart des Servers startet die Probe nicht von selbst.
+Läuft auf dem Server:
+- Web-App `nova-web` (pm2 von `nova`, aus `ecosystem.config.cjs`, TZ=Europe/Berlin) mit einer Kopie der Daten von 00:41. Kopf antwortet aus Gedächtnis und Verlauf.
+- Lead-Scanner unter `/home/nova/projekte/lead-scanner` (eigener Google-Schlüssel in seiner `.env`, nur für `nova` lesbar); sein Test läuft auf dem Server grün.
+- Claude Code 2.1.287 für `nova` installiert (`~/.local/bin/claude`) – **nicht angemeldet**.
+- Sicherung jede Nacht 03:30 (deutsche Zeit) nach `~/sicherung/<datum>/`: Datenbank, `~/Nova`, Projekte; jede Sicherung wird nach dem Schreiben gelesen; 14 Tage. Erste Sicherung 02.10. 01:14 geprüft (3,3 GB).
+
+Im Code (Zweig `server/umzug`), auf dem Server installiert, aber ohne echten Zugang noch nicht gelaufen:
+- Mail über IMAP/SMTP (IONOS) statt Apple Mail – braucht die Passwörter und `~/Nova/mailkonten.txt`.
+- Kalender über CalDAV statt Apple Kalender – braucht `~/Nova/kalender.json` und das Kalender-Passwort.
+- Signaturen als Dateien `~/Nova/signaturen/<adresse>.txt` – Inhalt liefert Joachim (Apple Mail hängte sie bisher selbst an).
+
+Läuft bewusst nicht:
+- Hintergrund-Läufer `nova-worker` (sonst laufen Mac und Server gleichzeitig, Mails gingen doppelt raus).
+- Live-Stellen von Webseite/App vom Server aus: Die Deploy-Skripte melden sich als root per SSH an; `nova` hat (richtig so) keinen root-Zugang. Lösung mit Joachim: fest installierte, root-eigene Deploy-Befehle, die `nova` per sudo-Regel genau so aufrufen darf – nicht die Skripte aus dem Projekt (die könnte Claude Code ändern).
+- Browser für Plattform-Einträge (bleibt auf dem Mac, Joachim löst dort Captchas).
+
+Aktualisieren vom Mac: `scripts/server/aktualisieren.sh` (überträgt, installiert, baut, startet laufende Prozesse neu – startet den Hintergrund-Läufer nie von selbst).
 
 ## Noch zu tun bis zum Umschalten
 
-1. Mail direkt über IONOS (IMAP/SMTP) statt Apple Mail – Passwörter trägt Joachim selbst ein.
-2. Kalender über iCloud (CalDAV) statt Apple Kalender – App-Passwort von Joachim.
-3. Claude Code auf dem Server installieren und anmelden (Joachim); Projektpfade auf `/home/nova/projekte`; Live-Stellen nur über die Deploy-Skripte, nach Joachims Ja.
-4. Lead-Scanner auf dem Server (Google-Schlüssel gezielt nachtragen).
-5. NOVA.app auf dem Mac als Fernbedienung (spricht mit dem Server).
-6. Sicherung: NOVA-Datenbank und `/home/nova` jede Nacht, dazu eine Kopie außer Haus. Prüfen, ob das IONOS-Backup (Acronis) gebucht ist.
-7. Gleiche Node-Version auf Mac und Server (Mac 24, Server 22 – Lockfile wich ab).
-8. Umschalten mit Joachim an einem Abend: Mac-NOVA aus, letzte Daten übernehmen, Server-Worker an.
+1. Joachim: Passwörter eintragen (`scripts/server/nova.sh passwort joachim@rankpilot.de`, `… check@b2b-rankpilot.de`, `… info@elevum.io`), Signaturtexte liefern; danach eine echte Test-Mail an seine Test-Adressen (auf Zuruf).
+2. Joachim: Welcher Kalender (iCloud?), Apple-ID und App-Passwort (`nova.sh kalender-passwort`).
+3. Joachim: Claude Code auf dem Server anmelden (`ssh nova@87.106.179.99`, dann `claude`).
+4. Live-Stellen vom Server (siehe oben) gemeinsam einrichten.
+5. NOVA.app auf dem Mac als Fernbedienung (spricht über SSH mit dem Server); Swift-Helfer und Apple-Teile im Launcher entfernen.
+6. Kopie der Sicherung außer Haus (Ziel klären) und prüfen, ob das IONOS-Backup (Acronis) gebucht ist.
+7. Gleiche Node-Version auf Mac und Server (Mac 24, Server 22).
+8. Umschalten an einem Abend: Mac-NOVA aus, letzte Daten übernehmen (`scripts/umzug-daten.ts`), Projekte nachgleichen, `pm2 start ecosystem.config.cjs`, `pm2 save` + Autostart.
 
 Gefunden nebenbei (rankPilot, nicht angefasst): Die tägliche Sicherung der Uploads scheitert jeden Tag („/var/data/rankpilot-uploads fehlt“); die Datenbank-Sicherungen liegen nur auf demselben Server.
