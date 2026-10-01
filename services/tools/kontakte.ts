@@ -16,23 +16,23 @@ function fehler(error: unknown): NovaToolResult {
 export const kundenSuchenTool: NovaToolDefinition = {
   name: "kunden_suchen",
   description:
-    "Sucht mit Joachims Lead-Scanner (Google Places + Impressum) lokale Betriebe als potenzielle rankPilot-KUNDEN, z. B. Schreinereien in Pforzheim. Nicht für Sponsoren. Kostet API-Anfragen: Ohne Dauerfreigabe kommt freigabe_noetig mit freigabe_id und Kosten zurück – dann einmal fragen („20 Schreinereien in Pforzheim, ca. 0,04 $ – los?“) und nach dem Ja mit derselben Branche/Ort/Anzahl und der freigabe_id erneut aufrufen. Der Lauf dauert einige Minuten im Hintergrund; NOVA meldet sich, wenn die Kundenliste fertig ist.",
+    "Findet mit Joachims Lead-Scanner ALLE Betriebe einer Branche im Umkreis um einen Ort (Google Maps, Gebiet wird lückenlos in Kacheln abgesucht) als potenzielle rankPilot-KUNDEN, z. B. alle Schreinereien im Umkreis von 40 km um Pforzheim – das können Hunderte sein. Jede Website wird auf E-Mail und Ansprechpartner geprüft; alle Betriebe kommen in den Vorrat und werden vom Tagesbetrieb nach und nach angeschrieben (nicht von der Suche selbst). Nicht für Sponsoren. Ein Ort je Suche (Mittelpunkt), nie mehrere Orte in einem Feld; „in Pforzheim“ ohne Umkreis = 10 km. Kostet Google-Anfragen: Ohne Dauerfreigabe kommt freigabe_noetig mit freigabe_id und Kosten zurück – dann einmal fragen („alle Schreinereien im Umkreis von 40 km um Pforzheim, ca. 4,50 $, höchstens 13 $ – los?“) und nach dem Ja mit denselben Angaben und der freigabe_id erneut aufrufen. Der Lauf dauert je nach Gebiet 10 bis 40 Minuten; NOVA meldet sich mit den Zahlen.",
   parameters: {
     type: "object",
     properties: {
-      branche: { type: "string" },
-      ort: { type: "string" },
-      anzahl: { type: "integer", description: "1–60 Betriebe. Wenn der Nutzer nichts sagt: 20." },
+      branche: { type: "string", description: "Eine Branche, Einzahl, wie man sie bei Google Maps sucht, z. B. „Schreinerei“." },
+      ort: { type: "string", description: "Genau ein Ort als Mittelpunkt, z. B. „Pforzheim“." },
+      radius_km: { type: "integer", description: "Umkreis in km (1–60). Ohne Angabe des Nutzers: 10." },
       freigabe_id: { type: "string", description: "Nur nach Ja des Nutzers: freigabe_id aus der Rückfrage. Sonst leer." },
     },
-    required: ["branche", "ort", "anzahl", "freigabe_id"],
+    required: ["branche", "ort", "radius_km", "freigabe_id"],
     additionalProperties: false,
   },
   async execute(args, ctx) {
     try {
       const result = await starteKundensuche({
         organizationId: ctx.organizationId,
-        auftrag: { branche: str(args.branche), ort: str(args.ort), anzahl: Number(args.anzahl) },
+        auftrag: { branche: str(args.branche), mitte: str(args.ort), radiusKm: Number(args.radius_km) },
         freigabeId: str(args.freigabe_id) || undefined,
       });
       return { ok: true, executed: result.status === "gestartet", data: result };

@@ -222,15 +222,21 @@ Abschluss dieser Runde: `tsc`, `eslint`, `next build`, `npm run macos:build` gr�
 - NOVA-Code: zurückgestellter Betrieb wird beim Wiederfinden wieder aufgenommen; **Fehler behoben:** Suchläufe des Tagesbetriebs zählten nicht gegen das Tageslimit der Scanner-Freigabe (nur Einzelsuchen). Tests: tagesbetrieb 15/15 (2 neu, Gegenproben schlagen fehl), übrige grün. Beide Code-Korrekturen wirken im Hintergrund-Läufer erst nach einem Neustart von NOVA.app.
 - Beobachtet: Eine Einzelsuche „Schreinereien in Pforzheim und Umgebung im Umkreis von 40 km“ scheiterte an Google („Places API: service currently unavailable“, vorübergehend); NOVA sagte danach trotzdem „Die erste Suche … läuft“ – die Antwort entstand, bevor die Fehlermeldung kam.
 
+**01.10.2026, 11:00–11:30 – Kundensuche an der Wurzel neu: Gebietssuche (Joachims Vorgabe).** Joachim: „Umkreis 40 km um Pforzheim heißt ALLE Firmen, 100–300, nicht 5.“ Ursache: Die Suche lief als „Branche in Ort“ mit Google-Obergrenze (max. 60 je Anfrage, Scanner nahm 20); der Kopf gab „Mühlacker und Niefern-Öschelbronn“ als einen Ort an Google (→ 5 Treffer).
+- Lead-Scanner (lokal, main 1968557): neu `src/gebiet.ts` (`npm run gebiet`): Kreis in 8-km-Kacheln, je Kachel Google Text Search mit `locationRestriction`, volle Kacheln (60) werden geviertelt bis 1 km, Zusammenführung über placeId, Radius- und Geschlossen-Filter, Kostengrenze, Website-Prüfung parallel, CSV mit Ort und Entfernung; `--fixture/--lage` ohne Google. `npm run test:gebiet`: nachgebautes Google mit 600 Betrieben → 445/445 im Radius gefunden; Gegenprobe ohne Teilen schlägt fehl. Die zuvor eingebaute Matrix-Reihenfolge (2d463e6) bleibt im Scanner, NOVA nutzt `daily` nicht mehr.
+- NOVA: `kunden_suchen` = Gebietssuche (branche, ort = ein Mittelpunkt, radius_km; Kosten-Schätzung + Obergrenze in der Freigabe, 40 km ≈ 4,50 $, höchstens 13,44 $). Jeder Treffer → Vorrat (`leads`, geprüft) + Firma/Kontakt + Dokumentationsliste `kunden-<branche>-<ort>-<km>km-<datum>`; Meldung mit ehrlichen Zahlen. Tagesbetrieb: Suchgebiet (`suchgebiet`: Pforzheim/40) + Branchen-Reihenfolge (`branchen`, Schreinerei zuerst) in `~/Nova/tagesbetrieb.json`; ist der Vorrat < 5, sucht er die nächste noch nicht durchsuchte Branche im ganzen Gebiet (`~/Nova/zustand/suchplan.json`; jede Gebietssuche, auch auf Zuruf, hakt ihre Branche ab); sind alle durch, meldet er das. Alter Tageslauf-Weg (`echterTageslauf`, Einzelsuche mit `anzahl`) gelöscht. Kopf-Regel: ein Mittelpunkt + Umkreis, nie mehrere Orte in einem Feld.
+- Gefunden durch den Phase-4-Nachweis: Meldung nannte „384 Google-Anfragen, 13.44 $“ bei 0 Anfragen (Zahl aus der Startzeile gelesen) – behoben (Ergebniszeile, Komma), Test ergänzt. `docs/nachweis-phase4-scanner.txt` neu.
+- Tests: kunden 9/9, tagesbetrieb 16/16, alle anderen grün; tsc, eslint sauber. `docs/SCRAPER.md` aktualisiert.
+- **Nicht geprüft:** echter Google-Lauf der Gebietssuche (Kosten, braucht Joachims Ja); Laufzeit bei 200+ Websites.
+- Stand der Daten: Tagesbetrieb ist aus (NOVA hat ihn um 10:49 auf Joachims Einwand ausgeschaltet). 11 Zahnarzt/Physio-Betriebe zurückgestellt. Heute 4 Scanner-Läufe (3 Einzelsuchen, 1 Tageslauf) – Tageslimit 3 erreicht, weitere Suchen heute nur mit Einzel-Ja.
+
 ## Dran
 
-**Joachim, wenn er zurück ist:**
-1. NOVA.app starten (Worker kennt die neuen Aufträge `nachfass.tick` erst dann).
-2. ~~Nachfass-Vorlage lesen~~ – Joachim hat `~/Nova/vorlagen/kunden-nachfass.md` am 01.10. bestätigt („passt, machen wir“).
-3. Erster echter Versand wie geplant: „Schreib die Schreinereien aus Pforzheim mit der Kunden-Vorlage an, alle 5 Minuten.“ – die Zusammenfassung nennt jetzt auch die Nachfass-Mail nach 6 Tagen.
-4. Zählung der Checks freischalten (optional, später): Zweige `nova/check-kurzlink` (Webseite) und `nova/check-herkunft` (App) übernehmen und live stellen, danach `RANKPILOT_CHECKS_TOKEN` in NOVAs `.env` selbst eintragen.
-5. „Guten Morgen, was liegt heute an?“ ausprobieren.
-Danach: Phase 7 (Browser/Plattformen). Später: Kopf-Vergleich OpenAI/Claude, Kostenübersicht, Kalender (Punkt 6 der Liste, nicht beauftragt).
+**Joachim:**
+1. NOVA.app beenden und neu starten (Hintergrund-Läufer braucht den neuen Code).
+2. „Such alle Schreinereien im Umkreis von 40 km um Pforzheim.“ → NOVA nennt etwa 4,50 $ (höchstens 13,44 $) → „Ja“. Läuft 10–40 Minuten, dann Meldung mit Anzahl.
+3. „Schalte den Kunden-Tagesbetrieb ein.“ → Beispiel-Mail an eine Schreinerei → „Ja“ → 15 am Tag.
+4. Entscheiden: Soll der Tagesbetrieb danach selbst die nächste Branche suchen (je ~4,50 $), oder erst auf Zuruf? Standard jetzt: selbst, im Rahmen der Dauerfreigabe (3 Läufe/Tag).
 
 ## Was Joachim liefert (siehe Auftrag, Anhang)
 

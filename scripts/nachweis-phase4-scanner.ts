@@ -1,6 +1,7 @@
 /**
- * Nachweis Phase 4: echter Lead-Scanner (Kommandozeile) mit seiner eigenen Beispieldatei – ohne Google-API,
- * ohne Website-Abruf. Prüft Aufruf, CSV-Erkennung und Einlesen in NOVA (Wegwerf-DB und -NOVA_HOME).
+ * Nachweis Phase 4: echte Gebietssuche des Lead-Scanners (Kommandozeile, src/gebiet.ts) mit seiner eigenen
+ * Beispieldatei – ohne Google-API, ohne Website-Abruf. Prüft Aufruf, CSV-Erkennung und Einlesen in NOVA
+ * (Vorrat, Firmen, Liste; Wegwerf-DB und -NOVA_HOME).
  * Die vom Scanner erzeugte CSV unter lead-scanner/output wird danach wieder gelöscht.
  * Ausgabe: docs/nachweis-phase4-scanner.txt
  */
@@ -23,38 +24,39 @@ async function main() {
   const push = spawnSync("npx", ["prisma", "db", "push", "--skip-generate", "--accept-data-loss"], { env: process.env, encoding: "utf8" });
   if (push.status !== 0) throw new Error(push.stderr);
   const { prisma } = await import("@/lib/prisma");
-  const { baueScanner, scannerDir } = await import("@/lib/leads/scanner");
-  const { fuehreKundensucheAus } = await import("@/services/leads");
+  const { baueGebietsScanner, scannerDir } = await import("@/lib/leads/scanner");
+  const { fuehreGebietssucheAus } = await import("@/services/leads");
   const { holeNeueMeldungen } = await import("@/services/meldungen");
   const { leseKontaktliste } = await import("@/lib/mail/kontaktlisten");
   const org = await prisma.organization.create({ data: { name: "Nachweis", slug: `nachweis-${Date.now()}` } });
 
   log(`NOVA Phase-4-Nachweis Lead-Scanner – ${new Date().toISOString()}`);
-  log(`Scanner: ${scannerDir()} (Beispieldatei fixtures/places_sample.json, --skip-audit, keine API-Kosten)`);
-  const runner = baueScanner(["--fixture", "fixtures/places_sample.json", "--skip-audit"]);
+  log(`Scanner: ${scannerDir()} – Gebietssuche mit Beispieldatei fixtures/places_sample.json, --skip-audit, keine API-Kosten`);
+  const runner = baueGebietsScanner(["--fixture", "fixtures/places_sample.json", "--lage", "48.8922,8.6946", "--skip-audit"]);
   const gemerkt = async (auftrag: Parameters<typeof runner>[0]) => {
     const lauf = await runner(auftrag);
     scannerCsv = lauf.csvPfad;
     log(`Scanner-CSV: ${lauf.csvPfad}`);
     return lauf;
   };
-  const result = await fuehreKundensucheAus({
+  const result = await fuehreGebietssucheAus({
     organizationId: org.id,
-    auftrag: { branche: "Nachweis Schreinerei", ort: "Nachweisort", anzahl: 5 },
+    auftrag: { branche: "Nachweis Schreinerei", mitte: "Pforzheim", radiusKm: 40 },
     runner: gemerkt,
+    mx: async () => true,
   });
   if (!result.ok) throw new Error(result.grund);
-  log(`Liste: ${result.liste} – ${result.anzahl} Betriebe, ${result.mitEmail} mit E-Mail, ${result.mitPerson} mit Ansprechpartner`);
+  log(`Liste: ${result.liste} – ${result.gefunden} Betriebe, ${result.mitEmail} mit E-Mail, ${result.neuImVorrat} neu im Vorrat`);
   for (const zeile of leseKontaktliste(result.liste)) {
     log(`  ${zeile.werte.firma} | ${zeile.werte.anrede} | ${zeile.werte.email || "(keine E-Mail)"} | ${zeile.werte.telefon}`);
   }
-  log(`Firmen in DB: ${await prisma.company.count()}, Kontakte: ${await prisma.contact.count()}`);
+  log(`Firmen in DB: ${await prisma.company.count()}, Kontakte: ${await prisma.contact.count()}, Vorrat (leads): ${await prisma.lead.count()}`);
   const meldung = await holeNeueMeldungen(org.id);
   log(`Meldung: ${meldung[0]?.text ?? "(keine)"}`);
-  if (result.anzahl < 1 || meldung.length !== 1) throw new Error("Einlesen oder Meldung fehlt.");
+  if (result.gefunden < 1 || meldung.length !== 1 || (await prisma.lead.count()) !== result.gefunden) throw new Error("Einlesen oder Meldung fehlt.");
   log("");
-  log("ERGEBNIS: Aufruf des echten Lead-Scanners und Einlesen in NOVA funktionieren (Beispieldaten, ohne Google-API).");
-  log("Nicht geprüft: echte Google-Places-Suche und Impressum-Auslese – das prüft Joachim in NOVA.app.");
+  log("ERGEBNIS: Aufruf der echten Gebietssuche des Lead-Scanners und Einlesen in NOVA funktionieren (Beispieldaten, ohne Google-API).");
+  log("Nicht geprüft: echte Google-Abfrage mit Kacheln und Impressum-Auslese – braucht Joachims Freigabe (kostet Google-Anfragen).");
   await prisma.$disconnect();
 }
 

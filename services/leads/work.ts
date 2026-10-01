@@ -1,21 +1,23 @@
-import { echterScanner } from "@/lib/leads/scanner";
-import { fuehreKundensucheAus } from "@/services/leads";
+import { echterGebietsScanner } from "@/lib/leads/scanner";
+import { fuehreGebietssucheAus } from "@/services/leads";
+import { echterMxPruefer } from "@/services/tagesbetrieb/pruefen";
 
-/** Worker-Handler „scanner.lauf“. Kein zweiter Versuch: jeder Lauf kostet API-Anfragen. */
+/** Worker-Handler „scanner.lauf“ (Gebietssuche auf Joachims Zuruf). Kein zweiter Versuch: jeder Lauf kostet API-Anfragen. */
 export async function scannerLaufWorkHandler(item: {
   organizationId: string;
   payload: Record<string, unknown>;
 }): Promise<{ ok: boolean; retry?: boolean; note?: string }> {
-  const result = await fuehreKundensucheAus({
+  const result = await fuehreGebietssucheAus({
     organizationId: item.organizationId,
     auftrag: {
       branche: String(item.payload.branche ?? ""),
-      ort: String(item.payload.ort ?? ""),
-      anzahl: Number(item.payload.anzahl ?? 0),
+      mitte: String(item.payload.mitte ?? ""),
+      radiusKm: Number(item.payload.radiusKm ?? 0),
     },
-    runner: echterScanner,
+    runner: echterGebietsScanner,
+    mx: echterMxPruefer,
   });
   return result.ok
-    ? { ok: true, note: `${result.anzahl} Betriebe → ${result.liste}` }
+    ? { ok: true, note: `${result.gefunden} Betriebe, ${result.neuImVorrat} neu im Vorrat → ${result.liste}` }
     : { ok: false, retry: false, note: result.grund };
 }

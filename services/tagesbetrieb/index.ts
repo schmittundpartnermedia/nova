@@ -1,7 +1,5 @@
-import fs from "node:fs";
 import { prisma } from "@/lib/prisma";
 import { assertOrganizationId } from "@/services/tenant";
-import { parseKontaktliste } from "@/lib/mail/kontaktlisten";
 import { fuelleVorlage, leseVorlagen } from "@/lib/mail/vorlagen";
 import { createApprovalRequest, decideApproval, findMatchingPolicy, policyMaxPerDay, scannerRunsToday } from "@/services/approvals";
 import { erstelleEntwurf, sendeEntwurf } from "@/services/mail/entwuerfe";
@@ -10,7 +8,9 @@ import { enqueueWorkItem } from "@/services/worker/queue";
 import { kuerzlichGemeldet, meldeNutzer } from "@/services/meldungen";
 import { nachfassEinstellung, planePostfachWache } from "@/services/kampagnen";
 import { schreibeTagesbericht } from "@/services/tagesbericht";
-import type { TageslaufRunner } from "@/lib/leads/scanner";
+import type { GebietsRunner } from "@/lib/leads/scanner";
+import { fuehreGebietssucheAus } from "@/services/leads";
+import { erledigteBranchen, naechsteBranche } from "@/services/tagesbetrieb/suchplan";
 import { leseEinstellungen, lokalesDatum, zeitfenster, type TagesbetriebEinstellungen } from "@/services/tagesbetrieb/einstellungen";
 import { feststellungAus } from "@/lib/leads/feststellung";
 import { planeNachfass } from "@/services/nachfass";
@@ -18,7 +18,8 @@ import { pruefeAdresse, type MxPruefer } from "@/services/tagesbetrieb/pruefen";
 
 /**
  * Kunden-Tagesbetrieb (Worker-Job „tagesbetrieb.tick“ alle 5 Minuten, solange eingeschaltet):
- * 1. Vorrat: Unter N geprüften Adressen startet der Scanner-Tageslauf („tagesbetrieb.suche“) – nur mit Dauerfreigabe scanner.start.
+ * 1. Vorrat: Unter N geprüften Adressen sucht der Scanner die nächste Branche im ganzen Suchgebiet („tagesbetrieb.suche“,
+ *    Gebietssuche, Reihenfolge laut Einstellungen) – nur mit Dauerfreigabe scanner.start.
  * 2. Morgens: eine Tageskampagne mit EINER Beispiel-Mail und einer Freigabe; NOVA legt sie im Chat vor.
  * 3. Nach dem Ja: pro Takt eine Mail (geprüfte Adresse → Entwurf aus der Vorlage → Versand), bis Tageslimit oder Feierabend.
  * 4. Nach Feierabend: Tagesbericht in den Chat und nach ~/Nova/berichte/.
@@ -53,92 +54,15 @@ function werteAus(lead: {
   };
 }
 
-/** Liest eine CSV des Lead-Scanners in die Tabelle leads ein (Adressen, die es schon gibt, werden übersprungen). */
-export async function leseLeadsEin(organizationId: string, csvPfad: string): Promise<{ neu: number; ohneEmail: number }> {
-  assertOrganizationId(organizationId);
-  const zeilen = parseKontaktliste(fs.readFileSync(csvPfad, "utf8")).map((zeile) => zeile.werte);
-  let neu = 0;
-  let ohneEmail = 0;
-  for (const werte of zeilen) {
-    const firma = (werte.name ?? "").trim();
-    if (!firma) continue;
-    const email = (werte.email ?? "").trim().toLowerCase() || null;
-    const ort = (werte.ort ?? "").trim() || null;
-    // Abgleich über die Adresse; ohne Adresse über Firma + Ort.
-    const bekannt = email
-      ? await prisma.lead.findFirst({ where: { organizationId, email } })
-      : await prisma.lead.findFirst({ where: { organizationId, email: null, firma, ort } });
-    if (bekannt?.status === "zurueckgestellt") {
-      // Zurückgestellt, bis seine Branche dran ist – jetzt hat der Scanner ihn in seiner Branche wiedergefunden.
-      await prisma.lead.update({ where: { id: bekannt.id }, data: { status: "neu", grund: null, geprueftAt: null, quelle: csvPfad } });
-      neu += 1;
-      continue;
-    }
-    if (bekannt) continue;
-    const ansprechpartner = (werte.ansprechpartner || werte.inhabername || "").trim() || null;
-    const score = Number.parseInt(werte.score ?? "", 10);
-    await prisma.lead.create({
-      data: {
-        organizationId,
-        firma,
-        ansprechpartner,
-        anrede: ansprechpartner ? `Guten Tag ${ansprechpartner}` : `Sehr geehrtes ${firma}-Team`,
-        email,
-        telefon: (werte.telefon ?? "").trim() || null,
-        ort,
-        branche: (werte.branche ?? "").trim() || null,
-        website: (werte.finalurl || werte.website || "").trim() || null,
-        befunde: (werte.befunde ?? "").trim() || null,
-        aufhaenger: (werte.aufhaenger ?? "").trim() || null,
-        score: Number.isFinite(score) ? score : null,
-        quelle: csvPfad,
-        status: email ? "neu" : "verworfen",
-        grund: email ? null : "keine E-Mail-Adresse",
-        geprueftAt: email ? null : new Date(),
-      },
-    });
-    neu += 1;
-    if (!email) ohneEmail += 1;
-  }
-  return { neu, ohneEmail };
-}
-
-/** Prüft alle neuen Leads (Form, MX, Sperrliste, schon angeschrieben). */
-export async function pruefeNeueLeads(organizationId: string, mx: MxPruefer): Promise<{ geprueft: number; verworfen: number }> {
-  const neue = await prisma.lead.findMany({ where: { organizationId, status: "neu" }, orderBy: { createdAt: "asc" } });
-  let geprueft = 0;
-  let verworfen = 0;
-  for (const lead of neue) {
-    const ergebnis = await pruefeAdresse({ organizationId, email: lead.email, mx });
-    await prisma.lead.update({
-      where: { id: lead.id },
-      data: ergebnis.ok
-        ? { status: "geprueft", grund: null, geprueftAt: new Date() }
-        : { status: "verworfen", grund: ergebnis.grund, geprueftAt: new Date() },
-    });
-    if (ergebnis.ok) geprueft += 1;
-    else verworfen += 1;
-  }
-  return { geprueft, verworfen };
-}
-
-/** Worker-Teil „tagesbetrieb.suche“: Scanner-Tageslauf, einlesen, prüfen. */
-export async function fuehreTagessucheAus(input: { organizationId: string; tageslauf: TageslaufRunner; mx: MxPruefer }) {
-  try {
-    const lauf = await input.tageslauf();
-    const kombis = Number(lauf.ausgabe.match(/(\d+) Kombi\(s\) verarbeitet/)?.[1] ?? 0);
-    const eingelesen = await leseLeadsEin(input.organizationId, lauf.csvPfad);
-    const pruefung = await pruefeNeueLeads(input.organizationId, input.mx);
-    return { ok: true as const, kombis, ...eingelesen, ...pruefung, csv: lauf.csvPfad };
-  } catch (error) {
-    const grund = error instanceof Error ? error.message : String(error);
-    await meldeNutzer({
-      organizationId: input.organizationId,
-      anlass: `tagesbetrieb-suche-fehler:${lokalesDatum(new Date())}:${Date.now()}`,
-      text: `Die Kundensuche für den Tagesbetrieb ist fehlgeschlagen: ${grund}`,
-    });
-    return { ok: false as const, grund };
-  }
+/** Worker-Teil „tagesbetrieb.suche“: nächste Branche im Suchgebiet vollständig suchen, einlesen, prüfen (Suchplan hakt fuehreGebietssucheAus ab). */
+export async function fuehreTagessucheAus(input: { organizationId: string; branche: string; runner: GebietsRunner; mx: MxPruefer }) {
+  const cfg = leseEinstellungen();
+  return fuehreGebietssucheAus({
+    organizationId: input.organizationId,
+    auftrag: { branche: input.branche, mitte: cfg.suchgebiet.mitte, radiusKm: cfg.suchgebiet.radiusKm },
+    runner: input.runner,
+    mx: input.mx,
+  });
 }
 
 /** Nächste geprüfte Adresse als Entwurf der Tageskampagne; unpassende Leads werden mit Grund verworfen. */
@@ -233,20 +157,29 @@ export async function tagesbetriebTick(input: {
     return { weiter: true, aktion: "vorlage fehlt" };
   }
 
-  // Vorrat auffüllen.
+  // Vorrat auffüllen: nächste Branche im ganzen Suchgebiet.
   const vorrat = await prisma.lead.count({ where: { organizationId, status: "geprueft" } });
   if (vorrat < cfg.vorratMindestens) {
     const laufend = await prisma.workItem.count({
       where: { organizationId, kind: "tagesbetrieb.suche", status: { in: ["queued", "leased", "running"] } },
     });
-    if (!laufend) {
+    const branche = naechsteBranche(cfg);
+    if (!laufend && !branche) {
+      if (!(await kuerzlichGemeldet(organizationId, `tagesbetrieb-gebiet-fertig:${cfg.suchgebiet.mitte}:${cfg.suchgebiet.radiusKm}`, 7 * 24 * 60))) {
+        await meldeNutzer({
+          organizationId,
+          anlass: `tagesbetrieb-gebiet-fertig:${cfg.suchgebiet.mitte}:${cfg.suchgebiet.radiusKm}`,
+          text: `Alle ${cfg.branchen.length} Branchen im Umkreis von ${cfg.suchgebiet.radiusKm} km um ${cfg.suchgebiet.mitte} sind durchsucht. Für neue Betriebe brauche ich ein neues Gebiet oder weitere Branchen.`,
+        });
+      }
+    } else if (!laufend && branche) {
       const darf = await scannerDarf(organizationId);
       if (darf.ok) {
         await enqueueWorkItem({
           organizationId,
           kind: "tagesbetrieb.suche",
-          idempotencyKey: `tagesbetrieb.suche:${jetzt.getTime()}`,
-          payload: {},
+          idempotencyKey: `tagesbetrieb.suche:${branche}:${jetzt.getTime()}`,
+          payload: { branche },
           maxAttempts: 1,
         });
       } else if (!(await kuerzlichGemeldet(organizationId, `tagesbetrieb-scanner:${datum}`, 24 * 60))) {
@@ -376,5 +309,10 @@ export async function tagesbetriebStand(organizationId: string, jetzt = new Date
     einstellungen: cfg,
     heute: { datum, kampagne: kampagne?.status ?? "noch keine", gesendet, max: cfg.maxProTag, verworfen: verworfenHeute },
     vorrat_geprueft: vorrat,
+    suchplan: {
+      gebiet: `Umkreis von ${cfg.suchgebiet.radiusKm} km um ${cfg.suchgebiet.mitte}`,
+      erledigt: erledigteBranchen(cfg),
+      naechste_branche: naechsteBranche(cfg) ?? "keine mehr – alle Branchen durchsucht",
+    },
   };
 }

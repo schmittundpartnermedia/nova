@@ -23,6 +23,10 @@ export type TagesbetriebEinstellungen = {
   nachfassTage: number;
   /** Höchstens so viele Nachfass-Mails am Tag (über alle Kampagnen). */
   nachfassMaxProTag: number;
+  /** Suchgebiet: alle Betriebe im Umkreis um diesen Ort (Gebietssuche des Lead-Scanners). */
+  suchgebiet: { mitte: string; radiusKm: number };
+  /** Branchen in dieser Reihenfolge; eine Branche wird im ganzen Gebiet gesucht, dann kommt die nächste. */
+  branchen: string[];
 };
 
 export const STANDARD: TagesbetriebEinstellungen = {
@@ -37,6 +41,12 @@ export const STANDARD: TagesbetriebEinstellungen = {
   vorratMindestens: 5,
   nachfassTage: 6,
   nachfassMaxProTag: 30,
+  suchgebiet: { mitte: "Pforzheim", radiusKm: 40 },
+  branchen: [
+    "Schreinerei", "Zahnarztpraxis", "Physiotherapie", "Rechtsanwalt", "Steuerberater", "Autowerkstatt", "Restaurant",
+    "Friseursalon", "Kosmetikstudio", "Fitnessstudio", "Immobilienmakler", "Elektriker", "Sanitär Heizung", "Dachdecker",
+    "Maler und Lackierer", "Garten- und Landschaftsbau", "Fahrschule", "Tierarzt", "Hörgeräteakustiker", "Bestattungsunternehmen",
+  ],
 };
 
 export function einstellungenDatei(): string {

@@ -1,5 +1,5 @@
 /**
- * Regressionstest Kundensuche und Kontaktlisten (Phase 4) – ohne Lead-Scanner-API, ohne Apple Mail, ohne App.
+ * Regressionstest Kundensuche (Gebietssuche) und Kontaktlisten (Phase 4) – ohne Lead-Scanner-API, ohne Apple Mail, ohne App.
  * Wegwerf-Datenbank und -NOVA_HOME; der Scanner ist ein Test-Runner, der eine CSV im Format des Lead-Scanners schreibt.
  */
 import assert from "node:assert/strict";
@@ -12,11 +12,12 @@ const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "nova-test-kunden-"));
 process.env.DATABASE_URL = `file:${path.join(tmp, "test.db")}`;
 process.env.NOVA_HOME = path.join(tmp, "home");
 
+// Ausgabe der Gebietssuche (lead-scanner/src/gebiet.ts)
 const SCANNER_CSV = [
-  "﻿name,inhaberName,ansprechpartner,telefon,email,adresse,website,finalUrl,rating,reviewCount,score,befunde,aufhaenger",
-  'Schreinerei Zimmermann GmbH & Co.KG,Uwe Zimmermann,Uwe Zimmermann,07231 441292,info@schreinerei-zimmermann.eu,"Bäznerstraße 2, 75172 Pforzheim",http://www.schreinerei-zimmermann.eu/,http://www.schreinerei-zimmermann.eu/,4.9,10,38,keine Meta-Description,Aufhänger A',
-  'Holzwerk Nord,,,07231 1111,kontakt@holzwerk-nord.de,"Nordstr. 1, Pforzheim",https://holzwerk-nord.de,https://holzwerk-nord.de/,4.1,5,61,kein SSL/HTTPS,Aufhänger B',
-  'Möbelbau Süd,Eva Süd,,07231 2222,,"Südstr. 3, Pforzheim",,,3.9,2,72,keine Website,Aufhänger C',
+  "﻿placeId,name,inhaberName,ansprechpartner,telefon,email,adresse,ort,entfernungKm,website,finalUrl,rating,reviewCount,score,befunde,aufhaenger",
+  'p1,Schreinerei Zimmermann GmbH & Co.KG,Uwe Zimmermann,Uwe Zimmermann,07231 441292,info@schreinerei-zimmermann.eu,"Bäznerstraße 2, 75172 Pforzheim",Pforzheim,1.2,http://www.schreinerei-zimmermann.eu/,http://www.schreinerei-zimmermann.eu/,4.9,10,38,keine Meta-Description,Aufhänger A',
+  'p2,Holzwerk Nord,,,07041 1111,kontakt@holzwerk-nord.de,"Nordstr. 1, 75417 Mühlacker",Mühlacker,12.3,https://holzwerk-nord.de,https://holzwerk-nord.de/,4.1,5,61,kein SSL/HTTPS,Aufhänger B',
+  'p3,Möbelbau Süd,Eva Süd,,07051 2222,,"Südstr. 3, 75365 Calw",Calw,20.1,,,3.9,2,72,keine Website,Aufhänger C',
 ].join("\n");
 
 async function main() {
@@ -25,10 +26,12 @@ async function main() {
 
   const { prisma } = await import("@/lib/prisma");
   const { executeTool } = await import("@/services/tools/registry");
-  const { fuehreKundensucheAus } = await import("@/services/leads");
+  const { fuehreGebietssucheAus } = await import("@/services/leads");
+  const { schaetzeKosten } = await import("@/lib/leads/scanner");
+  const mx = async () => true;
   const { holeNeueMeldungen } = await import("@/services/meldungen");
   const { leseKontaktliste } = await import("@/lib/mail/kontaktlisten");
-  type ScannerRunner = import("@/lib/leads/scanner").ScannerRunner;
+  type ScannerRunner = import("@/lib/leads/scanner").GebietsRunner;
 
   const org = await prisma.organization.create({ data: { name: "Test", slug: `test-${Date.now()}` } });
   const keinPostfach = {
@@ -45,7 +48,10 @@ async function main() {
     scannerAufrufe.push(auftrag);
     const pfad = path.join(tmp, `scan-${scannerAufrufe.length}.csv`);
     fs.writeFileSync(pfad, SCANNER_CSV);
-    return { csvPfad: pfad, ausgabe: `CSV geschrieben: ${pfad}` };
+    return {
+      csvPfad: pfad,
+      ausgabe: `Gebietssuche "${auftrag.branche}" im Umkreis von ${auftrag.radiusKm} km um ${auftrag.mitte} (höchstens ${auftrag.maxAnfragen} Anfragen) …\nGebiet: 3 Betriebe, 2 mit E-Mail, 131 Anfragen\nCSV geschrieben: ${pfad}`,
+    };
   };
   const heute = new Date("2026-09-30T10:00:00Z");
 
@@ -94,32 +100,44 @@ async function main() {
         assert.deepEqual(fillMailTemplate(vorlage, {}).fehlend, ["firma"]);
       },
     ],
-    ["Kundensuche ohne Freigabe: Rückfrage mit Kosten, kein Lauf", async () => {
-      const result = await run("kunden_suchen", { branche: "Schreinerei", ort: "Pforzheim", anzahl: 20, freigabe_id: "" });
-      const data = result.data as { status: string; kosten_usd: number };
+    ["Kundensuche ohne Freigabe: Rückfrage mit Kosten und Obergrenze, kein Lauf", async () => {
+      const result = await run("kunden_suchen", { branche: "Schreinerei", ort: "Pforzheim", radius_km: 40, freigabe_id: "" });
+      const data = result.data as { status: string; kosten_usd: number; max_kosten_usd: number };
       assert.equal(data.status, "freigabe_noetig");
-      assert.equal(data.kosten_usd, 0.035);
+      assert.equal(data.kosten_usd, schaetzeKosten(40).kostenUsd);
+      assert.ok(data.kosten_usd > 3 && data.kosten_usd < 7, `40 km kosten etwa 3–7 $ (${data.kosten_usd})`);
+      assert.ok(data.max_kosten_usd > data.kosten_usd);
+      assert.ok(schaetzeKosten(10).kostenUsd < 1, "ein Ort mit 10 km ist billig");
       assert.equal(result.executed, false);
       assert.equal(await prisma.workItem.count({ where: { kind: "scanner.lauf" } }), 0);
     }],
     ["Freigabe gilt nur für genau diese Suche; danach Lauf im Hintergrund geplant", async () => {
-      const frage = await run("kunden_suchen", { branche: "Schreinerei", ort: "Pforzheim", anzahl: 40, freigabe_id: "" });
+      const frage = await run("kunden_suchen", { branche: "Schreinerei", ort: "Pforzheim", radius_km: 40, freigabe_id: "" });
       const freigabeId = (frage.data as { freigabe_id: string }).freigabe_id;
-      assert.equal((frage.data as { kosten_usd: number }).kosten_usd, 0.07);
-      const falsch = await run("kunden_suchen", { branche: "Schreinerei", ort: "Karlsruhe", anzahl: 40, freigabe_id: freigabeId });
-      assert.equal(falsch.ok, false);
-      const richtig = await run("kunden_suchen", { branche: "Schreinerei", ort: "Pforzheim", anzahl: 40, freigabe_id: freigabeId });
+      const falsch = await run("kunden_suchen", { branche: "Schreinerei", ort: "Pforzheim", radius_km: 20, freigabe_id: freigabeId });
+      assert.equal(falsch.ok, false, "anderer Umkreis = andere Suche");
+      const richtig = await run("kunden_suchen", { branche: "Schreinerei", ort: "Pforzheim", radius_km: 40, freigabe_id: freigabeId });
       assert.equal((richtig.data as { status: string }).status, "gestartet");
       assert.equal(richtig.executed, true);
       const item = await prisma.workItem.findFirstOrThrow({ where: { kind: "scanner.lauf" } });
-      assert.deepEqual(JSON.parse(item.payload), { branche: "Schreinerei", ort: "Pforzheim", anzahl: 40 });
+      assert.deepEqual(JSON.parse(item.payload), { branche: "Schreinerei", mitte: "Pforzheim", radiusKm: 40 });
       assert.equal(scannerAufrufe.length, 0, "Werkzeug startet den Scanner nicht selbst, das macht der Worker");
     }],
-    ["Worker-Lauf: Ergebnis wird Kundenliste mit Anrede, Firmen und Kontakte, Meldung mit Zahlen", async () => {
-      const result = await fuehreKundensucheAus({ organizationId: org.id, auftrag: { branche: "Schreinerei", ort: "Pforzheim", anzahl: 20 }, runner: testScanner, heute });
+    ["Worker-Lauf: alle Betriebe in Vorrat, Firmen, Kontakte und Liste; Meldung mit ehrlichen Zahlen", async () => {
+      const result = await fuehreGebietssucheAus({ organizationId: org.id, auftrag: { branche: "Schreinerei", mitte: "Pforzheim", radiusKm: 40 }, runner: testScanner, mx, heute });
       assert.equal(result.ok, true);
       assert.equal(scannerAufrufe.length, 1);
-      const liste = leseKontaktliste("kunden-schreinerei-pforzheim-2026-09-30").map((zeile) => zeile.werte);
+      assert.deepEqual(scannerAufrufe[0], { branche: "Schreinerei", mitte: "Pforzheim", radiusKm: 40, maxAnfragen: schaetzeKosten(40).maxAnfragen });
+      const vorrat = await prisma.lead.findMany({ orderBy: { firma: "asc" } });
+      assert.deepEqual(
+        vorrat.map((lead) => [lead.firma, lead.status, lead.ort, lead.branche]),
+        [
+          ["Holzwerk Nord", "geprueft", "Mühlacker", "Schreinerei"],
+          ["Möbelbau Süd", "verworfen", "Calw", "Schreinerei"],
+          ["Schreinerei Zimmermann GmbH & Co.KG", "geprueft", "Pforzheim", "Schreinerei"],
+        ],
+      );
+      const liste = leseKontaktliste("kunden-schreinerei-pforzheim-40km-2026-09-30").map((zeile) => zeile.werte);
       assert.deepEqual(
         liste.map((k) => [k.firma, k.anrede, k.email]),
         [
@@ -139,28 +157,35 @@ async function main() {
       assert.equal(uwe.lastName, "Zimmermann");
       const meldungen = await holeNeueMeldungen(org.id);
       assert.equal(meldungen.length, 1);
-      assert.match(meldungen[0]!.text, /3 Betriebe, 2 mit E-Mail, 2 mit Ansprechpartner/);
-      assert.match(meldungen[0]!.text, /Größter Handlungsbedarf: Möbelbau Süd, Holzwerk Nord, Schreinerei Zimmermann/);
+      assert.match(meldungen[0]!.text, /Suche nach allen Schreinerei im Umkreis von 40 km um Pforzheim ist fertig: 3 Betriebe gefunden, 2 davon mit E-Mail\. 2 sind neu und geprüft im Vorrat/);
+      assert.match(meldungen[0]!.text, /131 Google-Anfragen, etwa 4,59 \$\./, "Anfragen aus der Ergebniszeile, nicht aus der Obergrenze");
+      const { naechsteBranche } = await import("@/services/tagesbetrieb/suchplan");
+      const { leseEinstellungen } = await import("@/services/tagesbetrieb/einstellungen");
+      assert.equal(naechsteBranche(leseEinstellungen()), "Zahnarztpraxis", "Suche auf Zuruf hakt die Branche im Suchplan des Tagesbetriebs ab");
+      assert.equal(liste[1]!.ort, "Mühlacker");
+      assert.equal(liste[1]!.entfernung_km, "12.3");
     }],
     ["Zweiter Lauf mit denselben Betrieben legt keine Firmen oder Kontakte doppelt an", async () => {
-      await fuehreKundensucheAus({ organizationId: org.id, auftrag: { branche: "Schreinerei", ort: "Pforzheim", anzahl: 20 }, runner: testScanner, heute });
+      const zweiter = await fuehreGebietssucheAus({ organizationId: org.id, auftrag: { branche: "Schreinerei", mitte: "Pforzheim", radiusKm: 40 }, runner: testScanner, mx, heute });
+      assert.equal(zweiter.ok && zweiter.neuImVorrat, 0, "nichts doppelt im Vorrat");
+      assert.equal(await prisma.lead.count(), 3);
       assert.equal(await prisma.company.count({ where: { organizationId: org.id } }), 3);
       assert.equal(await prisma.contact.count({ where: { organizationId: org.id } }), 3);
       await holeNeueMeldungen(org.id);
     }],
     ["Scanner-Fehler wird ehrlich gemeldet", async () => {
       const kaputt: ScannerRunner = async () => { throw new Error("Places-Key ungültig"); };
-      const result = await fuehreKundensucheAus({ organizationId: org.id, auftrag: { branche: "Maler", ort: "Calw", anzahl: 5 }, runner: kaputt });
+      const result = await fuehreGebietssucheAus({ organizationId: org.id, auftrag: { branche: "Maler", mitte: "Calw", radiusKm: 10 }, runner: kaputt, mx });
       assert.equal(result.ok, false);
       const meldungen = await holeNeueMeldungen(org.id);
-      assert.match(meldungen[0]!.text, /fehlgeschlagen: Places-Key ungültig/);
+      assert.match(meldungen[0]!.text, /Suche nach allen Maler im Umkreis von 10 km um Calw ist fehlgeschlagen: Places-Key ungültig/);
     }],
     ["Dauerfreigabe Scanner mit Tageslimit: erster Lauf ohne Rückfrage, dann wieder Rückfrage", async () => {
       await prisma.workItem.deleteMany({ where: { kind: "scanner.lauf" } });
       await run("freigabe_scanner_dauer", { aktion: "erteilen", max_pro_tag: 1 });
-      const erster = await run("kunden_suchen", { branche: "Elektriker", ort: "Calw", anzahl: 10, freigabe_id: "" });
+      const erster = await run("kunden_suchen", { branche: "Elektriker", ort: "Calw", radius_km: 10, freigabe_id: "" });
       assert.equal((erster.data as { status: string }).status, "gestartet");
-      const zweiter = await run("kunden_suchen", { branche: "Elektriker", ort: "Nagold", anzahl: 10, freigabe_id: "" });
+      const zweiter = await run("kunden_suchen", { branche: "Elektriker", ort: "Nagold", radius_km: 10, freigabe_id: "" });
       assert.equal((zweiter.data as { status: string }).status, "freigabe_noetig");
       assert.match((zweiter.data as { grund: string }).grund, /Tageslimit/);
       await run("freigabe_scanner_dauer", { aktion: "widerrufen", max_pro_tag: 0 });

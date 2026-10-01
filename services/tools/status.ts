@@ -22,7 +22,7 @@ const FAEHIGKEITEN = [
   "Nachfass-Mail: wer nach einigen Tagen nicht antwortet, bekommt einmal eine kurze zweite Mail (Vorlage „<vorlage>-nachfass“)",
   "Absagen, unzustellbare Adressen und „bitte keine Mails“ selbst auf die Sperrliste setzen; Abwesenheitsnotizen erkennen",
   "Sponsoren, die du mir nennst, mit richtiger Anrede in eine Liste eintragen",
-  "mit deinem Lead-Scanner lokale Betriebe als Kunden suchen",
+  "mit deinem Lead-Scanner ALLE Betriebe einer Branche im Umkreis um einen Ort finden (Gebietssuche über Google Maps) und in den Vorrat legen",
   "Kunden-Tagesbetrieb: werktags Kunden suchen, prüfen und nach deiner Morgen-Freigabe automatisch anschreiben",
   "Tagesbericht über alles, was ich an einem Tag gemacht habe",
   "Tagesüberblick auf „Was liegt heute an?“: was auf dich wartet, was läuft, Zahlen seit gestern",

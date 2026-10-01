@@ -1,8 +1,17 @@
 # Lead-Scanner – was er kann (Untersuchung 30.09.2026, nur gelesen, nichts ausgeführt)
 
-Ort: `/Volumes/ELEVUM/Projekte/joachim/lead-scanner` (Node/TypeScript, eigenes Repo ohne Commits).
+Ort: `/Volumes/ELEVUM/Projekte/joachim/lead-scanner` (Node/TypeScript, eigenes lokales Repo ohne GitHub).
 
-## Aufrufweg
+## Gebietssuche (seit 01.10.2026, so nutzt NOVA den Scanner)
+
+- `npm run gebiet -- --branche "<Branche>" --mitte "<Ort>" --radius <km> [--max-anfragen <n>]` (Datei `src/gebiet.ts`).
+- Findet **alle** Betriebe der Branche im Umkreis: Der Kreis wird in 8-km-Kacheln zerlegt, jede Kachel wird bei Google Places (Text Search) mit fester Gebietsgrenze (`locationRestriction`) abgefragt. Liefert eine Kachel die Google-Obergrenze von 60 Treffern, wird sie geviertelt (bis 1 km). Zusammenführung über `placeId`; außerhalb des Radius und dauerhaft Geschlossene fallen weg.
+- Kosten: ~0,035 $ je Anfrage; 40 km ≈ 96 Startkacheln ≈ 4–5 $ je Branche, Obergrenze `--max-anfragen` (NOVA: 4 × Kachelzahl, bei 40 km 384 Anfragen ≈ 13,44 $). Wird sie erreicht, meldet der Scanner „unvollständig“.
+- Danach Website-Prüfung je Betrieb (6 parallel): E-Mail, Ansprechpartner, Befunde, Score. Ausgabe `output/gebiet_<branche>_<ort>_<km>km_<datum>.csv` mit `placeId, …, ort, entfernungKm, …`.
+- Ohne Google (Nachweise): `--fixture <places.json> --lage <lat,lng>`. Test: `npm run test:gebiet` (nachgebautes Google, prüft Vollständigkeit).
+- NOVA: Werkzeug `kunden_suchen` (branche, ort, radius_km) und der Tagesbetrieb (Suchgebiet + Branchen-Reihenfolge in `~/Nova/tagesbetrieb.json`, erledigte Branchen in `~/Nova/zustand/suchplan.json`). Alle Treffer kommen in den Vorrat (`leads`), werden geprüft und vom Tagesbetrieb mit Tageslimit angeschrieben.
+
+## Ältere Aufrufwege (nicht mehr von NOVA genutzt)
 
 - Einzel-Scan: `npm run scan -- --branche "<Branche>" --ort "<Ort>" --limit <n>` (im Projektordner)
   - Optional: `--fixture <json>` (Places-Antwort aus Datei statt API), `--skip-audit` (keine Website-Analyse)

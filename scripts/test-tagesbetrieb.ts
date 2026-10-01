@@ -14,15 +14,16 @@ process.env.NOVA_HOME = path.join(tmp, "home");
 // Die Check-Zählung fragt die echte App ab; im Test nie.
 delete process.env.RANKPILOT_CHECKS_TOKEN;
 
-const TAGESLAUF_CSV = [
-  "placeId,datum,ort,branche,name,inhaberName,ansprechpartner,telefon,email,adresse,website,finalUrl,rating,reviewCount,score,befunde,aufhaenger",
-  "p1,2026-10-01,Pforzheim,Schreinerei,Holz Maier,Anton Maier,Anton Maier,0721 1,info@holz-maier.de,Str 1,https://holz-maier.de,https://holz-maier.de/,4.5,10,70,kein SSL,Aufhänger 1",
-  "p2,2026-10-01,Pforzheim,Schreinerei,Tischlerei Nord,,,0721 2,kontakt@tischlerei-nord.de,Str 2,https://tischlerei-nord.de,https://tischlerei-nord.de/,4.1,3,60,keine Meta-Description,Aufhänger 2",
-  "p3,2026-10-01,Pforzheim,Schreinerei,Ohne Mail GmbH,,,0721 3,,Str 3,,,3.9,1,90,keine Website,Aufhänger 3",
-  "p4,2026-10-01,Pforzheim,Schreinerei,Tote Domain,,,0721 4,info@tot.de,Str 4,https://tot.de,https://tot.de/,4.0,2,80,x,y",
-  "p5,2026-10-01,Pforzheim,Schreinerei,Gesperrt AG,,,0721 5,info@gesperrt.de,Str 5,https://gesperrt.de,https://gesperrt.de/,4.0,2,85,x,y",
-  "p6,2026-10-01,Pforzheim,Schreinerei,Schon Kunde,,,0721 6,hallo@schon.de,Str 6,https://schon.de,https://schon.de/,4.0,2,50,x,y",
-  "p7,2026-10-01,Pforzheim,Schreinerei,Dritte Werkstatt,Eva Kurz,Eva Kurz,0721 7,eva@werkstatt3.de,Str 7,https://werkstatt3.de,https://werkstatt3.de/,4.9,40,40,wenig Bewertungen,Aufhänger 7",
+// Ausgabe der Gebietssuche (lead-scanner/src/gebiet.ts)
+const GEBIET_CSV = [
+  "placeId,name,inhaberName,ansprechpartner,telefon,email,adresse,ort,entfernungKm,website,finalUrl,rating,reviewCount,score,befunde,aufhaenger",
+  "p1,Holz Maier,Anton Maier,Anton Maier,0721 1,info@holz-maier.de,Str 1,Pforzheim,1.0,https://holz-maier.de,https://holz-maier.de/,4.5,10,70,kein SSL,Aufhänger 1",
+  "p2,Tischlerei Nord,,,0721 2,kontakt@tischlerei-nord.de,Str 2,Pforzheim,2.0,https://tischlerei-nord.de,https://tischlerei-nord.de/,4.1,3,60,keine Meta-Description,Aufhänger 2",
+  "p3,Ohne Mail GmbH,,,0721 3,,Str 3,Pforzheim,3.0,,,3.9,1,90,keine Website,Aufhänger 3",
+  "p4,Tote Domain,,,0721 4,info@tot.de,Str 4,Pforzheim,4.0,https://tot.de,https://tot.de/,4.0,2,80,x,y",
+  "p5,Gesperrt AG,,,0721 5,info@gesperrt.de,Str 5,Pforzheim,5.0,https://gesperrt.de,https://gesperrt.de/,4.0,2,85,x,y",
+  "p6,Schon Kunde,,,0721 6,hallo@schon.de,Str 6,Pforzheim,6.0,https://schon.de,https://schon.de/,4.0,2,50,x,y",
+  "p7,Dritte Werkstatt,Eva Kurz,Eva Kurz,0721 7,eva@werkstatt3.de,Str 7,Mühlacker,12.0,https://werkstatt3.de,https://werkstatt3.de/,4.9,40,40,wenig Bewertungen,Aufhänger 7",
 ].join("\n");
 
 // Der Test spielt den HEUTIGEN Tag durch (die Datenbank stempelt mit der echten Uhrzeit); Wochentage werden passend gesetzt.
@@ -60,11 +61,14 @@ async function main() {
   const ctx = { organizationId: org.id, postfach };
   const run = (name: string, args: Record<string, unknown>) => executeTool(name, args, ctx);
   const tick = (jetzt: Date) => tagesbetriebTick({ organizationId: org.id, jetzt, postfach, mx });
-  const tageslauf = async () => {
-    const pfad = path.join(tmp, `daily-${Date.now()}.csv`);
-    fs.writeFileSync(pfad, TAGESLAUF_CSV);
-    return { csvPfad: pfad, ausgabe: `7 Leads geschrieben: ${pfad}\nZusammenfassung: 7 Leads, 0 Duplikate gefiltert, 2 Kombi(s) verarbeitet.` };
+  const suchAuftraege: unknown[] = [];
+  const runner: import("@/lib/leads/scanner").GebietsRunner = async (auftrag) => {
+    suchAuftraege.push(auftrag);
+    const pfad = path.join(tmp, `gebiet-${Date.now()}.csv`);
+    fs.writeFileSync(pfad, GEBIET_CSV);
+    return { csvPfad: pfad, ausgabe: `Gebiet: 7 Betriebe, 6 mit E-Mail, 120 Anfragen\nCSV geschrieben: ${pfad}` };
   };
+  const { naechsteBranche } = await import("@/services/tagesbetrieb/suchplan");
 
   const tests: Array<[string, () => Promise<void>]> = [
     ["Ausgeschaltet: der Takt tut nichts und plant sich nicht neu", async () => {
@@ -103,16 +107,21 @@ async function main() {
       await tick(t(7, 45));
       await tick(t(7, 50));
       assert.equal(await prisma.workItem.count({ where: { kind: "tagesbetrieb.suche" } }), 1);
+      const auftrag = await prisma.workItem.findFirstOrThrow({ where: { kind: "tagesbetrieb.suche" } });
+      assert.deepEqual(JSON.parse(auftrag.payload), { branche: "Schreinerei" }, "erste Branche des Plans");
     }],
-    ["Suche + Prüfung: gültige Adressen geprüft, andere mit Grund verworfen", async () => {
+    ["Suche + Prüfung: ganze Branche im Suchgebiet, gültige Adressen geprüft, andere mit Grund verworfen, Branche abgehakt", async () => {
       fs.mkdirSync(path.join(home, "kampagnen"), { recursive: true });
       fs.writeFileSync(path.join(home, "kampagnen", "sperrliste.txt"), "@gesperrt.de  # will keine Mails\n");
       await prisma.communication.create({
         data: { organizationId: org.id, channel: "email", direction: "outbound", subject: "alt", body: "alt", status: "sent", toAddress: "hallo@schon.de", sentAt: new Date(Date.now() - 20 * 86_400_000) },
       });
-      const result = await fuehreTagessucheAus({ organizationId: org.id, tageslauf, mx });
+      const result = await fuehreTagessucheAus({ organizationId: org.id, branche: "Schreinerei", runner, mx });
       assert.equal(result.ok, true);
-      assert.equal((result as { kombis: number }).kombis, 2);
+      assert.deepEqual(suchAuftraege[0], { branche: "Schreinerei", mitte: "Pforzheim", radiusKm: 40, maxAnfragen: (await import("@/lib/leads/scanner")).schaetzeKosten(40).maxAnfragen });
+      assert.equal(result.ok && result.gefunden, 7);
+      assert.equal(result.ok && result.anfragen, 120);
+      assert.equal(naechsteBranche(leseEinstellungen()), "Zahnarztpraxis", "Schreinerei ist im Suchplan abgehakt");
       // wie der Worker: geplanten Auftrag mit Ergebnis-Notiz abschließen
       const { completeWorkItem } = await import("@/services/worker/queue");
       const auftrag = await prisma.workItem.findFirstOrThrow({ where: { kind: "tagesbetrieb.suche" } });
@@ -126,8 +135,8 @@ async function main() {
       assert.deepEqual(nachFirma["Tote Domain"], ["verworfen", "Domain tot.de nimmt keine Mail an"]);
       assert.deepEqual(nachFirma["Gesperrt AG"], ["verworfen", "steht auf der Sperrliste"]);
       assert.deepEqual(nachFirma["Schon Kunde"], ["verworfen", "wurde schon angeschrieben"]);
-      const nochmal = await fuehreTagessucheAus({ organizationId: org.id, tageslauf, mx });
-      assert.equal((nochmal as { neu: number }).neu, 0, "gleiche Adressen werden nicht doppelt eingelesen");
+      const nochmal = await fuehreTagessucheAus({ organizationId: org.id, branche: "Schreinerei", runner, mx });
+      assert.equal(nochmal.ok && nochmal.neuImVorrat, 0, "gleiche Adressen werden nicht doppelt eingelesen");
     }],
     ["Suchläufe des Tagesbetriebs zählen gegen das Tageslimit der Scanner-Freigabe", async () => {
       const { scannerRunsToday } = await import("@/services/approvals");
@@ -137,8 +146,8 @@ async function main() {
     ["Zurückgestellter Betrieb wird wieder aufgenommen, wenn der Scanner ihn in seiner Branche wiederfindet", async () => {
       const maier = await prisma.lead.findFirstOrThrow({ where: { firma: "Holz Maier" } });
       await prisma.lead.update({ where: { id: maier.id }, data: { status: "zurueckgestellt", grund: "Branche kommt später" } });
-      const wieder = await fuehreTagessucheAus({ organizationId: org.id, tageslauf, mx });
-      assert.equal((wieder as { neu: number }).neu, 1, "nur der zurückgestellte Betrieb zählt als neu");
+      const wieder = await fuehreTagessucheAus({ organizationId: org.id, branche: "Schreinerei", runner, mx });
+      assert.equal(wieder.ok && wieder.neuImVorrat, 1, "nur der zurückgestellte Betrieb kommt neu in den Vorrat");
       const danach = await prisma.lead.findUniqueOrThrow({ where: { id: maier.id } });
       assert.deepEqual([danach.status, danach.grund], ["geprueft", null]);
       assert.equal(await prisma.lead.count({ where: { firma: "Holz Maier" } }), 1, "kein zweiter Eintrag");
@@ -207,6 +216,20 @@ async function main() {
       assert.ok(meldungen[0]!.text.startsWith(`Tagesbericht ${datum}: 2 Mails gesendet`));
       assert.equal((await tick(t(17, 10))).aktion, "ausserhalb");
       assert.equal((await holeNeueMeldungen(org.id)).length, 0);
+    }],
+    ["Alle Branchen im Gebiet durchsucht: keine Suche mehr, einmal melden", async () => {
+      await holeNeueMeldungen(org.id);
+      // Frühere Testschritte haben Suchaufträge geplant; die gelten hier als erledigt (sonst wartet NOVA zu Recht auf sie).
+      await prisma.workItem.updateMany({ where: { kind: "tagesbetrieb.suche", status: "queued" }, data: { status: "completed" } });
+      fs.writeFileSync(path.join(home, "tagesbetrieb.json"), JSON.stringify({ ...leseEinstellungen(), branchen: ["Schreinerei"], vorratMindestens: 999 }));
+      const suchenVorher = await prisma.workItem.count({ where: { kind: "tagesbetrieb.suche" } });
+      await tick(t(16, 0));
+      await tick(t(16, 5));
+      assert.equal(await prisma.workItem.count({ where: { kind: "tagesbetrieb.suche" } }), suchenVorher);
+      const meldungen = await holeNeueMeldungen(org.id);
+      assert.equal(meldungen.length, 1);
+      assert.match(meldungen[0]!.text, /Alle 1 Branchen im Umkreis von 40 km um Pforzheim sind durchsucht/);
+      fs.writeFileSync(path.join(home, "tagesbetrieb.json"), JSON.stringify({ ...leseEinstellungen(), branchen: undefined, vorratMindestens: 5 }));
     }],
     ["Kein Arbeitstag: nichts passiert", async () => {
       const vorher = gesendet.length;
