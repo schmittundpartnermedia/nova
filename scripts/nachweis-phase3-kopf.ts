@@ -96,7 +96,7 @@ async function main() {
   const t1 = await sag("Schreib die Firmen aus der Liste test mit der Sponsoren-Vorlage an, eine Mail pro Minute, von joachim@rankpilot.de.");
   check(t1.toolsExecuted.some((t) => t.name === "kampagne_planen" && t.executed), "Kampagne geplant");
   check(!t1.toolsExecuted.some((t) => t.name === "kampagne_starten"), "noch nicht gestartet");
-  check(/3/.test(t1.reply) && /los|starten|\?/i.test(t1.reply), "Zusammenfassung mit Anzahl und Rückfrage");
+  check(/\b(3|drei)\b/i.test(t1.reply) && /los|starten|\?/i.test(t1.reply), "Zusammenfassung mit Anzahl und Rückfrage");
   check(versand.length === 0, "nichts gesendet");
 
   const t2 = await sag("Ja, los.");

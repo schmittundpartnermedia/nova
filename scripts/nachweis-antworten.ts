@@ -77,7 +77,8 @@ async function main() {
 
   const t2 = await sag("Und was brauchst du noch von mir?");
   check(/kunden.?vorlage|vorlage.*kunden/i.test(t2.reply), "sagt, dass die Kunden-Vorlage fehlt");
-  check(/scanner|lead/i.test(t2.reply) && /freigabe/i.test(t2.reply), "sagt, dass die Scanner-Freigabe fehlt");
+  // Seit 01.10. braucht der Tagesbetrieb keine Scanner-Dauerfreigabe mehr (NOVA schlägt Suchen vor); dafür fehlt der Schlüssel für die Check-Zählung.
+  check(/RANKPILOT_CHECKS_TOKEN|schlüssel|check/i.test(t2.reply), "sagt, dass der Schlüssel für die Check-Zählung fehlt");
   check(gesprochen(t2.reply), "gesprochene Antwort ohne Listen/Fettdruck");
 
   await sag("Check meine Mails.");
