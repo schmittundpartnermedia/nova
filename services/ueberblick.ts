@@ -5,6 +5,7 @@ import { kampagnenStand } from "@/services/kampagnen";
 import { leseEinstellungen } from "@/services/tagesbetrieb/einstellungen";
 import { wirkung } from "@/services/wirkung";
 import type { Postfach } from "@/services/mail/postfach";
+import { schliesseAbgelaufeneFreigaben } from "@/services/approvals";
 import type { CheckQuelle } from "@/lib/rankpilot/checks";
 
 /**
@@ -40,6 +41,7 @@ export async function tagesueberblick(input: { organizationId: string; postfach:
     antwortenOffen.push({ firma: mail.recipientName ?? mail.fromAddress ?? "", betreff: mail.subject, entwurf_bereit: antworten.some((row) => row.status === "draft") });
   }
 
+  await schliesseAbgelaufeneFreigaben(org, jetzt);
   const freigaben = await prisma.approvalRequest.findMany({
     where: { organizationId: org, status: "pending", createdAt: { gte: new Date(jetzt.getTime() - 7 * 86_400_000) } },
     orderBy: { createdAt: "asc" },

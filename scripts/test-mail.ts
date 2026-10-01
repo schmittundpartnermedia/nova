@@ -253,6 +253,21 @@ async function main() {
       assert.equal(data.betreff, "Partnerschaft mit Elektro Maier");
       assert.equal(data.text, "Sehr geehrter Herr Maier,\n\nwir suchen Partner wie Elektro Maier.");
     }],
+    ["Offene Freigaben laufen nach 48 Stunden ab; danach geht die alte Freigabe nicht mehr", async () => {
+      const { schliesseAbgelaufeneFreigaben } = await import("@/services/approvals");
+      const id = idOf(await entwurf({ betreff: "Alt" }));
+      const frage = await run("mail_senden", { entwurf_id: id, freigabe_id: "" });
+      const freigabeId = (frage.data as { freigabe_id: string }).freigabe_id;
+      await prisma.approvalRequest.update({ where: { id: freigabeId }, data: { createdAt: new Date(Date.now() - 49 * 3_600_000) } });
+      const frisch = await prisma.approvalRequest.create({ data: { organizationId: org.id, actionType: "mail.send", description: "frisch", payload: "{}" } });
+      assert.equal(await schliesseAbgelaufeneFreigaben(org.id), 1);
+      assert.equal((await prisma.approvalRequest.findUniqueOrThrow({ where: { id: freigabeId } })).status, "expired");
+      assert.equal((await prisma.approvalRequest.findUniqueOrThrow({ where: { id: frisch.id } })).status, "pending", "frische bleibt offen");
+      const vorher = box.versandCalls().length;
+      const alt = await run("mail_senden", { entwurf_id: id, freigabe_id: freigabeId });
+      assert.equal(alt.ok, false, "abgelaufene Freigabe sendet nicht");
+      assert.equal(box.versandCalls().length, vorher);
+    }],
     ["Keine Gedankenstriche in Mails: Entwurf abgelehnt, Vorlage abgelehnt, Werte werden Bindestrich", async () => {
       const vorher = await prisma.communication.count();
       for (const strich of ["\u2013", "\u2014"]) {

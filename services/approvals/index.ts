@@ -31,6 +31,19 @@ export async function createApprovalRequest(input: {
   });
 }
 
+/** Offene Freigaben gelten so lange; danach fragt NOVA neu (sonst sammeln sich vergessene Rückfragen an). */
+export const FREIGABE_GUELTIG_STUNDEN = 48;
+
+/** Setzt offene Freigaben, die älter als FREIGABE_GUELTIG_STUNDEN sind, auf „expired“. Erteilte bleiben unberührt. */
+export async function schliesseAbgelaufeneFreigaben(organizationId: string, jetzt = new Date()): Promise<number> {
+  assertOrganizationId(organizationId);
+  const ergebnis = await prisma.approvalRequest.updateMany({
+    where: { organizationId, status: "pending", createdAt: { lt: new Date(jetzt.getTime() - FREIGABE_GUELTIG_STUNDEN * 3_600_000) } },
+    data: { status: "expired" },
+  });
+  return ergebnis.count;
+}
+
 export async function decideApproval(input: {
   organizationId: string;
   approvalId: string;

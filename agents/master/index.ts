@@ -8,6 +8,7 @@ import { AppleMailPostfach } from "@/connectors/mail/apple";
 import { publicErrorMessage } from "@/lib/secrets";
 import type { ProviderMode } from "@/types/ai";
 import type { OrbState } from "@/types";
+import { schliesseAbgelaufeneFreigaben } from "@/services/approvals";
 import { DIALOG_HISTORY_SIZE } from "@/types/conversation";
 
 const postfach = new AppleMailPostfach();
@@ -47,6 +48,7 @@ export async function runMaster(input: {
 }): Promise<MasterRunResult> {
   bootstrapTools();
   ensureGedaechtnis();
+  await schliesseAbgelaufeneFreigaben(input.organizationId);
 
   const emit = (event: MasterEvent) => input.onEvent?.(event);
   emit({ type: "status", orbState: "THINKING", statusMessage: "Ich denke nach …" });

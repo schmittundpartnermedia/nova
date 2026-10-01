@@ -46,7 +46,8 @@ export type ActivityType =
   | "review"
   | "workspace";
 
-export type ApprovalStatus = "pending" | "approved" | "rejected";
+/** expired: offene Freigabe, auf die länger als FREIGABE_GUELTIG_STUNDEN niemand geantwortet hat. */
+export type ApprovalStatus = "pending" | "approved" | "rejected" | "expired";
 
 export type MemberRole = "owner" | "admin" | "member";
 
