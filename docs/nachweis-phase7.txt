@@ -1,0 +1,24 @@
+NOVA Nachweis Phase 7 – 2026-10-01T10:48:05.825Z – Modell gpt-6-astra; echte Websuche; lokale Testseite statt echter Plattform; Schlüsselbund im Speicher; unsichtbares Chrome
+
+Joachim: Such mir die Plattformen, auf denen rankpilot eingetragen sein sollte.
+Werkzeuge: ["plattformen_liste","web_suchen","web_suchen","web_suchen","web_suchen","web_suchen","web_suchen","web_suchen","plattformen_liste"]
+NOVA: Ich würde mit OMR Reviews, OMT und Capterra anfangen: Dort passt rankPilot gut als SEO-Software hin, besonders bei OMR und OMT zur deutschsprachigen Marketing-Zielgruppe. Ergänzend kommen G2 und AlternativeTo infrage; Product Hunt eher für einen gezielten Produktlaunch.
+
+Die sechs Kandidaten stehen jetzt in deiner Plattformliste, noch ohne Registrierung; Aufnahmebedingungen und mögliche Kosten sind noch zu prüfen.
+  ✓ recherchiert im Web
+  ✓ Plattformliste angelegt (6: AlternativeTo, Capterra, G2, OMR Reviews, OMT, Product Hunt)
+(Nachweis: lokale Testseite „Testverzeichnis“ in die Liste aufgenommen)
+
+Joachim: Fang mit dem Testverzeichnis an und leg dort das Konto für rankpilot an.
+Werkzeuge: ["plattformen_liste","browser_oeffnen","zugangsdaten_speichern","browser_ausfuellen","plattformen_liste","browser_klicken","browser_braucht_nutzer"]
+NOVA: Beim Testverzeichnis brauche ich dich: Bitte löse das Captcha im Browser und sag danach „weiter“.
+  ✓ legt die Zugangsdaten im Schlüsselbund an
+  ✓ füllt aus und sendet ab
+  ✓ Eintrag „NOVA: Testverzeichnis“ im Schlüsselbund
+  ✓ erkennt das Captcha und ruft Joachim
+  ✓ sagt Joachim, dass er das Captcha lösen soll
+  ✓ Liste zeigt den Stand (wartet_auf_joachim, nächster Schritt: Joachim: captcha – Bitte löse das Captcha im Browser und sag anschließend „weiter“.)
+  ✓ Passwort steht weder in Antwort noch Verlauf noch Werkzeugprotokoll
+
+ERGEBNIS: Nachweis Phase 7 bestanden (echte API und Websuche, lokale Testseite, Schlüsselbund im Speicher).
+Nicht geprüft: echte Plattform, echter macOS-Schlüsselbund, sichtbares Chrome – das ist Joachims Abnahme.

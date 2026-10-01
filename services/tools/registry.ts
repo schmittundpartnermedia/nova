@@ -6,6 +6,7 @@ import { TAGESBETRIEB_TOOLS } from "@/services/tools/tagesbetrieb";
 import { novaStatusTool } from "@/services/tools/status";
 import { wirkungTool } from "@/services/tools/wirkung";
 import { tagesueberblickTool } from "@/services/tools/ueberblick";
+import { PLATTFORM_TOOLS } from "@/services/tools/plattformen";
 import { CLAUDE_TOOLS } from "@/services/tools/claude";
 import type { NovaToolDefinition, NovaToolResult, ToolContext } from "@/services/tools/types";
 
@@ -30,6 +31,7 @@ export function bootstrapTools(): void {
   register(novaStatusTool);
   register(wirkungTool);
   register(tagesueberblickTool);
+  for (const tool of PLATTFORM_TOOLS) register(tool);
   bootstrapped = true;
 }
 

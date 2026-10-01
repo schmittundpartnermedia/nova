@@ -1,7 +1,7 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  serverExternalPackages: ["@prisma/client", "prisma", "openai"],
+  serverExternalPackages: ["@prisma/client", "prisma", "openai", "playwright-core"],
   // NOVA.app läuft über „next dev“: das Next-Symbol („N“) unten links gehört nicht in die Oberfläche.
   // Kompilier- und Laufzeitfehler zeigt Next trotzdem an.
   devIndicators: false,

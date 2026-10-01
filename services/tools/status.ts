@@ -25,6 +25,7 @@ const FAEHIGKEITEN = [
   "mit deinem Lead-Scanner ALLE Betriebe einer Branche im Umkreis um einen Ort finden (Gebietssuche über Google Maps) und in den Vorrat legen",
   "Kunden-Tagesbetrieb: werktags Kunden suchen, prüfen und nach deiner Morgen-Freigabe automatisch anschreiben",
   "Tagesbericht über alles, was ich an einem Tag gemacht habe",
+  "rankpilot auf Software-Verzeichnissen und Bewertungsplattformen eintragen: Plattformen recherchieren, in meinem eigenen Chrome registrieren und das Profil ausfüllen; Captcha, Bestätigungen und das finale Speichern machst du; Passwörter liegen nur im Schlüsselbund",
   "Tagesüberblick auf „Was liegt heute an?“: was auf dich wartet, was läuft, Zahlen seit gestern",
   "zeigen, was die Mails gebracht haben: Antworten, gestartete rankPilot Checks und neue Konten je Kampagne",
   "Adressen auf die Sperrliste setzen",
@@ -32,7 +33,8 @@ const FAEHIGKEITEN = [
 ];
 
 const NICHT = [
-  "keine Bildschirmsteuerung und keine Klicks in anderen Programmen",
+  "keine Bildschirmsteuerung und keine Klicks in anderen Programmen (nur in meinem eigenen Browserfenster für Plattform-Einträge)",
+  "keine Bewertungen schreiben, keine Kommentare mit Links, keine Forenbeiträge",
   "keinen Kalender, keine Dateien außer meinen Listen und Vorlagen",
 ];
 

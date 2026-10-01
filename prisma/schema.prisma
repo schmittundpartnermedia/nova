@@ -21,6 +21,7 @@ model Organization {
   tasks                   Task[]
   jobs                    Job[]
   campaigns               Campaign[]
+  plattformen             Plattform[]
   jobSteps                JobStep[]
   activities              Activity[]
   memoryEntries           MemoryEntry[]
@@ -1422,4 +1423,31 @@ model Lead {
   @@unique([organizationId, email])
   @@index([organizationId, status])
   @@map("leads")
+}
+
+/// Phase 7: Plattformen (Software-Verzeichnisse, Bewertungsportale), auf denen rankpilot eingetragen werden soll.
+/// Zugangsdaten stehen NICHT hier, sondern im macOS-Schlüsselbund (Dienst „NOVA: <name>“).
+model Plattform {
+  id                String   @id @default(cuid())
+  organizationId    String   @map("organization_id")
+  name              String
+  url               String
+  /// Software-Verzeichnis | Bewertungsportal | Branchenbuch | …
+  kategorie         String?
+  /// Warum diese Plattform (aus der Recherche).
+  begruendung       String?
+  kontoAngelegt     Boolean  @default(false) @map("konto_angelegt")
+  profilAusgefuellt Boolean  @default(false) @map("profil_ausgefuellt")
+  /// offen | in_arbeit | wartet_auf_joachim | fertig | uebersprungen
+  status            String   @default("offen")
+  letzterSchritt    String?  @map("letzter_schritt")
+  naechsterSchritt  String?  @map("naechster_schritt")
+  reihenfolge       Int      @default(0)
+  createdAt         DateTime @default(now()) @map("created_at")
+  updatedAt         DateTime @updatedAt @map("updated_at")
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, name])
+  @@map("plattformen")
 }

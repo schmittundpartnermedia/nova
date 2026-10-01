@@ -230,13 +230,26 @@ Abschluss dieser Runde: `tsc`, `eslint`, `next build`, `npm run macos:build` gr�
 - **Nicht geprüft:** echter Google-Lauf der Gebietssuche (Kosten, braucht Joachims Ja); Laufzeit bei 200+ Websites.
 - Stand der Daten: Tagesbetrieb ist aus (NOVA hat ihn um 10:49 auf Joachims Einwand ausgeschaltet). 11 Zahnarzt/Physio-Betriebe zurückgestellt. Heute 4 Scanner-Läufe (3 Einzelsuchen, 1 Tageslauf) – Tageslimit 3 erreicht, weitere Suchen heute nur mit Einzel-Ja.
 
+**01.10.2026, 12:35 – Erste echte Gebietssuche:** „alle Schreinereien im Umkreis von 40 km um Pforzheim“ → 656 Betriebe, 367 mit E-Mail, 341 neu und geprüft im Vorrat (9 schon angeschrieben, 2 tote Domains), 103 Google-Anfragen ≈ 3,61 $, ~6 Minuten. Google zählt verwandte Betriebe mit (Zimmerei, Fensterbau). Tagesbetrieb danach von Joachim eingeschaltet und freigegeben, erste Mail 12:46 (check@b2b-rankpilot.de).
+
+**01.10.2026, nachmittags – Phase 7 gebaut (Claude Code), Abnahme steht aus.**
+- Browser (`lib/browser/sitzung.ts`, `playwright-core`): Joachims Chrome mit **eigenem Profil** `~/Nova/browser-profil`, sichtbar; Seite als Text (als fremder Inhalt markiert) mit nummerierten Feldern/Knöpfen; Ausfüllen über ref; Passwortfelder nur mit `{{passwort}}` (aus dem Schlüsselbund, nie ausgelesen, nie im Ergebnis); Dateien nur `{{datei:<name>}}` aus `~/Nova/assets/`; nur http(s) (file:// nur im Test – sonst könnte eine Seite NOVA lokale Dateien lesen lassen); Captcha-/Code-Erkennung.
+- Schlüsselbund (`lib/zugangsdaten.ts`): Eintrag „NOVA: <plattform>“, Passwort von NOVA erzeugt (20 Zeichen), Übergabe über `security -i` (nicht in der Prozessliste); nie überschrieben.
+- Tabelle `plattformen` (Migration `20261001120000_plattformen`, eingespielt mit Wartezeit, verbucht; DB-Sicherung im Scratchpad): Name, URL, Kategorie, Begründung, Konto angelegt, Profil ausgefüllt, Status (offen/in_arbeit/wartet_auf_joachim/fertig/uebersprungen), letzter/nächster Schritt.
+- Werkzeuge: `web_suchen` (vorhandene OpenAI-Websuche), `plattformen_liste`, `browser_oeffnen/_lesen/_ausfuellen/_klicken/_braucht_nutzer/_schliessen`, `zugangsdaten_speichern/_holen`. Kopf-Regeln: Captcha, Codes, Zwei-Faktor, Zahlung und finales Speichern macht Joachim; keine Bewertungen/Kommentare/Forenbeiträge; keine Newsletter-Häkchen, AGB-Häkchen nur bei beauftragter Registrierung und dann ansagen; Plattformen nur beim Namen, keine Links vorlesen; bei unbekanntem Namen zuerst in der Liste nachsehen. Werkzeugrunden je Anfrage 8 → 16.
+- Logos: `~/Nova/assets/logo-symbol.png`, `logo-schriftzug.png` (aus der Webseite).
+- Nachweise: `test:plattformen` 8/8 (unsichtbares Chrome, Wegwerf-Profil, lokale Testseiten, Schlüsselbund im Speicher; Gegenprobe Klartext-Passwort schlägt fehl). `npm run nachweis:phase7` → `docs/nachweis-phase7.txt`: echte API + echte Websuche bestanden (6 Plattformen recherchiert: OMR Reviews, OMT, Capterra, G2, AlternativeTo, Product Hunt; Testseite: Zugangsdaten → Ausfüllen → Absenden → Captcha erkannt → Joachim gerufen; Passwort nirgends im Verlauf). Der Nachweis fand zwei Schwächen (Rückfrage statt Liste prüfen; Markdown-Links in gesprochener Antwort) – Regeln ergänzt.
+- **Nicht geprüft:** echte Plattform, echter macOS-Schlüsselbund, sichtbares Chrome in NOVA.app. `next.config.ts` (playwright-core extern) wirkt erst nach Neustart der App.
+- **Fund nebenbei:** `Projekte/joachim/rankpilot-website` und `rankPilot-app` sind Verknüpfungen (Symlinks) auf `/Volumes/My Book 24/Webseiten/…` – Webseite und App liegen also noch auf der My Book 24, nicht auf ELEVUM. Ohne angeschlossene My Book 24 gehen Claude-Aufträge und Live-Stellen dort nicht. Nichts geändert.
+
 ## Dran
 
-**Joachim:**
-1. NOVA.app beenden und neu starten (Hintergrund-Läufer braucht den neuen Code).
-2. „Such alle Schreinereien im Umkreis von 40 km um Pforzheim.“ → NOVA nennt etwa 4,50 $ (höchstens 13,44 $) → „Ja“. Läuft 10–40 Minuten, dann Meldung mit Anzahl.
-3. „Schalte den Kunden-Tagesbetrieb ein.“ → Beispiel-Mail an eine Schreinerei → „Ja“ → 15 am Tag.
-4. Wenn der Vorrat knapp wird, schlägt NOVA die nächste Branche vor („… Zahnarztpraxis … etwa 4,50 $ – soll ich, oder lieber eine andere Branche?“) → „Ja“ oder eine andere Branche nennen.
+**Joachim (Abnahme Phase 7), nach Feierabend des Tagesbetriebs oder morgen früh:**
+1. NOVA.app neu starten (nicht während der Tagesbetrieb sendet – oder kurz zwischen zwei Mails).
+2. Profiltext diktieren, falls NOVA nachfragt (Beschreibung, Kategorien, welche E-Mail für Plattform-Konten).
+3. „Such mir die Plattformen, auf denen rankpilot eingetragen sein sollte.“ → Liste.
+4. „Fang mit <zwei Plattformen deiner Wahl> an.“ → Chrome öffnet sich, NOVA füllt aus, ruft dich bei Captcha/Mail → „weiter“ → am Ende speicherst du. Prüfen: Profile angelegt, Zugangsdaten im Schlüsselbund (Schlüsselbundverwaltung, Suche „NOVA:“), Liste zeigt den Stand.
+Danach offen: Kalender, Kostenübersicht, Kopf-Vergleich; Entscheidung zu My Book 24 / ELEVUM.
 
 ## Was Joachim liefert (siehe Auftrag, Anhang)
 

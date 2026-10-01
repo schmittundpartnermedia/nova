@@ -53,10 +53,16 @@ function test(name: string, fn: () => Promise<void>) {
   tests.push([name, fn]);
 }
 
-test("Werkzeugliste: Gedächtnis (Phase 1), Mail und Vorlagen (Phase 2), Kampagnen (Phase 3), Kundensuche, Kontaktlisten und Tagesbetrieb (Phase 4), Claude-Aufträge (Phase 5), Wirkung der Mails, Tagesüberblick – nichts sonst", async () => {
+test("Werkzeugliste: Gedächtnis (Phase 1), Mail und Vorlagen (Phase 2), Kampagnen (Phase 3), Kundensuche, Kontaktlisten und Tagesbetrieb (Phase 4), Claude-Aufträge (Phase 5), Wirkung der Mails, Tagesüberblick, Plattform-Einträge (Phase 7) – nichts sonst", async () => {
   assert.deepEqual(
     listTools().map((t) => t.name).sort(),
     [
+      "browser_ausfuellen",
+      "browser_braucht_nutzer",
+      "browser_klicken",
+      "browser_lesen",
+      "browser_oeffnen",
+      "browser_schliessen",
       "claude_beauftragen",
       "claude_live",
       "claude_status",
@@ -76,6 +82,7 @@ test("Werkzeugliste: Gedächtnis (Phase 1), Mail und Vorlagen (Phase 2), Kampagn
       "mail_lesen",
       "mail_senden",
       "nova_status",
+      "plattformen_liste",
       "sperrliste_hinzufuegen",
       "tagesbericht",
       "tagesbetrieb",
@@ -83,7 +90,10 @@ test("Werkzeugliste: Gedächtnis (Phase 1), Mail und Vorlagen (Phase 2), Kampagn
       "tagesueberblick",
       "vorlage_fuellen",
       "vorlage_liste",
+      "web_suchen",
       "wirkung_anzeigen",
+      "zugangsdaten_holen",
+      "zugangsdaten_speichern",
     ],
   );
 });
@@ -194,7 +204,7 @@ test("Werkzeugrunden erschöpft: ehrliche Meldung statt „Erledigt“", async (
   const model = scripted(Array.from({ length: 20 }, () => endlos));
   const result = await runHeadLoop({ provider: model, model: "m", history: [], userRequest: "Mach irgendwas.", context });
   assert.match(result.reply, /nicht zu einem Ergebnis gekommen/);
-  assert.equal(model.calls.length, 8);
+  assert.equal(model.calls.length, 16, "höchstens 16 Werkzeugrunden je Anfrage");
 });
 
 test("Leere Modellantwort wird nicht als Erfolg ausgegeben", async () => {
