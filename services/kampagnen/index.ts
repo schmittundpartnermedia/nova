@@ -337,7 +337,11 @@ export function fertigMeldung(stand: KampagnenStand): string {
     teile.push(`${stand.unzustellbar.length} kam${stand.unzustellbar.length === 1 ? "" : "en"} als unzustellbar zurück (${stand.unzustellbar.map((item) => item.firma || item.email).join(", ")}), die Adresse${stand.unzustellbar.length === 1 ? " ist" : "n sind"} gesperrt.`);
   }
   if (stand.ungueltig.length) {
-    teile.push(`${stand.ungueltig.length} ${stand.ungueltig.length === 1 ? "Adresse war" : "Adressen waren"} ungültig und wurden nicht angeschrieben.`);
+    teile.push(
+      stand.ungueltig.length === 1
+        ? "1 Adresse war ungültig und wurde nicht angeschrieben."
+        : `${stand.ungueltig.length} Adressen waren ungültig und wurden nicht angeschrieben.`,
+    );
   }
   teile.push("Antworten lege ich dir vor, sobald sie eingehen.");
   return teile.join(" ");

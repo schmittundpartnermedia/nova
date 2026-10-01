@@ -84,6 +84,7 @@ async function main() {
     run("kampagne_planen", { vorlage: "sponsoren", liste: "test", abstand_minuten: 5, absender: "joachim@rankpilot.de" });
 
   let kampagneId = "";
+  const kampagnenStandFuer = async () => (await import("@/services/kampagnen")).kampagnenStand(org.id, kampagneId);
   let freigabeId = "";
 
   const tests: Array<[string, () => Promise<void>]> = [
@@ -156,6 +157,9 @@ async function main() {
       assert.equal(meldungen.length, 1);
       assert.match(meldungen[0]!.text, /2 von 3 Mails sind raus, 1 nicht \(Beta; Söhne\)/);
       assert.match(meldungen[0]!.text, /3 Adressen waren ungültig/);
+      const { fertigMeldung } = await import("@/services/kampagnen");
+      const eins = fertigMeldung({ ...(await kampagnenStandFuer()), ungueltig: [{ zeile: 2, firma: "X", email: "", grund: "keine" }] });
+      assert.match(eins, /1 Adresse war ungültig und wurde nicht angeschrieben\./);
       assert.equal((await holeNeueMeldungen(org.id)).length, 0, "Meldung wird nur einmal zugestellt");
       const status = await run("kampagne_status", { kampagne_id: kampagneId });
       const stand = status.data as { gesendet: number; fehlgeschlagen: Array<{ grund: string }> };

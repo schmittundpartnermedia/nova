@@ -212,6 +212,8 @@ Tests: mail 17/17, kunden 9/9, kopf 10, kampagne 9, tagesbetrieb 13, claude 8.
 
 Abschluss dieser Runde: `tsc`, `eslint`, `next build`, `npm run macos:build` grün; alle Tests grün (kopf 10, mail 18, kampagne 14, kunden 9, tagesbetrieb 13, claude 8, nachfass 6, wirkung 5). NOVA.app neu gebaut, nicht gestartet. **Nichts davon lief gegen das echte Apple Mail oder im echten Worker.**
 
+**01.10.2026, 09:33–10:14 – Erste echte Kunden-Kampagne:** Joachim hat in NOVA.app „Schreinereien Pforzheim“ gestartet: 9 Mails von joachim@rankpilot.de, alle 5 Minuten, alle 9 im Ordner Gesendet bestätigt (`VERIFIED`), Blindow ohne Adresse übersprungen, jede Mail mit eigenem Check-Link, Nachfass ab 07.10. geplant. Abschlussmeldung kam. Gefunden: „1 Adresse war ungültig und wurden …“ – Einzahl korrigiert, Test ergänzt (wirkt im Hintergrund-Läufer erst nach Neustart der App).
+
 ## Dran
 
 **Joachim, wenn er zurück ist:**
