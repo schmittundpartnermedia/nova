@@ -258,6 +258,12 @@ Abschluss dieser Runde: `tsc`, `eslint`, `next build`, `npm run macos:build` gr�
 
 **01.10.2026, ~15:10 – Phase-7-Test durch Joachim: Formular nicht erkannt – behoben.** Ursache 1: Das OMR-Formular („Software kostenfrei listen“) steckt in einem eingebetteten Rahmen (iframe, HubSpot); NOVA las nur die Hauptseite. Ursache 2: Fehlalarm „Captcha lösen“ durch ein unsichtbares reCAPTCHA. Jetzt: Lesen über alle sichtbaren Rahmen (Nummern `r<rahmen>-<n>`, Ausfüllen/Klicken im richtigen Rahmen), offene Shadow-DOM-Bäume, Beschriftung auch über aria-labelledby/name, einmaliges Nachlesen nach 2,5 s bei nachladenden Formularen, Captcha-Hinweis nur bei sichtbarem Captcha-Rahmen. Kopf-Regel: Cookie-Banner ablehnen/„nur notwendige“. `test:plattformen` 10/10 (neu: Formular im Rahmen + unsichtbares Captcha, nachladende Web-Komponente; Gegenprobe ohne Rahmen schlägt fehl). Echte OMR-Seite unsichtbar gelesen (Wegwerf-Profil, nichts abgeschickt): 10 Felder + „Einsenden“ erkannt, kein Captcha-Alarm.
 
+**01.10.2026, ~16:00 – Check-Zählung ganz live; Fehler in rankPilot behoben (auf Joachims Ja).**
+- App: Zweig `nova/check-herkunft` auf Joachims aufgeräumten Stand übernommen (c426b50f), tsc + vitest 1853/1853, gepusht, Blau-Grün-Deploy OK. `GET /api/internal/nova/checks` antwortet ohne Schlüssel mit 401.
+- **Fund:** Auf dem Server war `ADS_CHECK_INGEST_SECRET` nirgends gesetzt – die Webseite hat Checks nie an die App übergeben (80× „ADS_CHECK_INGEST_SECRET fehlt – kein App-Ingest“ im Log; 44 Checks nur als Dateien auf dem Webseiten-Server). Behoben: zufälliger Schlüssel (nie angezeigt) in `/var/www/rankpilot-website/.env` und `/var/www/rankpilot/.env` ergänzt (Sicherungen `.env.vor-nova-20261001`), Webseite neu gestartet (Health 200), App per Blau-Grün neu veröffentlicht (Health OK). Derselbe Schlüssel als `RANKPILOT_CHECKS_TOKEN` in NOVAs `.env` (nicht in Git). NOVAs Abfrage der App getestet: eingerichtet, 0 Checks mit NOVA-Herkunft (richtig, bisher kam ja nichts an). Die 44 alten Checks auf dem Server an die App nachgereicht: 44/44 übernommen.
+- Hinweis: Die `.env`-Dateien auf dem Server sind für alle Server-Nutzer lesbar (644) – kein NOVA-Thema, Joachim entscheidet.
+- NOVA.app muss neu gestartet werden, damit sie den Schlüssel liest.
+
 ## Dran
 
 **Joachim (Abnahme Phase 7), nach Feierabend des Tagesbetriebs oder morgen früh:**
@@ -265,7 +271,7 @@ Abschluss dieser Runde: `tsc`, `eslint`, `next build`, `npm run macos:build` gr�
 2. Profiltext diktieren, falls NOVA nachfragt (Beschreibung, Kategorien, welche E-Mail für Plattform-Konten).
 3. „Such mir die Plattformen, auf denen rankpilot eingetragen sein sollte.“ → Liste.
 4. „Fang mit <zwei Plattformen deiner Wahl> an.“ → Chrome öffnet sich, NOVA füllt aus, ruft dich bei Captcha/Mail → „weiter“ → am Ende speicherst du. Prüfen: Profile angelegt, Zugangsdaten im Schlüsselbund (Schlüsselbundverwaltung, Suche „NOVA:“), Liste zeigt den Stand.
-Danach offen: App-Teil der Check-Zählung (wartet, bis Joachims Aufräumen an der App fertig ist), Preise für gpt-6-astra/gpt-4o-mini-tts/web_search in `~/Nova/preise.json`, Kalender, Kopf-Vergleich.
+Danach offen: Kalender.
 
 ## Was Joachim liefert (siehe Auftrag, Anhang)
 
