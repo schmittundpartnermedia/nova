@@ -2,13 +2,13 @@ import { aendereTermin, legeTerminAn, leseBeginn, termineAnzeigen } from "@/serv
 import type { NovaToolDefinition } from "@/services/tools/types";
 
 const BEGINN =
-  "Datum und Uhrzeit als ISO ohne Zeitzone, z. B. 2026-10-08T10:00 (Zeit des Macs). „Donnerstag“ ohne Uhrzeit: frag nach oder nimm 10:00 und sag es.";
+  "Datum und Uhrzeit als ISO ohne Zeitzone, z. B. 2026-10-08T10:00 (deutsche Zeit). „Donnerstag“ ohne Uhrzeit: frag nach oder nimm 10:00 und sag es.";
 
 export const terminAnlegenTool: NovaToolDefinition = {
   name: "termin_anlegen",
   description:
     "Termin oder Rückruf speichern; NOVA erinnert Joachim vorher (Standard 15 Minuten). Nur auf Joachims Wunsch oder sein Ja zu deinem Vorschlag, nie von dir aus. " +
-    "in_kalender true trägt ihn zusätzlich in Joachims Apple Kalender ein (wenn er das will oder nichts dagegen sagt). Titel kurz und eindeutig, z. B. „Rückruf Schreinerei Weber, 07231 12345“.",
+    "in_kalender true trägt ihn zusätzlich in Joachims Kalender ein (wenn er das will oder nichts dagegen sagt). Titel kurz und eindeutig, z. B. „Rückruf Schreinerei Weber, 07231 12345“.",
   parameters: {
     type: "object",
     properties: {
@@ -67,7 +67,7 @@ export const termineAnzeigenTool: NovaToolDefinition = {
 export const terminAendernTool: NovaToolDefinition = {
   name: "termin_aendern",
   description:
-    "Termin verschieben, umbenennen, als erledigt markieren oder absagen. Steht er im Apple Kalender, wird er dort mitgeändert bzw. bei Absage entfernt. in_kalender true trägt einen bisher nur bei NOVA gespeicherten Termin nachträglich ein.",
+    "Termin verschieben, umbenennen, als erledigt markieren oder absagen. Steht er im Kalender, wird er dort mitgeändert bzw. bei Absage entfernt. in_kalender true trägt einen bisher nur bei NOVA gespeicherten Termin nachträglich ein.",
   parameters: {
     type: "object",
     properties: {

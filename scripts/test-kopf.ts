@@ -16,6 +16,9 @@ import type { HeadProvider, HeadTurnInput, HeadTurnOutput } from "@/types/ai";
 import type { ToolContext } from "@/services/tools/types";
 import type { Postfach } from "@/services/mail/postfach";
 
+// Deutsche Zeit wie auf dem Server (pm2: TZ=Europe/Berlin), unabhängig vom Rechner, auf dem der Test läuft.
+process.env.TZ = "Europe/Berlin";
+
 /** Diese Tests fassen kein Postfach an; jeder Zugriff wäre ein Fehler. */
 const keinPostfach: Postfach = {
   neueste: async () => { throw new Error("Test darf kein Postfach nutzen."); },

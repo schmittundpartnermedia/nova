@@ -1,8 +1,8 @@
 /**
- * Regressionstest Termine – ohne Netz, ohne Apple Kalender (Kalender im Speicher), Wegwerf-DB.
+ * Regressionstest Termine – ohne Netz, ohne echten Kalender (Kalender im Speicher), Wegwerf-DB.
  * Geprüft: Anlegen mit/ohne Kalender, Erinnerung über den echten Worker-Takt zur richtigen Zeit und nur einmal,
  * Verschieben (alte Erinnerung fällt weg, Kalender angepasst), Absagen (aus dem Kalender), Kalenderfehler ehrlich,
- * Vergangenheit abgelehnt, AppleScript sicher, Termine im Tagesüberblick.
+ * Vergangenheit abgelehnt, CalDAV-Eintrag (iCalendar), Termine im Tagesüberblick.
  */
 import assert from "node:assert/strict";
 import fs from "node:fs";
@@ -10,13 +10,17 @@ import os from "node:os";
 import path from "node:path";
 import { wegwerfDatenbank } from "./lib/wegwerf-db";
 
+// Deutsche Zeit wie auf dem Server (pm2: TZ=Europe/Berlin), unabhängig vom Rechner, auf dem der Test läuft.
+process.env.TZ = "Europe/Berlin";
+
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "nova-test-termine-"));
 process.env.NOVA_HOME = path.join(tmp, "home");
 
 async function main() {
   wegwerfDatenbank();
   const { prisma } = await import("@/lib/prisma");
-  const { setzeKalender, eintragScript, aenderScript, kalenderScriptSicher } = await import("@/lib/kalender/apple");
+  const { setzeKalender } = await import("@/lib/kalender");
+  const { baueCaldavKalender, ics } = await import("@/lib/kalender/caldav");
   const { legeTerminAn, aendereTermin } = await import("@/services/termine");
   const { tickWorker } = await import("@/services/worker/runtime");
   const { executeTool } = await import("@/services/tools/registry");
@@ -57,7 +61,7 @@ async function main() {
     ["Anlegen mit Kalender: gespeichert, im Kalender, Erinnerung 15 Minuten vorher geplant", async () => {
       const r = await legeTerminAn({ organizationId: org.id, titel: "Rückruf Schreinerei Weber", beginn: donnerstag10, notiz: "Herr Weber, 07231 12345", inKalender: true, jetzt });
       weberId = r.termin.id;
-      assert.match(r.kalender, /Apple Kalender „Arbeit“/);
+      assert.match(r.kalender, /im Kalender „Arbeit“/);
       assert.equal(eintraege.size, 1);
       const items = await offeneErinnerungen();
       assert.equal(items.length, 1);
@@ -117,7 +121,7 @@ async function main() {
       assert.equal(r.ok, true);
       assert.equal(r.executed, true);
       const data = r.data as { termin: { id: string; imKalender: string | null }; kalender: string };
-      assert.match(data.kalender, /nicht im Apple Kalender: NOVA darf den Kalender noch nicht steuern/);
+      assert.match(data.kalender, /nicht im Kalender: NOVA darf den Kalender noch nicht steuern/);
       assert.equal(data.termin.imKalender, null);
       const items = (await offeneErinnerungen()).filter((i) => i.payload.includes(data.termin.id));
       assert.equal(items.length, 1);
@@ -134,18 +138,45 @@ async function main() {
       assert.equal(r.ok, false);
       assert.equal(await prisma.termin.count(), vorher);
     }],
-    ["AppleScript: Datum aus Bestandteilen, Text sicher zitiert, fremde Befehle abgelehnt", async () => {
-      const e = { titel: 'Rückruf "Weber" \\ Co', beginn: new Date(2026, 9, 8, 10, 0), dauerMinuten: 30, notiz: "Zeile 1\nZeile 2", erinnerungMinuten: 15 };
-      const s = eintragScript(e, null);
-      assert.ok(s.includes("set year of beginnDatum to 2026") && s.includes("set month of beginnDatum to 10") && s.includes("set day of beginnDatum to 8"));
-      assert.ok(s.includes(`set time of beginnDatum to ${10 * 3600}`) && s.includes(`set time of endeDatum to ${10 * 3600 + 30 * 60}`));
-      assert.ok(s.includes('summary:"Rückruf \\"Weber\\" \\\\ Co"'));
-      assert.ok(s.includes('description:"Zeile 1\\nZeile 2"'));
-      assert.ok(s.includes("trigger interval:-15"));
-      assert.equal(kalenderScriptSicher(s), true);
-      assert.equal(kalenderScriptSicher(aenderScript({ kalender: "Arbeit", uid: "u" }, e)), true);
-      assert.equal(kalenderScriptSicher(eintragScript({ ...e, titel: "x do shell script y" }, null)), false);
-      assert.equal(kalenderScriptSicher('tell application "Calendar"\n tell application "Mail" to quit\nend tell'), false);
+    ["CalDAV: Eintrag als iCalendar (UTC, Erinnerung, maskiert, umbrochen), Kalender nach Name, Ändern behält die UID", async () => {
+      const e = { titel: "Rückruf Weber; Müller, Co", beginn: new Date(2026, 9, 8, 10, 0), dauerMinuten: 30, notiz: "Zeile 1\nTel. 07231 12345 " + "x".repeat(80), erinnerungMinuten: 15 };
+      const text = ics("abc@nova", e, new Date(Date.UTC(2026, 9, 2, 1, 0)));
+      assert.match(text, /^BEGIN:VCALENDAR\r\n/);
+      assert.match(text, /\r\nDTSTART:20261008T080000Z\r\n/, "10 Uhr Sommerzeit = 08:00 UTC");
+      assert.match(text, /\r\nDTEND:20261008T083000Z\r\n/);
+      assert.match(text, /\r\nSUMMARY:Rückruf Weber\\; Müller\\, Co\r\n/);
+      assert.match(text, /\r\nTRIGGER:-PT15M\r\n/);
+      assert.ok(text.split("\r\n").every((z) => Buffer.byteLength(z, "utf8") <= 75), "Zeilen höchstens 75 Bytes");
+      assert.match(text.replace(/\r\n /g, ""), /DESCRIPTION:Zeile 1\\nTel\. 07231 12345 x{80}/);
+
+      const home = process.env.NOVA_HOME!;
+      const aufrufe: string[] = [];
+      let geschrieben = "";
+      const cal = baueCaldavKalender(async () => ({
+        async fetchCalendars() { return [{ url: "https://dav.example/cal/privat/", displayName: "Privat" }, { url: "https://dav.example/cal/arbeit/", displayName: "Arbeit", components: ["VEVENT"] }]; },
+        async createCalendarObject(p) { aufrufe.push(`neu ${p.calendar.url}${p.filename}`); geschrieben = p.iCalString; return new Response(null, { status: 201 }); },
+        async updateCalendarObject(p) { aufrufe.push(`ändern ${p.calendarObject.url}`); geschrieben = p.calendarObject.data; return new Response(null, { status: 204 }); },
+        async deleteCalendarObject(p) { aufrufe.push(`weg ${p.calendarObject.url}`); return new Response(null, { status: 404 }); },
+      }));
+      assert.match((await cal.eintragen(e) as { grund: string }).grund, /Kein Kalender eingerichtet/);
+      fs.mkdirSync(home, { recursive: true });
+      fs.writeFileSync(path.join(home, "kalender.json"), JSON.stringify({ server: "https://dav.example", benutzer: "j@example.com", kalender: "Arbeit" }));
+      assert.match((await cal.eintragen(e) as { grund: string }).grund, /fehlt das Passwort/);
+      fs.mkdirSync(path.join(home, "geheim"), { recursive: true });
+      fs.writeFileSync(path.join(home, "geheim", "kalender"), "app-pw");
+      const r = await cal.eintragen(e);
+      assert.equal(r.ok, true);
+      if (!r.ok) return;
+      assert.equal(r.kalender, "Arbeit");
+      assert.match(r.uid, /^https:\/\/dav\.example\/cal\/arbeit\/.+%40nova\.ics$/);
+      const uid = geschrieben.match(/UID:(.+)\r\n/)![1];
+      const r2 = await cal.aendern(r, { ...e, beginn: new Date(2026, 9, 9, 11, 0) });
+      assert.equal(r2.ok, true);
+      assert.equal(geschrieben.match(/UID:(.+)\r\n/)![1], uid, "gleiche UID beim Ändern");
+      assert.match(geschrieben, /DTSTART:20261009T090000Z/);
+      assert.equal((await cal.entfernen(r)).ok, true, "schon weg (404) gilt als entfernt");
+      assert.deepEqual(aufrufe.map((a) => a.split(" ")[0]), ["neu", "ändern", "weg"]);
+      fs.rmSync(path.join(home, "kalender.json"));
     }],
     ["Tagesüberblick nennt die offenen Termine von heute und morgen", async () => {
       const heute = new Date();

@@ -8,6 +8,9 @@ import os from "node:os";
 import path from "node:path";
 import { wegwerfDatenbank } from "./lib/wegwerf-db";
 
+// Deutsche Zeit wie auf dem Server (pm2: TZ=Europe/Berlin), unabhängig vom Rechner, auf dem der Test läuft.
+process.env.TZ = "Europe/Berlin";
+
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "nova-test-kunden-"));
 process.env.NOVA_HOME = path.join(tmp, "home");
 

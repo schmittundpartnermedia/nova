@@ -10,6 +10,8 @@
 #   scripts/server/nova.sh passwort <adresse>
 #                                     – Mail-Passwort für ein Konto eintragen (verdeckte Eingabe; landet nur in
 #                                       /home/nova/Nova/geheim/mail/<adresse>, lesbar nur für „nova“)
+#   scripts/server/nova.sh kalender-passwort
+#                                     – Kalender-Passwort (bei iCloud ein App-Passwort) eintragen
 set -euo pipefail
 
 SERVER="${NOVA_SERVER:-nova@87.106.179.99}"
@@ -17,6 +19,7 @@ PORT_LOKAL="${NOVA_PORT_LOKAL:-3200}"
 
 case "${1:-status}" in
   status) ssh "$SERVER" 'pm2 ls' ;;
+  # start/stop wirken auf NOVAs pm2 (ecosystem.config.cjs in ~/nova).
   logs) ssh -t "$SERVER" 'pm2 logs --lines 50' ;;
   stop) ssh "$SERVER" 'pm2 stop all && pm2 ls' ;;
   start) ssh "$SERVER" 'pm2 start all && pm2 ls' ;;
@@ -37,8 +40,15 @@ case "${1:-status}" in
     printf '%s' "$pw" | ssh "$SERVER" "umask 077 && mkdir -p ~/Nova/geheim/mail && cat > ~/Nova/geheim/mail/${adresse} && echo 'Gespeichert für ${adresse}.'"
     unset pw
     ;;
+  kalender-passwort)
+    read -r -s -p "Kalender-Passwort (iCloud: App-Passwort): " pw
+    echo
+    [ -n "$pw" ] || { echo "Leer – nichts geändert." >&2; exit 1; }
+    printf '%s' "$pw" | ssh "$SERVER" "umask 077 && mkdir -p ~/Nova/geheim && cat > ~/Nova/geheim/kalender && echo 'Kalender-Passwort gespeichert.'"
+    unset pw
+    ;;
   *)
-    echo "Befehle: status | logs | stop | start | oeffnen | passwort <adresse>" >&2
+    echo "Befehle: status | logs | stop | start | oeffnen | passwort <adresse> | kalender-passwort" >&2
     exit 1
     ;;
 esac

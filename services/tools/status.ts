@@ -27,7 +27,7 @@ const FAEHIGKEITEN = [
   "Tagesbericht über alles, was ich an einem Tag gemacht habe",
   "rankpilot auf Software-Verzeichnissen und Bewertungsplattformen eintragen: Plattformen recherchieren, in meinem eigenen Chrome registrieren und das Profil ausfüllen; Captcha, Bestätigungen und das finale Speichern machst du; Passwörter liegen nur im Schlüsselbund",
   "Tagesüberblick auf „Was liegt heute an?“: was auf dich wartet, was läuft, Zahlen seit gestern",
-  "Termine und Rückrufe speichern und dich vorher erinnern, auf Wunsch auch im Apple Kalender; Rückrufwünsche aus Antworten schlage ich zum Eintragen vor",
+  "Termine und Rückrufe speichern und dich vorher erinnern, auf Wunsch auch im Kalender; Rückrufwünsche aus Antworten schlage ich zum Eintragen vor",
   "sagen, was ich gekostet habe (OpenAI, Claude Code, Google) – wo ein Preis fehlt, sage ich es",
   "zeigen, was die Mails gebracht haben: Antworten, gestartete rankPilot Checks und neue Konten je Kampagne",
   "Adressen auf die Sperrliste setzen",

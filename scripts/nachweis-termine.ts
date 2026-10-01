@@ -1,5 +1,5 @@
 /**
- * Nachweis Termine gegen das echte Modell – OHNE Apple Mail, OHNE Apple Kalender:
+ * Nachweis Termine gegen das echte Modell – OHNE echtes Postfach, OHNE echten Kalender:
  * Test-Postfach, Kalender im Speicher, Wegwerf-Datenbank und -NOVA_HOME.
  * Ein Betrieb antwortet „Rufen Sie mich Donnerstag an“ → Postfach-Wache schlägt vor, trägt nichts ein →
  * Joachim sagt „Ja, um 10“ → Termin gespeichert, im Kalender, Erinnerung geplant → Erinnerung über den Worker-Takt.
@@ -9,6 +9,9 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { wegwerfDatenbank } from "./lib/wegwerf-db";
+
+// Deutsche Zeit wie auf dem Server (pm2: TZ=Europe/Berlin), unabhängig vom Rechner, auf dem der Test läuft.
+process.env.TZ = "Europe/Berlin";
 
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "nova-nachweis-termine-"));
 for (const line of fs.readFileSync(path.join(process.cwd(), ".env"), "utf8").split("\n")) {
@@ -37,7 +40,7 @@ async function main() {
   const { postfachWache } = await import("@/services/kampagnen/wache");
   const { holeNeueMeldungen } = await import("@/services/meldungen");
   const { encodeMailRef, decodeMailRef } = await import("@/services/mail/postfach");
-  const { setzeKalender } = await import("@/lib/kalender/apple");
+  const { setzeKalender } = await import("@/lib/kalender");
   const { tickWorker } = await import("@/services/worker/runtime");
   type Postfach = import("@/services/mail/postfach").Postfach;
   type MailVoll = import("@/services/mail/postfach").MailVoll;
@@ -81,7 +84,7 @@ async function main() {
   }
 
   log(`NOVA Nachweis Termine – ${new Date().toISOString()} – jetzt laut Kopf: ${jetztText()}`);
-  log(`Modell: ${HEAD_MODEL} (echte API). Postfach: Test-Postfach. Kalender: im Speicher (nicht Apple Kalender).`);
+  log(`Modell: ${HEAD_MODEL} (echte API). Postfach: Test-Postfach. Kalender: im Speicher (kein echter Kalender).`);
 
   // Eine gesendete Tagesbetriebs-Mail an die Schreinerei Weber (gestern).
   const gestern = new Date(Date.now() - 86_400_000);
@@ -147,7 +150,7 @@ async function main() {
 
   log();
   log("ERGEBNIS: Nachweis Termine bestanden (echte API, Test-Postfach, Kalender im Speicher, Worker-Takt mit fester Zeit).");
-  log("Nicht geprüft: echter Apple Kalender (macOS-Freigabe), Erinnerung in NOVA.app – das ist Joachims Abnahme.");
+  log("Nicht geprüft: echter Kalender (CalDAV), Erinnerung in NOVA.app – das ist Joachims Abnahme.");
   setzeKalender(null);
   await prisma.$disconnect();
 }

@@ -4,7 +4,7 @@ import { novaHomeDir } from "@/lib/gedaechtnis/paths";
 
 /**
  * Einstellungen des Kunden-Tagesbetriebs: `~/Nova/tagesbetrieb.json` (von Joachim änderbar).
- * Zeiten sind Ortszeit des Macs; wochentage 1 = Montag … 7 = Sonntag.
+ * Zeiten sind deutsche Zeit (TZ=Europe/Berlin); wochentage 1 = Montag … 7 = Sonntag.
  */
 export type TagesbetriebEinstellungen = {
   aktiv: boolean;

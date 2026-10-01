@@ -14,6 +14,9 @@ import { hasOpenAIApiKey } from "@/lib/secrets";
 import { HEAD_MODEL } from "@/providers/ai/models";
 import type { Postfach } from "@/services/mail/postfach";
 
+// Deutsche Zeit wie auf dem Server (pm2: TZ=Europe/Berlin), unabhängig vom Rechner, auf dem der Test läuft.
+process.env.TZ = "Europe/Berlin";
+
 /** Der Phase-1-Nachweis braucht kein Postfach; ein Zugriff würde den Nachweis scheitern lassen. */
 const keinPostfach: Postfach = {
   neueste: async () => { throw new Error("Nachweis Phase 1 nutzt kein Postfach."); },

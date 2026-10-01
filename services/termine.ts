@@ -1,12 +1,12 @@
 import type { Termin } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
-import { kalender, type KalenderEintrag } from "@/lib/kalender/apple";
+import { kalender, type KalenderEintrag } from "@/lib/kalender";
 import { meldeNutzer } from "@/services/meldungen";
 import { cancelWorkItem, enqueueWorkItem } from "@/services/worker/queue";
 
 /**
  * Termine und Rückrufe. NOVA speichert sie bei sich und erinnert über den Hintergrund-Läufer
- * (Work-Item „termin.erinnerung“ mit runAt = Beginn − Vorlauf). Auf Wunsch zusätzlich im Apple Kalender.
+ * (Work-Item „termin.erinnerung“ mit runAt = Beginn − Vorlauf). Auf Wunsch zusätzlich im Kalender.
  */
 
 export type TerminAnsicht = {
@@ -72,7 +72,7 @@ async function streicheErinnerungen(t: Termin): Promise<void> {
 
 export function leseBeginn(wert: unknown): Date | null {
   if (typeof wert !== "string" || !wert.trim()) return null;
-  // Ohne Zeitzonenangabe gilt die Zeit des Macs (so rechnet der Kopf „Donnerstag 10 Uhr“).
+  // Ohne Zeitzonenangabe gilt deutsche Zeit (Prozesse laufen mit TZ=Europe/Berlin) (so rechnet der Kopf „Donnerstag 10 Uhr“).
   const d = new Date(wert.trim());
   return Number.isNaN(d.getTime()) ? null : d;
 }
@@ -107,9 +107,9 @@ export async function legeTerminAn(input: {
     const r = await kalender().eintragen(eintragAus(t));
     if (r.ok) {
       t = await prisma.termin.update({ where: { id: t.id }, data: { kalenderName: r.kalender, kalenderUid: r.uid } });
-      kalenderStand = `eingetragen im Apple Kalender „${r.kalender}“`;
+      kalenderStand = `eingetragen im Kalender „${r.kalender}“`;
     } else {
-      kalenderStand = `nicht im Apple Kalender: ${r.grund}`;
+      kalenderStand = `nicht im Kalender: ${r.grund}`;
     }
   }
   return { termin: ansicht(t), kalender: kalenderStand };
@@ -159,23 +159,23 @@ export async function aendereTermin(input: {
   await streicheErinnerungen(t);
   await planeErinnerung(t, jetzt);
 
-  let kalenderStand = t.kalenderUid ? `steht im Apple Kalender „${t.kalenderName}“` : "nicht im Apple Kalender";
+  let kalenderStand = t.kalenderUid ? `steht im Kalender „${t.kalenderName}“` : "nicht im Kalender";
   const ort = t.kalenderUid && t.kalenderName ? { kalender: t.kalenderName, uid: t.kalenderUid } : null;
   if (ort && t.status === "abgesagt") {
     const r = await kalender().entfernen(ort);
     if (r.ok) {
       t = await prisma.termin.update({ where: { id: t.id }, data: { kalenderName: null, kalenderUid: null } });
-      kalenderStand = "aus dem Apple Kalender entfernt";
-    } else kalenderStand = `im Apple Kalender nicht entfernt: ${r.grund}`;
+      kalenderStand = "aus dem Kalender entfernt";
+    } else kalenderStand = `im Kalender nicht entfernt: ${r.grund}`;
   } else if (ort && t.status !== "erledigt") {
     const r = await kalender().aendern(ort, eintragAus(t));
-    kalenderStand = r.ok ? `im Apple Kalender „${r.kalender}“ angepasst` : `im Apple Kalender nicht angepasst: ${r.grund}`;
+    kalenderStand = r.ok ? `im Kalender „${r.kalender}“ angepasst` : `im Kalender nicht angepasst: ${r.grund}`;
   } else if (!ort && input.inKalender && t.status === "geplant") {
     const r = await kalender().eintragen(eintragAus(t));
     if (r.ok) {
       t = await prisma.termin.update({ where: { id: t.id }, data: { kalenderName: r.kalender, kalenderUid: r.uid } });
-      kalenderStand = `eingetragen im Apple Kalender „${r.kalender}“`;
-    } else kalenderStand = `nicht im Apple Kalender: ${r.grund}`;
+      kalenderStand = `eingetragen im Kalender „${r.kalender}“`;
+    } else kalenderStand = `nicht im Kalender: ${r.grund}`;
   }
   return { termin: ansicht(t), kalender: kalenderStand };
 }
