@@ -216,6 +216,12 @@ Abschluss dieser Runde: `tsc`, `eslint`, `next build`, `npm run macos:build` gr�
 
 **01.10.2026 – Eigene Versanddomain für Kaltakquise (Joachims Vorschlag):** `check@b2b-rankpilot.de`. DNS geprüft: MX/SPF/DKIM (IONOS s1/s2)/DMARC p=none vorhanden; Domain im August 2026 angelegt → ohne Ruf, darum Hochfahren empfohlen (Woche 1: 15/Tag, dann 25, 35, ab Woche 4: 50). In `lib/mail/steerable.ts` als steuerbarer Absender ergänzt; lokal: Anzeigename „rankPilot Joachim Schmitt“, Signatur „rankpilot Joachim“, `~/Nova/tagesbetrieb.json` → Absender check@b2b-rankpilot.de, 15 Mails/Tag; Gedächtnis `firma.md`: Kunden-Kampagnen/Tagesbetrieb von check@, Sponsoren/normal von joachim@. **Voraussetzung:** Joachim legt das Konto in Apple Mail an (Passwort trägt er selbst ein). Nicht geprüft: Versand von dieser Adresse.
 
+**01.10.2026, 10:45–11:00 – Tagesbetrieb nach Joachims Ablauf (Claude Code):** Joachim will: eine Branche nach der anderen, alle Orte im Umkreis von 40 km um Pforzheim, je 20 Firmen, ohne Doppelte, Schreinereien zuerst. Der erste Tageslauf (10:43) hatte dagegen nach der alten Matrix Zahnarzt/Physio Pforzheim geliefert und um 10:48 eine Zahnarzt-Beispielmail zur Freigabe vorgelegt (nichts gesendet). Umgestellt:
+- Lead-Scanner (lokal, kein Remote, Commit 2d463e6): `reihenfolge: "branche"` in `config/targets.json` (Standard bleibt „ort“), 53 Orte im Umkreis ~40 km nach Entfernung (Koordinaten genähert), Schreinerei zuerst. `state.json` auf Pforzheim/Schreinerei gesetzt; die 20 Betriebe des Zahnarzt/Physio-Laufs aus den Doppel-Sperren genommen, damit der Scanner sie in ihrer Branche wiederfindet (Sicherung im Scratchpad).
+- NOVA-DB (Sicherung im Scratchpad): Zahnarzt-Tageskampagne abgebrochen und umbenannt, Entwurf `cancelled`, Freigabe `rejected`; 11 geprüfte Zahnarzt/Physio-Betriebe `zurueckgestellt`.
+- NOVA-Code: zurückgestellter Betrieb wird beim Wiederfinden wieder aufgenommen; **Fehler behoben:** Suchläufe des Tagesbetriebs zählten nicht gegen das Tageslimit der Scanner-Freigabe (nur Einzelsuchen). Tests: tagesbetrieb 15/15 (2 neu, Gegenproben schlagen fehl), übrige grün. Beide Code-Korrekturen wirken im Hintergrund-Läufer erst nach einem Neustart von NOVA.app.
+- Beobachtet: Eine Einzelsuche „Schreinereien in Pforzheim und Umgebung im Umkreis von 40 km“ scheiterte an Google („Places API: service currently unavailable“, vorübergehend); NOVA sagte danach trotzdem „Die erste Suche … läuft“ – die Antwort entstand, bevor die Fehlermeldung kam.
+
 ## Dran
 
 **Joachim, wenn er zurück ist:**

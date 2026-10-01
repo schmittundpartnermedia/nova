@@ -129,6 +129,20 @@ async function main() {
       const nochmal = await fuehreTagessucheAus({ organizationId: org.id, tageslauf, mx });
       assert.equal((nochmal as { neu: number }).neu, 0, "gleiche Adressen werden nicht doppelt eingelesen");
     }],
+    ["Suchläufe des Tagesbetriebs zählen gegen das Tageslimit der Scanner-Freigabe", async () => {
+      const { scannerRunsToday } = await import("@/services/approvals");
+      assert.equal(await scannerRunsToday(org.id), await prisma.workItem.count({ where: { kind: "tagesbetrieb.suche" } }));
+      assert.ok((await scannerRunsToday(org.id)) >= 1);
+    }],
+    ["Zurückgestellter Betrieb wird wieder aufgenommen, wenn der Scanner ihn in seiner Branche wiederfindet", async () => {
+      const maier = await prisma.lead.findFirstOrThrow({ where: { firma: "Holz Maier" } });
+      await prisma.lead.update({ where: { id: maier.id }, data: { status: "zurueckgestellt", grund: "Branche kommt später" } });
+      const wieder = await fuehreTagessucheAus({ organizationId: org.id, tageslauf, mx });
+      assert.equal((wieder as { neu: number }).neu, 1, "nur der zurückgestellte Betrieb zählt als neu");
+      const danach = await prisma.lead.findUniqueOrThrow({ where: { id: maier.id } });
+      assert.deepEqual([danach.status, danach.grund], ["geprueft", null]);
+      assert.equal(await prisma.lead.count({ where: { firma: "Holz Maier" } }), 1, "kein zweiter Eintrag");
+    }],
     ["Morgens: Tageskampagne mit EINER Beispiel-Mail zur Freigabe vorgelegt, nichts gesendet", async () => {
       await holeNeueMeldungen(org.id);
       assert.equal((await tick(t(7, 55))).aktion, "freigabe vorgelegt");

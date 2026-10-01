@@ -1407,7 +1407,7 @@ model Lead {
   score           Int?
   /// Scanner-CSV, aus der der Lead stammt
   quelle          String
-  /// neu | geprueft | verworfen | angeschrieben
+  /// neu | geprueft | verworfen | angeschrieben | zurueckgestellt (Branche kommt später dran)
   status          String    @default("neu")
   grund           String?
   geprueftAt      DateTime? @map("geprueft_at")

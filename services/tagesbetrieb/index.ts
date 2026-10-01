@@ -68,6 +68,12 @@ export async function leseLeadsEin(organizationId: string, csvPfad: string): Pro
     const bekannt = email
       ? await prisma.lead.findFirst({ where: { organizationId, email } })
       : await prisma.lead.findFirst({ where: { organizationId, email: null, firma, ort } });
+    if (bekannt?.status === "zurueckgestellt") {
+      // Zurückgestellt, bis seine Branche dran ist – jetzt hat der Scanner ihn in seiner Branche wiedergefunden.
+      await prisma.lead.update({ where: { id: bekannt.id }, data: { status: "neu", grund: null, geprueftAt: null, quelle: csvPfad } });
+      neu += 1;
+      continue;
+    }
     if (bekannt) continue;
     const ansprechpartner = (werte.ansprechpartner || werte.inhabername || "").trim() || null;
     const score = Number.parseInt(werte.score ?? "", 10);
