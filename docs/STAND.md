@@ -250,6 +250,8 @@ Abschluss dieser Runde: `tsc`, `eslint`, `next build`, `npm run macos:build` gr�
 
 **01.10.2026, ~13:50 – Check-Zählung: Webseite live, App wartet.** Auf Joachims Ja: `rankpilot-website` Zweig `nova/check-kurzlink` per Merge (1cf8c0c) in `main`, gepusht, `scripts/deploy-website.sh` → Health OK; rankpilot.de liefert die Kurzlink-Erkennung aus. App **nicht** veröffentlicht: Auf `main` lag ein fremder neuer Stand (72f17012, 13:46, „fix(security): Admin-Seed …“) und die App war gerade neu gestartet – jemand anderes arbeitet/deployt dort; erst nach Joachims Rückmeldung. Lücke behoben: NOVA startet Befehle mit `zsh -lc`, das `~/.zshrc` nicht liest – dort standen `RP_DEPLOY_SSH/PATH`; jetzt in `rankPilot-app/.env.deploy` (gitignored, 600; vom Deploy-Skript vorgesehen). Vorabprüfung `RP_DEPLOY_GUARD_ONLY=1` ohne Terminal-Profil bestanden.
 
+**01.10.2026, ~14:00 – Kostenübersicht gebaut (Claude Code).** `lib/kosten.ts`: Verbrauchsbuch `~/Nova/zustand/kosten/<JJJJ-MM>.jsonl`, geschrieben bei jedem OpenAI-Aufruf (Kopf: Tokens; Sprachausgabe: Zeichen; Spracherkennung: Sekunden aus dem WAV-Kopf; Websuche: Tokens + Suchaufrufe). Preise: nur sicher bekannte im Code (whisper-1, gpt-4o-mini-transcribe, gpt-4o-mini), alles andere (gpt-6-astra, gpt-4o-mini-tts, web_search) trägt Joachim in `~/Nova/preise.json` ein – bis dahin „Preis fehlt“, nie geschätzt. `services/kosten.ts` + Werkzeug `kosten_anzeigen` (heute/7 Tage/Monat/Vormonat): OpenAI je Modell, Claude Code (echte `total_cost_usd` je Auftrag), Google Places (Anfragen × 0,035 $). Tagesbericht hat einen Abschnitt „Kosten“. Tests: `test:kosten` 4/4 (neu), alle anderen grün. `npm run nachweis:kosten` → `docs/nachweis-kosten.txt`: echter Kopf-Aufruf im Kostenbuch, NOVA sagt ehrlich, dass der Preis für gpt-6-astra fehlt. Wirkt im Hintergrund-Läufer (Tagesbericht) erst nach Neustart der App.
+
 ## Dran
 
 **Joachim (Abnahme Phase 7), nach Feierabend des Tagesbetriebs oder morgen früh:**
@@ -257,7 +259,7 @@ Abschluss dieser Runde: `tsc`, `eslint`, `next build`, `npm run macos:build` gr�
 2. Profiltext diktieren, falls NOVA nachfragt (Beschreibung, Kategorien, welche E-Mail für Plattform-Konten).
 3. „Such mir die Plattformen, auf denen rankpilot eingetragen sein sollte.“ → Liste.
 4. „Fang mit <zwei Plattformen deiner Wahl> an.“ → Chrome öffnet sich, NOVA füllt aus, ruft dich bei Captcha/Mail → „weiter“ → am Ende speicherst du. Prüfen: Profile angelegt, Zugangsdaten im Schlüsselbund (Schlüsselbundverwaltung, Suche „NOVA:“), Liste zeigt den Stand.
-Danach offen: Kalender, Kostenübersicht, Kopf-Vergleich; Entscheidung zu My Book 24 / ELEVUM.
+Danach offen: App-Teil der Check-Zählung (wartet, bis Joachims Aufräumen an der App fertig ist), Preise für gpt-6-astra/gpt-4o-mini-tts/web_search in `~/Nova/preise.json`, Kalender, Kopf-Vergleich.
 
 ## Was Joachim liefert (siehe Auftrag, Anhang)
 

@@ -1,4 +1,5 @@
 import OpenAI, { toFile } from "openai";
+import { bucheVerbrauch } from "@/lib/kosten";
 import { hasOpenAIApiKey } from "@/lib/secrets";
 
 export type TranscribeAdapter = {
@@ -21,6 +22,13 @@ const noneAdapter: TranscribeAdapter = {
   },
 };
 
+/** Länge einer WAV-Aufnahme aus dem Kopf (Bytes je Sekunde an Stelle 28); andere Formate: unbekannt. */
+function audioSekunden(bytes: Uint8Array): number | null {
+  if (bytes.length < 44 || String.fromCharCode(...bytes.slice(0, 4)) !== "RIFF") return null;
+  const byteRate = bytes[28]! | (bytes[29]! << 8) | (bytes[30]! << 16) | (bytes[31]! << 24);
+  return byteRate > 0 ? (bytes.length - 44) / byteRate : null;
+}
+
 const openaiAdapter: TranscribeAdapter = {
   id: "openai-transcribe",
   available() {
@@ -41,6 +49,7 @@ const openaiAdapter: TranscribeAdapter = {
         language: "de",
         prompt: "Joachim spricht Deutsch mit NOVA. Begriffe: NOVA, Joachim, rankPilot.",
       });
+      bucheVerbrauch({ art: "spracherkennung", modell: "gpt-4o-mini-transcribe", sekunden: audioSekunden(input.bytes) ?? undefined });
       return (result.text ?? "").replace(/\s+/g, " ").trim();
     } catch {
       const result = await client.audio.transcriptions.create({
@@ -49,6 +58,7 @@ const openaiAdapter: TranscribeAdapter = {
         language: "de",
         prompt: "NOVA, Joachim, rankPilot.",
       });
+      bucheVerbrauch({ art: "spracherkennung", modell: "whisper-1", sekunden: audioSekunden(input.bytes) ?? undefined });
       return (result.text ?? "").replace(/\s+/g, " ").trim();
     }
   },

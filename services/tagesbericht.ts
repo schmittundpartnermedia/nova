@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { novaHomeDir } from "@/lib/gedaechtnis/paths";
 import { meldeNutzer } from "@/services/meldungen";
 import { wirkung } from "@/services/wirkung";
+import { kostenUebersicht } from "@/services/kosten";
 import type { CheckQuelle } from "@/lib/rankpilot/checks";
 
 /**
@@ -111,6 +112,11 @@ export async function schreibeTagesbericht(input: { organizationId: string; datu
     }
     if (anfragen) zeilen.push("", `Google-Kosten: etwa ${(anfragen * 0.035).toFixed(2).replace(".", ",")} $ (${anfragen} Anfragen à ~0,035 $).`);
   } else zeilen.push("Keine.");
+  const kosten = await kostenUebersicht({ organizationId, von, bis });
+  zeilen.push("", "## Kosten", "");
+  for (const p of kosten.posten) zeilen.push(`- ${p.posten}: ${p.usd === null ? "Preis fehlt" : `${p.usd.toFixed(2).replace(".", ",")} $`} (${p.menge})`);
+  if (!kosten.posten.length) zeilen.push("Keine.");
+  else zeilen.push("", `Summe der bekannten Kosten: ${kosten.summe_usd.toFixed(2).replace(".", ",")} $${kosten.vollstaendig ? "" : ` – ohne ${kosten.ohne_preis.join(", ")} (Preis fehlt in ~/Nova/preise.json)`}.`);
   zeilen.push("", "## Verworfene Adressen", "");
   if (gruende.size) {
     for (const [grund, anzahl] of [...gruende.entries()].sort((a, b) => b[1] - a[1])) zeilen.push(`- ${anzahl} × ${grund}`);

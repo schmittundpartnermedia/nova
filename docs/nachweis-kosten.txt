@@ -1,0 +1,9 @@
+NOVA Nachweis Kosten – 2026-10-01T11:55:12.082Z – Modell gpt-6-astra
+Joachim: Was hat NOVA heute gekostet?
+Werkzeuge: ["kosten_anzeigen"]
+NOVA: Die heutigen Kosten kann ich noch nicht beziffern: Erfasst sind 6.372 Eingabe- und 22 Ausgabe-Tokens, aber der Preis für das verwendete Modell fehlt. Den müsstest du in der Datei preise.json im Nova-Ordner hinterlegen; die angezeigten null Dollar sind deshalb keine vollständige Kostensumme.
+  ✓ echter Kopf-Aufruf im Kostenbuch (2 Buchungen, 12924 Eingabe-Tokens)
+  ✓ ruft die Kostenübersicht auf
+  ✓ sagt ehrlich, dass für das Kopfmodell ein Preis fehlt
+
+ERGEBNIS: Nachweis Kosten bestanden (echte API).

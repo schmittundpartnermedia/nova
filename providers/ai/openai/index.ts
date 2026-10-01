@@ -1,6 +1,7 @@
 import OpenAI from "openai";
 import type { HeadProvider, HeadTurnInput, HeadTurnOutput, HealthCheckResult } from "@/types/ai";
 import { HEAD_MODEL } from "@/providers/ai/models";
+import { bucheVerbrauch } from "@/lib/kosten";
 import { hasOpenAIApiKey, publicErrorMessage } from "@/lib/secrets";
 
 const HEALTH_TTL_MS = 30_000;
@@ -60,6 +61,12 @@ export class OpenAIProvider implements HeadProvider {
         }),
         tools,
         ...(input.previousResponseId ? { previous_response_id: input.previousResponseId } : {}),
+      });
+      bucheVerbrauch({
+        art: "kopf",
+        modell: model,
+        eingabeTokens: response.usage?.input_tokens,
+        ausgabeTokens: response.usage?.output_tokens,
       });
 
       const toolCalls = (response.output ?? [])

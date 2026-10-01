@@ -28,6 +28,7 @@ const ANSAGEN: Record<string, string> = {
   tagesueberblick: "Moment, ich schaue, was heute ansteht.",
   wirkung_anzeigen: "Moment, ich schaue nach, was die Mails gebracht haben.",
   web_suchen: "Moment, ich recherchiere.",
+  kosten_anzeigen: "Moment, ich rechne die Kosten zusammen.",
   browser_oeffnen: "Ich öffne die Seite.",
 };
 
@@ -95,7 +96,7 @@ function buildInstructions(): string {
     "- „Was liegt heute an?“, „Was gibt's Neues?“, „Guten Morgen“: tagesueberblick, dann in höchstens sechs gesprochenen Sätzen – zuerst was auf ihn wartet (Antworten, Freigaben, Entwürfe, Claude), dann was läuft, dann die Zahlen seit gestern. Nichts, was leer ist, aufzählen; keine Listen vorlesen, bei vielen Einträgen die zwei, drei wichtigsten nennen.",
     "",
     "## Deine Werkzeuge",
-    "Gedächtnis, Apple Mail (lesen, entwerfen, antworten, senden), Mail-Vorlagen, Dauerfreigaben, Kampagnen im Hintergrund, Kundensuche mit dem Lead-Scanner, Kontaktlisten, Kunden-Tagesbetrieb, Tagesbericht, Tagesüberblick, Wirkung der Mails (Checks, Konten), Websuche, Plattform-Einträge im eigenen Browser (Registrierung, Profil, Zugangsdaten im Schlüsselbund), Sperrliste, Programmier-Aufträge an Claude Code, Selbstauskunft (nova_status). Keine Bildschirmsteuerung.",
+    "Gedächtnis, Apple Mail (lesen, entwerfen, antworten, senden), Mail-Vorlagen, Dauerfreigaben, Kampagnen im Hintergrund, Kundensuche mit dem Lead-Scanner, Kontaktlisten, Kunden-Tagesbetrieb, Tagesbericht, Tagesüberblick, Wirkung der Mails (Checks, Konten), Kostenübersicht, Websuche, Plattform-Einträge im eigenen Browser (Registrierung, Profil, Zugangsdaten im Schlüsselbund), Sperrliste, Programmier-Aufträge an Claude Code, Selbstauskunft (nova_status). Keine Bildschirmsteuerung.",
     "- Programmier-Aufträge („ändere auf der Webseite …“, „gib Claude den Auftrag …“): claude_beauftragen mit vollständiger, konkreter Aufgabe (fehlt z. B. der neue Wert, erst nachfragen). Claude arbeitet im Hintergrund; das Ergebnis kommt als Meldung. Live stellen nur über claude_live nach Joachims ausdrücklichem Ja.",
     "- Kundensuche: kunden_suchen findet ALLE Betriebe einer Branche im Umkreis um EINEN Ort (Mittelpunkt + radius_km), nie „20 Stück“ und nie mehrere Orte in einem Feld. „Schreinereien rund um Pforzheim, 40 km“ → branche „Schreinerei“, ort „Pforzheim“, radius_km 40. Alles landet im Vorrat; angeschrieben wird über den Tagesbetrieb (Joachims Tageslimit) – nicht sofort alle auf einmal.",
     "- Kunden vs. Sponsoren: kunden_suchen findet nur lokale Betriebe als potenzielle Kunden. Sponsoren sucht Joachim selbst; er nennt dir Firma, Ansprechpartner, Mail-Adresse und Bereich – trag sie mit kontakt_hinzufuegen in die Liste „sponsoren“ ein (oder die Liste, die er nennt) und bilde die Anrede: „Sehr geehrter Herr …“, „Sehr geehrte Frau …“, ohne Person „Sehr geehrtes <Firma>-Team“. Bei unklarem Geschlecht fragen. Einzelne Sponsoren-Mail: vorlage_fuellen, dann mail_entwurf; mehrere: kampagne_planen mit der Liste.",

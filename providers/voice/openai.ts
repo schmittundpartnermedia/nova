@@ -12,6 +12,7 @@ import type {
   VoiceSynthesizeInput,
   VoiceSynthesizeResult,
 } from "@/types/voice";
+import { bucheVerbrauch } from "@/lib/kosten";
 import { VoiceUnavailableError } from "@/types/voice";
 
 const HEALTH_TTL_MS = 30_000;
@@ -60,6 +61,7 @@ export class OpenAIVoiceProvider implements VoiceProvider {
         input.signal ? { signal: input.signal } : undefined,
       );
       const audio = Buffer.from(await response.arrayBuffer());
+      bucheVerbrauch({ art: "stimme", modell: config.model, zeichen: spoken.length });
       return {
         audio,
         mimeType: "audio/wav",

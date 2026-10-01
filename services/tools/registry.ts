@@ -7,6 +7,7 @@ import { novaStatusTool } from "@/services/tools/status";
 import { wirkungTool } from "@/services/tools/wirkung";
 import { tagesueberblickTool } from "@/services/tools/ueberblick";
 import { PLATTFORM_TOOLS } from "@/services/tools/plattformen";
+import { kostenTool } from "@/services/tools/kosten";
 import { CLAUDE_TOOLS } from "@/services/tools/claude";
 import type { NovaToolDefinition, NovaToolResult, ToolContext } from "@/services/tools/types";
 
@@ -32,6 +33,7 @@ export function bootstrapTools(): void {
   register(wirkungTool);
   register(tagesueberblickTool);
   for (const tool of PLATTFORM_TOOLS) register(tool);
+  register(kostenTool);
   bootstrapped = true;
 }
 

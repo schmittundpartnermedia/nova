@@ -2,6 +2,7 @@ import OpenAI from "openai";
 import { hasOpenAIApiKey, publicErrorMessage } from "@/lib/secrets";
 import { RESEARCH_LIMITS } from "@/lib/research/limits";
 import { canonicalizeUrl, domainOf } from "@/lib/research/url";
+import { bucheVerbrauch } from "@/lib/kosten";
 import type { SearchProvider, SearchQuery, SearchResponse, SearchResult } from "@/types/connectors";
 
 type LooseRecord = Record<string, unknown>;
@@ -123,6 +124,10 @@ export class OpenAISearchProvider implements SearchProvider {
         input: prompt,
       });
       const output = asArray((response as { output?: unknown[] }).output);
+      const usage = (response as { usage?: { input_tokens?: number; output_tokens?: number } }).usage;
+      bucheVerbrauch({ art: "websuche", modell: "gpt-4o-mini", eingabeTokens: usage?.input_tokens, ausgabeTokens: usage?.output_tokens });
+      // Die Suchaufrufe selbst kosten extra; ihr Preis steht nicht in der Tabelle (Modell „web_search“ in ~/Nova/preise.json).
+      bucheVerbrauch({ art: "websuche", modell: "web_search", anfragen: output.filter((item) => asRecord(item)?.type === "web_search_call").length });
       const results = collectResults(output).slice(0, input.limit ?? RESEARCH_LIMITS.maxResultsPerQuery);
       return {
         mock: false,
