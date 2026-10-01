@@ -5,13 +5,12 @@
  * Abbruch stoppt den Rest, Abschluss wird einmal gemeldet, Antworten werden erkannt und als Entwurf vorgelegt.
  */
 import assert from "node:assert/strict";
-import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { wegwerfDatenbank } from "./lib/wegwerf-db";
 
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "nova-test-kampagne-"));
-process.env.DATABASE_URL = `file:${path.join(tmp, "test.db")}`;
 process.env.NOVA_HOME = path.join(tmp, "home");
 
 type Postfach = import("@/services/mail/postfach").Postfach;
@@ -21,8 +20,7 @@ type HeadProvider = import("@/types/ai").HeadProvider;
 type HeadTurnInput = import("@/types/ai").HeadTurnInput;
 
 async function main() {
-  const push = spawnSync("npx", ["prisma", "db", "push", "--skip-generate", "--accept-data-loss"], { env: process.env, encoding: "utf8" });
-  if (push.status !== 0) throw new Error(`Test-Datenbank konnte nicht angelegt werden:\n${push.stderr}`);
+  wegwerfDatenbank();
 
   const home = process.env.NOVA_HOME!;
   fs.mkdirSync(path.join(home, "vorlagen"), { recursive: true });

@@ -97,11 +97,11 @@ export async function listActivities(input: {
       ...(q
         ? {
             OR: [
-              { title: { contains: q } },
-              { description: { contains: q } },
-              { company: { is: { name: { contains: q } } } },
-              { contact: { is: { firstName: { contains: q } } } },
-              { contact: { is: { lastName: { contains: q } } } },
+              { title: { contains: q, mode: "insensitive" as const } },
+              { description: { contains: q, mode: "insensitive" as const } },
+              { company: { is: { name: { contains: q, mode: "insensitive" as const } } } },
+              { contact: { is: { firstName: { contains: q, mode: "insensitive" as const } } } },
+              { contact: { is: { lastName: { contains: q, mode: "insensitive" as const } } } },
             ],
           }
         : {}),

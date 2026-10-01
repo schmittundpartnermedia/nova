@@ -3,13 +3,13 @@
  * Auftrag „Telefonnummer im Footer ändern“ → claude -p im Projektordner → NOVA prüft → Freigabe → übernehmen,
  * pushen (in ein lokales bare Repo), „Live“-Skript (schreibt nur eine Markierung). Ausgabe: docs/nachweis-phase5-claude.txt
  */
-import { execSync, spawnSync } from "node:child_process";
+import { execSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { wegwerfDatenbank } from "./lib/wegwerf-db";
 
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "nova-nachweis-p5-"));
-process.env.DATABASE_URL = `file:${path.join(tmp, "nachweis.db")}`;
 process.env.NOVA_HOME = path.join(tmp, "home");
 const lines: string[] = [];
 const log = (line = "") => {
@@ -22,8 +22,7 @@ const check = (ok: boolean, message: string) => {
 };
 
 async function main() {
-  const push = spawnSync("npx", ["prisma", "db", "push", "--skip-generate", "--accept-data-loss"], { env: process.env, encoding: "utf8" });
-  if (push.status !== 0) throw new Error(push.stderr);
+  wegwerfDatenbank();
   const origin = path.join(tmp, "origin.git");
   const repo = path.join(tmp, "testseite");
   const marker = path.join(tmp, "live.txt");

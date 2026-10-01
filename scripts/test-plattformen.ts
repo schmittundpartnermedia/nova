@@ -5,13 +5,12 @@
  * Captcha-Erkennung, „braucht Joachim“ hält den Stand fest, Seitentext als fremder Inhalt markiert.
  */
 import assert from "node:assert/strict";
-import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { wegwerfDatenbank } from "./lib/wegwerf-db";
 
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "nova-test-plattformen-"));
-process.env.DATABASE_URL = `file:${path.join(tmp, "test.db")}`;
 process.env.NOVA_HOME = path.join(tmp, "home");
 // Lokale Testseiten (file://) nur für diesen Test freigeben.
 process.env.NOVA_BROWSER_TESTSEITEN = "1";
@@ -64,8 +63,7 @@ setTimeout(()=>{ document.getElementById("ziel").innerHTML='<nova-feld></nova-fe
 </script></body></html>`;
 
 async function main() {
-  const push = spawnSync("npx", ["prisma", "db", "push", "--skip-generate", "--accept-data-loss"], { env: process.env, encoding: "utf8" });
-  if (push.status !== 0) throw new Error(`Test-Datenbank konnte nicht angelegt werden:\n${push.stderr}`);
+  wegwerfDatenbank();
   fs.mkdirSync(path.join(tmp, "seiten"), { recursive: true });
   fs.writeFileSync(path.join(tmp, "seiten", "registrierung.html"), REGISTRIERUNG);
   fs.writeFileSync(path.join(tmp, "seiten", "captcha.html"), CAPTCHA);

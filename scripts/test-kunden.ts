@@ -3,13 +3,12 @@
  * Wegwerf-Datenbank und -NOVA_HOME; der Scanner ist ein Test-Runner, der eine CSV im Format des Lead-Scanners schreibt.
  */
 import assert from "node:assert/strict";
-import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { wegwerfDatenbank } from "./lib/wegwerf-db";
 
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "nova-test-kunden-"));
-process.env.DATABASE_URL = `file:${path.join(tmp, "test.db")}`;
 process.env.NOVA_HOME = path.join(tmp, "home");
 
 // Ausgabe der Gebietssuche (lead-scanner/src/gebiet.ts)
@@ -21,8 +20,7 @@ const SCANNER_CSV = [
 ].join("\n");
 
 async function main() {
-  const push = spawnSync("npx", ["prisma", "db", "push", "--skip-generate", "--accept-data-loss"], { env: process.env, encoding: "utf8" });
-  if (push.status !== 0) throw new Error(`Test-Datenbank konnte nicht angelegt werden:\n${push.stderr}`);
+  wegwerfDatenbank();
 
   const { prisma } = await import("@/lib/prisma");
   const { executeTool } = await import("@/services/tools/registry");

@@ -4,10 +4,10 @@
  * Der Hintergrund-Läufer wird hier direkt aufgerufen (Handler mail.send / Postfach-Wache).
  * Ausgabe: docs/nachweis-phase3-kopf.txt
  */
-import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { wegwerfDatenbank } from "./lib/wegwerf-db";
 
 const echteVorlage = path.join(os.homedir(), "Nova", "vorlagen", "sponsoren.md");
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "nova-nachweis-p3-"));
@@ -15,7 +15,6 @@ for (const line of fs.readFileSync(path.join(process.cwd(), ".env"), "utf8").spl
   const match = line.match(/^\s*OPENAI_API_KEY\s*=\s*"?([^"\n]*)"?/);
   if (match && !process.env.OPENAI_API_KEY) process.env.OPENAI_API_KEY = match[1];
 }
-process.env.DATABASE_URL = `file:${path.join(tmp, "nachweis.db")}`;
 process.env.NOVA_HOME = path.join(tmp, "home");
 
 const lines: string[] = [];
@@ -29,8 +28,7 @@ function check(ok: boolean, message: string) {
 }
 
 async function main() {
-  const push = spawnSync("npx", ["prisma", "db", "push", "--skip-generate", "--accept-data-loss"], { env: process.env, encoding: "utf8" });
-  if (push.status !== 0) throw new Error(`Nachweis-Datenbank konnte nicht angelegt werden:\n${push.stderr}`);
+  wegwerfDatenbank();
   const home = process.env.NOVA_HOME!;
   fs.mkdirSync(path.join(home, "vorlagen"), { recursive: true });
   fs.mkdirSync(path.join(home, "kampagnen"), { recursive: true });

@@ -2,17 +2,16 @@
  * Nachweis Kostenübersicht (echte API, Wegwerf-DB und -NOVA_HOME): Ein echter Kopf-Aufruf landet im Kostenbuch,
  * „Was hat NOVA heute gekostet?“ nennt die Kosten und sagt ehrlich, wo ein Preis fehlt. Ausgabe: docs/nachweis-kosten.txt
  */
-import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { wegwerfDatenbank } from "./lib/wegwerf-db";
 
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "nova-nachweis-kosten-"));
 for (const line of fs.readFileSync(path.join(process.cwd(), ".env"), "utf8").split("\n")) {
   const match = line.match(/^\s*OPENAI_API_KEY\s*=\s*"?([^"\n]*)"?/);
   if (match && !process.env.OPENAI_API_KEY) process.env.OPENAI_API_KEY = match[1];
 }
-process.env.DATABASE_URL = `file:${path.join(tmp, "nachweis.db")}`;
 process.env.NOVA_HOME = path.join(tmp, "home");
 const lines: string[] = [];
 const log = (line = "") => {
@@ -25,8 +24,7 @@ const check = (ok: boolean, message: string) => {
 };
 
 async function main() {
-  const push = spawnSync("npx", ["prisma", "db", "push", "--skip-generate", "--accept-data-loss"], { env: process.env, encoding: "utf8" });
-  if (push.status !== 0) throw new Error(push.stderr);
+  wegwerfDatenbank();
   const { prisma } = await import("@/lib/prisma");
   const { runHeadLoop } = await import("@/agents/master/head");
   const { OpenAIProvider } = await import("@/providers/ai/openai");

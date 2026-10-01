@@ -5,13 +5,12 @@
  * Tageslimit zählt nur wirklich gesendete Mails, Antworten beziehen sich auf die Originalmail.
  */
 import assert from "node:assert/strict";
-import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { wegwerfDatenbank } from "./lib/wegwerf-db";
 
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "nova-test-mail-"));
-process.env.DATABASE_URL = `file:${path.join(tmp, "test.db")}`;
 process.env.NOVA_HOME = path.join(tmp, "home");
 
 type Postfach = import("@/services/mail/postfach").Postfach;
@@ -58,11 +57,7 @@ function testPostfach(original: Record<string, MailVoll>) {
 }
 
 async function main() {
-  const push = spawnSync("npx", ["prisma", "db", "push", "--skip-generate", "--accept-data-loss"], {
-    env: process.env,
-    encoding: "utf8",
-  });
-  if (push.status !== 0) throw new Error(`Test-Datenbank konnte nicht angelegt werden:\n${push.stderr}`);
+  wegwerfDatenbank();
 
   const { prisma } = await import("@/lib/prisma");
   const { executeTool } = await import("@/services/tools/registry");

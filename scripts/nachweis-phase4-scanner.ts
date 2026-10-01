@@ -5,13 +5,12 @@
  * Die vom Scanner erzeugte CSV unter lead-scanner/output wird danach wieder gelöscht.
  * Ausgabe: docs/nachweis-phase4-scanner.txt
  */
-import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { wegwerfDatenbank } from "./lib/wegwerf-db";
 
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "nova-nachweis-p4-"));
-process.env.DATABASE_URL = `file:${path.join(tmp, "nachweis.db")}`;
 process.env.NOVA_HOME = path.join(tmp, "home");
 const lines: string[] = [];
 const log = (line = "") => {
@@ -21,8 +20,7 @@ const log = (line = "") => {
 let scannerCsv = "";
 
 async function main() {
-  const push = spawnSync("npx", ["prisma", "db", "push", "--skip-generate", "--accept-data-loss"], { env: process.env, encoding: "utf8" });
-  if (push.status !== 0) throw new Error(push.stderr);
+  wegwerfDatenbank();
   const { prisma } = await import("@/lib/prisma");
   const { baueGebietsScanner, scannerDir } = await import("@/lib/leads/scanner");
   const { fuehreGebietssucheAus } = await import("@/services/leads");

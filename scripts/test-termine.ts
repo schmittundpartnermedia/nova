@@ -5,18 +5,16 @@
  * Vergangenheit abgelehnt, AppleScript sicher, Termine im Tagesüberblick.
  */
 import assert from "node:assert/strict";
-import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { wegwerfDatenbank } from "./lib/wegwerf-db";
 
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "nova-test-termine-"));
-process.env.DATABASE_URL = `file:${path.join(tmp, "test.db")}`;
 process.env.NOVA_HOME = path.join(tmp, "home");
 
 async function main() {
-  const push = spawnSync("npx", ["prisma", "db", "push", "--skip-generate", "--accept-data-loss"], { env: process.env, encoding: "utf8" });
-  if (push.status !== 0) throw new Error(push.stderr);
+  wegwerfDatenbank();
   const { prisma } = await import("@/lib/prisma");
   const { setzeKalender, eintragScript, aenderScript, kalenderScriptSicher } = await import("@/lib/kalender/apple");
   const { legeTerminAn, aendereTermin } = await import("@/services/termine");

@@ -188,11 +188,11 @@ export async function searchConversationMessages(input: {
       ...createdAt,
       ...(input.projectId || input.origin ? { conversation: conversationFilter } : {}),
       OR: [
-        { content: { contains: q } },
-        { fulltext: { contains: q.toLowerCase() } },
+        { content: { contains: q, mode: "insensitive" as const } },
+        { fulltext: { contains: q.toLowerCase(), mode: "insensitive" as const } },
         ...tokens.flatMap((token) => [
-          { content: { contains: token } },
-          { fulltext: { contains: token.toLowerCase() } },
+          { content: { contains: token, mode: "insensitive" as const } },
+          { fulltext: { contains: token.toLowerCase(), mode: "insensitive" as const } },
         ]),
       ],
     },

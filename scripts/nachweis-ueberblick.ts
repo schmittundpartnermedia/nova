@@ -4,17 +4,16 @@
  * „Was haben die Mails gebracht?“ → NOVA zählt ehrlich und sagt, dass Checks noch nicht gezählt werden.
  * Wegwerf-DB und -NOVA_HOME. Ausgabe: docs/nachweis-ueberblick.txt
  */
-import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { wegwerfDatenbank } from "./lib/wegwerf-db";
 
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "nova-nachweis-ueberblick-"));
 for (const line of fs.readFileSync(path.join(process.cwd(), ".env"), "utf8").split("\n")) {
   const match = line.match(/^\s*OPENAI_API_KEY\s*=\s*"?([^"\n]*)"?/);
   if (match && !process.env.OPENAI_API_KEY) process.env.OPENAI_API_KEY = match[1];
 }
-process.env.DATABASE_URL = `file:${path.join(tmp, "nachweis.db")}`;
 process.env.NOVA_HOME = path.join(tmp, "home");
 delete process.env.RANKPILOT_CHECKS_TOKEN;
 const lines: string[] = [];
@@ -29,8 +28,7 @@ const check = (ok: boolean, message: string) => {
 const gesprochen = (text: string) => !/\*\*|^#|\n\s*[-*•] /m.test(text);
 
 async function main() {
-  const push = spawnSync("npx", ["prisma", "db", "push", "--skip-generate", "--accept-data-loss"], { env: process.env, encoding: "utf8" });
-  if (push.status !== 0) throw new Error(push.stderr);
+  wegwerfDatenbank();
   const home = process.env.NOVA_HOME!;
   fs.mkdirSync(path.join(home, "gedaechtnis"), { recursive: true });
   fs.mkdirSync(path.join(home, "claude", "auftraege"), { recursive: true });

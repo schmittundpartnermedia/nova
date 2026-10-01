@@ -3,13 +3,12 @@
  * Ohne Lead-Scanner-API, ohne Apple Mail, ohne DNS: Test-Tageslauf, Test-Postfach, Test-MX. Wegwerf-DB und -NOVA_HOME.
  */
 import assert from "node:assert/strict";
-import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { wegwerfDatenbank } from "./lib/wegwerf-db";
 
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "nova-test-tagesbetrieb-"));
-process.env.DATABASE_URL = `file:${path.join(tmp, "test.db")}`;
 process.env.NOVA_HOME = path.join(tmp, "home");
 // Die Check-Zählung fragt die echte App ab; im Test nie.
 delete process.env.RANKPILOT_CHECKS_TOKEN;
@@ -32,8 +31,7 @@ const t = (stunde: number, minute: number) => new Date(heute.getFullYear(), heut
 const heuteWochentag = heute.getDay() === 0 ? 7 : heute.getDay();
 
 async function main() {
-  const push = spawnSync("npx", ["prisma", "db", "push", "--skip-generate", "--accept-data-loss"], { env: process.env, encoding: "utf8" });
-  if (push.status !== 0) throw new Error(`Test-Datenbank konnte nicht angelegt werden:\n${push.stderr}`);
+  wegwerfDatenbank();
 
   const home = process.env.NOVA_HOME!;
   const { prisma } = await import("@/lib/prisma");

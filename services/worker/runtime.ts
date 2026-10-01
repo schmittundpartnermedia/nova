@@ -55,7 +55,6 @@ registerWorkHandler("nachfass.tick", nachfassTickWorkHandler);
 registerWorkHandler("termin.erinnerung", terminErinnerungWorkHandler);
 
 export async function tickWorker(workerId: string, now = new Date()) {
-  await prisma.$queryRawUnsafe("PRAGMA journal_mode=WAL;");
   await pauseAbandonedJobs(now);
   await recoverExpiredLeases(now);
   const leased = await leaseDueWork(workerId, now);

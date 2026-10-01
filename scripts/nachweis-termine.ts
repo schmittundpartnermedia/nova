@@ -5,17 +5,16 @@
  * Joachim sagt „Ja, um 10“ → Termin gespeichert, im Kalender, Erinnerung geplant → Erinnerung über den Worker-Takt.
  * Ausgabe: docs/nachweis-termine.txt
  */
-import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { wegwerfDatenbank } from "./lib/wegwerf-db";
 
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "nova-nachweis-termine-"));
 for (const line of fs.readFileSync(path.join(process.cwd(), ".env"), "utf8").split("\n")) {
   const match = line.match(/^\s*OPENAI_API_KEY\s*=\s*"?([^"\n]*)"?/);
   if (match && !process.env.OPENAI_API_KEY) process.env.OPENAI_API_KEY = match[1];
 }
-process.env.DATABASE_URL = `file:${path.join(tmp, "nachweis.db")}`;
 process.env.NOVA_HOME = path.join(tmp, "home");
 
 const lines: string[] = [];
@@ -29,8 +28,7 @@ function check(ok: boolean, message: string) {
 }
 
 async function main() {
-  const push = spawnSync("npx", ["prisma", "db", "push", "--skip-generate", "--accept-data-loss"], { env: process.env, encoding: "utf8" });
-  if (push.status !== 0) throw new Error(`Nachweis-Datenbank konnte nicht angelegt werden:\n${push.stderr}`);
+  wegwerfDatenbank();
 
   const { prisma } = await import("@/lib/prisma");
   const { runHeadLoop, verlaufsInhalt, jetztText } = await import("@/agents/master/head");

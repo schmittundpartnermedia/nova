@@ -3,13 +3,13 @@
  * Wegwerf-Git-Projekt mit eigenem „origin“ (bare Repo), Test-Claude, das Dateien ändert, Wegwerf-DB und -NOVA_HOME.
  */
 import assert from "node:assert/strict";
-import { execSync, spawnSync } from "node:child_process";
+import { execSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { wegwerfDatenbank } from "./lib/wegwerf-db";
 
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "nova-test-claude-"));
-process.env.DATABASE_URL = `file:${path.join(tmp, "test.db")}`;
 process.env.NOVA_HOME = path.join(tmp, "home");
 
 const origin = path.join(tmp, "origin.git");
@@ -35,8 +35,7 @@ function projektAufsetzen(pruefenOk = true, liveOk = true) {
 }
 
 async function main() {
-  const push = spawnSync("npx", ["prisma", "db", "push", "--skip-generate", "--accept-data-loss"], { env: process.env, encoding: "utf8" });
-  if (push.status !== 0) throw new Error(push.stderr);
+  wegwerfDatenbank();
   sh(`git init --bare -b main ${origin}`, tmp);
   sh(`git clone ${origin} ${repo}`, tmp);
   sh('git config user.email "test@nova" && git config user.name "Test"');
