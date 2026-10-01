@@ -1,7 +1,11 @@
-/** Konten, die NOVA steuern darf (Entwurf + Versand). */
+/**
+ * Konten, die NOVA steuern darf (Entwurf + Versand).
+ * check@b2b-rankpilot.de: eigene Domain für Kaltakquise (Kunden-Kampagnen, Tagesbetrieb), damit rankpilot.de geschützt bleibt.
+ */
 export const DEFAULT_STEERABLE_MAIL_ADDRESSES = [
   "info@elevum.io",
   "joachim@rankpilot.de",
+  "check@b2b-rankpilot.de",
 ] as const;
 
 export function steerableMailAddresses(): string[] {

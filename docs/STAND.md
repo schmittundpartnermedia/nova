@@ -214,6 +214,8 @@ Abschluss dieser Runde: `tsc`, `eslint`, `next build`, `npm run macos:build` gr�
 
 **01.10.2026, 09:33–10:14 – Erste echte Kunden-Kampagne:** Joachim hat in NOVA.app „Schreinereien Pforzheim“ gestartet: 9 Mails von joachim@rankpilot.de, alle 5 Minuten, alle 9 im Ordner Gesendet bestätigt (`VERIFIED`), Blindow ohne Adresse übersprungen, jede Mail mit eigenem Check-Link, Nachfass ab 07.10. geplant. Abschlussmeldung kam. Gefunden: „1 Adresse war ungültig und wurden …“ – Einzahl korrigiert, Test ergänzt (wirkt im Hintergrund-Läufer erst nach Neustart der App).
 
+**01.10.2026 – Eigene Versanddomain für Kaltakquise (Joachims Vorschlag):** `check@b2b-rankpilot.de`. DNS geprüft: MX/SPF/DKIM (IONOS s1/s2)/DMARC p=none vorhanden; Domain im August 2026 angelegt → ohne Ruf, darum Hochfahren empfohlen (Woche 1: 15/Tag, dann 25, 35, ab Woche 4: 50). In `lib/mail/steerable.ts` als steuerbarer Absender ergänzt; lokal: Anzeigename „rankPilot Joachim Schmitt“, Signatur „rankpilot Joachim“, `~/Nova/tagesbetrieb.json` → Absender check@b2b-rankpilot.de, 15 Mails/Tag; Gedächtnis `firma.md`: Kunden-Kampagnen/Tagesbetrieb von check@, Sponsoren/normal von joachim@. **Voraussetzung:** Joachim legt das Konto in Apple Mail an (Passwort trägt er selbst ein). Nicht geprüft: Versand von dieser Adresse.
+
 ## Dran
 
 **Joachim, wenn er zurück ist:**
