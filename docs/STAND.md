@@ -246,6 +246,8 @@ Abschluss dieser Runde: `tsc`, `eslint`, `next build`, `npm run macos:build` gr�
 - Offen (Joachim entscheidet): `Projekte/joachim/rankPilot` ist eine ältere Kopie der Webseite (Stand 23.09., gleiches GitHub-Repo) – Verwechslungsgefahr.
 - Warnung: Auf der My Book 24 liegen weitere Ordner, die auf der ELEVUM nicht gefunden wurden (privat, Firmen, FIRMEN, Raw, raw-melina-wedding-alle-hd-unbearbeitet, Toskana, Fulda 2026, DN-wagyu, Capcut, RANK PILOT, rankpilot-Ki-clips, Desktop u. a.). Vor dem Löschen sichern.
 
+**01.10.2026 – Vergleich My Book 24 ↔ ELEVUM vor Joachims Löschung (nur gelesen):** Alle Projektordner unter `My Book 24/Webseiten` sind auf der ELEVUM vollständig vorhanden (gleich oder dort neuer; die 16 nur auf der My Book liegenden DN-masterclass-Dateien stecken im Zweig `entwurf/2026-07-galerie-schriften-anmeldung`). Die übrigen Ordner (privat, Firmen, Videos …) bleiben laut Joachim auf der My Book 24. Nicht gespeicherte Änderungen der alten Kopien `My Book 24/NOVA` (5 Dateien, Cursor-Zeit) und `My Book 24/rankPilot-app` (25 Dateien, Juli, enthält einen App-Datenexport mit Nutzer-E-Mails) auf Joachims Wort als **lokale** Zweige `sicherung/mybook24-2026-10-01` in den ELEVUM-Repos NOVA und rankPilot-app gesichert – bewusst nicht gepusht. Sicherheitsfund: In der Git-Konfiguration von `My Book 24/rankPilot-app` steht ein GitHub-Token im Klartext in der Remote-Adresse – Joachim soll ihn auf GitHub widerrufen (nicht wiederholt, nichts geändert).
+
 ## Dran
 
 **Joachim (Abnahme Phase 7), nach Feierabend des Tagesbetriebs oder morgen früh:**
