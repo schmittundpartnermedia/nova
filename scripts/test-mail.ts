@@ -288,54 +288,61 @@ async function main() {
       assert.equal(wert.ok, true);
       assert.equal((wert.data as { betreff: string }).betreff, "Partnerschaft mit Maier - Elektro");
     }],
-    ["Fettdruck und Anzeigename: Sternchen raus, Bereiche fett im Skript, Absender mit Namen", async () => {
+    ["Fettdruck und Anzeigename: Textfassung ohne Sternchen, HTML mit <strong>, Absender mit Namen", async () => {
       const { zerlegeFett } = await import("@/lib/mail/fett");
-      const { newSendScript, replySendScript } = await import("@/lib/mail/apple");
+      const { baueNachricht } = await import("@/lib/mail/nachricht");
+      const { simpleParser } = await import("mailparser");
       const { absenderMitName } = await import("@/lib/mail/absendernamen");
       const z = zerlegeFett("Hallo **Welt**, das ist **„wichtig“**. Ende ** offen");
       assert.equal(z.text, "Hallo Welt, das ist „wichtig“. Ende ** offen");
       assert.deepEqual(z.fett.map((b) => z.text.slice(b.von - 1, b.bis)), ["Welt", "„wichtig“"]);
-      const neu = newSendScript({ sender: "a@b.de", to: "c@d.de", subject: "S", body: z.text, fett: z.fett });
-      assert.match(neu, /set font of characters 7 thru 10 of content of msg to "Helvetica-Bold"/);
-      assert.doesNotMatch(neu, /\*\*Welt/);
-      const antwort = replySendScript({ accountId: "K", mailbox: "INBOX", messageId: "1", body: z.text, replyAll: false, sender: "a@b.de", fett: z.fett });
-      assert.match(antwort, /set font of characters 21 thru 29 of content of theReply/);
       assert.equal(absenderMitName("joachim@rankpilot.de"), "joachim@rankpilot.de", "ohne Eintrag nur die Adresse");
       fs.writeFileSync(path.join(process.env.NOVA_HOME!, "absendernamen.txt"), "# x\njoachim@rankpilot.de = rankPilot Joachim Schmitt\n");
       assert.equal(absenderMitName("joachim@rankpilot.de"), "rankPilot Joachim Schmitt <joachim@rankpilot.de>");
-      // Über das Test-Postfach gesendet: Text kommt ohne Sternchen an.
+      const { raw } = await baueNachricht({ von: absenderMitName("joachim@rankpilot.de"), an: "c@d.de", betreff: "**S**", text: "Hallo **Welt** <b>x</b>\n\nZweiter Absatz" });
+      const m = await simpleParser(raw);
+      assert.equal(m.subject, "S");
+      assert.equal(m.from?.value[0]?.name, "rankPilot Joachim Schmitt");
+      assert.match(m.text ?? "", /^Hallo Welt <b>x<\/b>\n\nZweiter Absatz/);
+      assert.match(String(m.html), /Hallo <strong>Welt<\/strong> &lt;b&gt;x&lt;\/b&gt;<\/p>/);
+      assert.doesNotMatch(String(m.html), /\*\*/);
+      // Über das Test-Postfach gesendet: Entwurf mit Fettdruck geht durch.
       const id = idOf(await entwurf({ text: "Hallo, **Dienstag** passt?" }));
       assert.equal(id.length > 0, true);
     }],
     ["Kopfzeilen: automatische Antworten, Rückläufer und Verlaufs-Kennungen werden richtig gelesen", async () => {
-      const { istAutomatischeAntwort, istRuecklaeufer, verlaufsKennungen, eingangSeitScript } = await import("@/lib/mail/apple");
-      assert.equal(istAutomatischeAntwort("auto-submitted=auto-replied "), true);
-      assert.equal(istAutomatischeAntwort("auto-submitted=no "), false);
-      assert.equal(istAutomatischeAntwort("x-autoreply=yes "), true);
-      assert.equal(istAutomatischeAntwort("precedence=bulk "), false);
-      assert.equal(istAutomatischeAntwort(""), false);
+      const { istAutomatischeAntwort, istRuecklaeufer, verlaufsKennungen } = await import("@/lib/mail/adressen");
+      assert.equal(istAutomatischeAntwort({ "auto-submitted": "auto-replied" }), true);
+      assert.equal(istAutomatischeAntwort({ "auto-submitted": "no" }), false);
+      assert.equal(istAutomatischeAntwort({ "x-autoreply": "yes" }), true);
+      assert.equal(istAutomatischeAntwort({ precedence: "bulk" }), false);
+      assert.equal(istAutomatischeAntwort({ precedence: "auto_reply" }), true);
+      assert.equal(istAutomatischeAntwort({}), false);
       assert.equal(istRuecklaeufer("Mail Delivery System <MAILER-DAEMON@mx.ionos.de>"), true);
       assert.equal(istRuecklaeufer("postmaster@outlook.com"), true);
       assert.equal(istRuecklaeufer("Max <max@firma.de>"), false);
       assert.deepEqual(verlaufsKennungen("<A1@X.de>", "<b2@y> <A1@x.de>"), ["a1@x.de", "b2@y"]);
-      const skript = eingangSeitScript({ seit: new Date(2026, 9, 1, 8, 30, 5), max: 50 });
-      assert.match(skript, /set year of seitDatum to 2026/);
-      assert.match(skript, /set month of seitDatum to 10/);
-      assert.match(skript, /set time of seitDatum to 30605/);
-      assert.match(skript, /junk mailbox whose date received ≥ seitDatum/);
     }],
-    ["Signatur: je Absender aus ~/Nova/signaturen.txt, landet im Sende- und Antwort-Skript", async () => {
-      const { signaturFuer } = await import("@/lib/mail/signaturen");
-      const { newSendScript, replySendScript } = await import("@/lib/mail/apple");
-      fs.writeFileSync(path.join(process.env.NOVA_HOME!, "signaturen.txt"), "# Kommentar\njoachim@rankpilot.de = rankpilot Joachim\n");
-      assert.equal(signaturFuer("Joachim@Rankpilot.de"), "rankpilot Joachim");
+    ["Signatur: je Absender aus ~/Nova/signaturen/<adresse>.txt, unter dem Text, vor dem Zitat", async () => {
+      const { signaturFuer, alleSignaturen } = await import("@/lib/mail/signaturen");
+      const { baueNachricht } = await import("@/lib/mail/nachricht");
+      const { simpleParser } = await import("mailparser");
+      fs.mkdirSync(path.join(process.env.NOVA_HOME!, "signaturen"), { recursive: true });
+      fs.writeFileSync(path.join(process.env.NOVA_HOME!, "signaturen", "joachim@rankpilot.de.txt"), "Viele Grüße\n**Joachim Schmitt**\nrankPilot\n\n");
+      assert.equal(signaturFuer("Joachim@Rankpilot.de"), "Viele Grüße\n**Joachim Schmitt**\nrankPilot");
       assert.equal(signaturFuer("info@elevum.io"), undefined);
-      const neu = newSendScript({ sender: "joachim@rankpilot.de", to: "a@b.de", subject: "S", body: "T", signature: "rankpilot Joachim" });
-      assert.match(neu, /set message signature of msg to signature "rankpilot Joachim"/);
-      assert.ok(neu.indexOf("message signature") < neu.indexOf("send msg"), "Signatur vor dem Senden setzen");
-      const antwort = replySendScript({ accountId: "K", mailbox: "INBOX", messageId: "1", body: "T", replyAll: false, sender: "joachim@rankpilot.de", signature: "rankpilot Joachim" });
-      assert.match(antwort, /set message signature of theReply to signature "rankpilot Joachim"/);
-      assert.ok(!newSendScript({ sender: "x@y.de", to: "a@b.de", subject: "S", body: "T" }).includes("message signature"));
+      assert.deepEqual(alleSignaturen().map((s) => s.absender), ["joachim@rankpilot.de"]);
+      const { raw } = await baueNachricht({
+        von: "joachim@rankpilot.de", an: "a@b.de", betreff: "Re: Frage", text: "Gern.", signatur: signaturFuer("joachim@rankpilot.de"),
+        antwortAuf: { messageId: "<orig@x.de>", references: ["<erst@x.de>"], von: "Max <max@x.de>", datum: new Date(2026, 9, 1, 9, 5), text: "Haben Sie Zeit?" },
+      });
+      const m = await simpleParser(raw);
+      const text = m.text ?? "";
+      assert.ok(text.indexOf("Gern.") < text.indexOf("Joachim Schmitt") && text.indexOf("Joachim Schmitt") < text.indexOf("> Haben Sie Zeit?"));
+      assert.match(text, /Am 1\. Oktober 2026 um 09:05 schrieb Max <max@x\.de>:/);
+      assert.match(String(m.html), /<strong>Joachim Schmitt<\/strong>/);
+      assert.equal(m.inReplyTo, "<orig@x.de>");
+      assert.deepEqual(m.references, ["<erst@x.de>", "<orig@x.de>"]);
     }],
   ];
 

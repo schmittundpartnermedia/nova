@@ -7,6 +7,9 @@
 #   scripts/server/nova.sh stop       – Notschalter: alles von NOVA anhalten
 #   scripts/server/nova.sh start      – wieder starten
 #   scripts/server/nova.sh oeffnen    – NOVA im Browser auf dem Mac öffnen (sichere Verbindung über SSH)
+#   scripts/server/nova.sh passwort <adresse>
+#                                     – Mail-Passwort für ein Konto eintragen (verdeckte Eingabe; landet nur in
+#                                       /home/nova/Nova/geheim/mail/<adresse>, lesbar nur für „nova“)
 set -euo pipefail
 
 SERVER="${NOVA_SERVER:-nova@87.106.179.99}"
@@ -22,8 +25,20 @@ case "${1:-status}" in
     (sleep 2 && open "http://127.0.0.1:${PORT_LOKAL}") &
     ssh -N -L "${PORT_LOKAL}:127.0.0.1:3100" "$SERVER"
     ;;
+  passwort)
+    adresse="$(printf '%s' "${2:-}" | tr '[:upper:]' '[:lower:]')"
+    if ! printf '%s' "$adresse" | grep -Eq '^[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}$'; then
+      echo "Aufruf: nova.sh passwort <adresse>" >&2
+      exit 1
+    fi
+    read -r -s -p "Passwort für ${adresse}: " pw
+    echo
+    [ -n "$pw" ] || { echo "Leer – nichts geändert." >&2; exit 1; }
+    printf '%s' "$pw" | ssh "$SERVER" "umask 077 && mkdir -p ~/Nova/geheim/mail && cat > ~/Nova/geheim/mail/${adresse} && echo 'Gespeichert für ${adresse}.'"
+    unset pw
+    ;;
   *)
-    echo "Befehle: status | logs | stop | start | oeffnen" >&2
+    echo "Befehle: status | logs | stop | start | oeffnen | passwort <adresse>" >&2
     exit 1
     ;;
 esac

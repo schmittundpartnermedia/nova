@@ -10,7 +10,7 @@ import { decodeMailRef, type Postfach } from "@/services/mail/postfach";
 
 /**
  * Mail-Entwürfe (Communication, channel "email") und ihr Versand.
- * Ein Weg für Kopf und Hintergrund-Läufer: Entwurf → Freigabe prüfen → Apple Mail → in „Gesendet“ bestätigt.
+ * Ein Weg für Kopf und Hintergrund-Läufer: Entwurf → Freigabe prüfen → Mailserver nimmt an → in „Gesendet“ abgelegt.
  */
 
 const EMAIL = /^[^\s@<>]+@[^\s@<>]+\.[^\s@<>]+$/;

@@ -4,14 +4,14 @@ import { getVisibleContextWindow } from "@/services/conversation";
 import { ensureGedaechtnis } from "@/lib/gedaechtnis/store";
 import { bootstrapTools } from "@/services/tools/registry";
 import { resolveHead } from "@/providers/ai/head";
-import { AppleMailPostfach } from "@/connectors/mail/apple";
+import { ImapPostfach } from "@/connectors/mail/imap";
 import { publicErrorMessage } from "@/lib/secrets";
 import type { ProviderMode } from "@/types/ai";
 import type { OrbState } from "@/types";
 import { schliesseAbgelaufeneFreigaben } from "@/services/approvals";
 import { DIALOG_HISTORY_SIZE } from "@/types/conversation";
 
-const postfach = new AppleMailPostfach();
+const postfach = new ImapPostfach();
 
 export type MasterEvent =
   | { type: "status"; orbState: OrbState; statusMessage: string }

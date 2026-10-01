@@ -1,4 +1,4 @@
-import { AppleMailPostfach } from "@/connectors/mail/apple";
+import { ImapPostfach } from "@/connectors/mail/imap";
 import { sendeEntwurf } from "@/services/mail/entwuerfe";
 import { nachKampagnenVersand } from "@/services/kampagnen";
 import type { Postfach } from "@/services/mail/postfach";
@@ -40,4 +40,4 @@ export function mailSendHandler(postfach: Postfach) {
   };
 }
 
-export const mailSendWorkHandler = mailSendHandler(new AppleMailPostfach());
+export const mailSendWorkHandler = mailSendHandler(new ImapPostfach());

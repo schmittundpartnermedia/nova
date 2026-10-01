@@ -15,7 +15,7 @@ import type { NovaToolDefinition } from "@/services/tools/types";
 
 const FAEHIGKEITEN = [
   "mir Dinge merken (Firma, Kunden, Projekte) und im Gespräch darauf zurückgreifen",
-  "Mails in Apple Mail lesen und zusammenfassen",
+  "Mails lesen und zusammenfassen (alle Konten aus ~/Nova/mailkonten.txt)",
   "Antworten und neue Mails entwerfen – gesendet wird erst nach deinem Ja oder mit Dauerfreigabe",
   "Mail-Vorlagen mit Platzhaltern füllen (z. B. Sponsoren-Anschreiben)",
   "Kampagnen: eine Kontaktliste mit einer Vorlage im Abstand anschreiben und Antworten erkennen (auch wenn ein Kollege antwortet)",
@@ -59,7 +59,7 @@ export const novaStatusTool: NovaToolDefinition = {
     if (/Noch nichts hinterlegt/.test(firma)) fehlt.push("Ich weiß noch nichts über deine Firma – sag „Merk dir: …“.");
     if (!vorlagen.includes("kunden")) fehlt.push("Kunden-Vorlage (~/Nova/vorlagen/kunden.md) – ohne sie kann ich keine Kunden anschreiben und der Tagesbetrieb startet nicht.");
     if (!vorlagen.includes("sponsoren")) fehlt.push("Sponsoren-Vorlage (~/Nova/vorlagen/sponsoren.md).");
-    if (!alleSignaturen().length) fehlt.push("Signatur-Zuordnung (~/Nova/signaturen.txt).");
+    if (!alleSignaturen().length) fehlt.push("Signatur (~/Nova/signaturen/<adresse>.txt).");
     if (!process.env.RANKPILOT_CHECKS_TOKEN?.trim()) fehlt.push("Schlüssel für die Check-Zählung (RANKPILOT_CHECKS_TOKEN in NOVAs .env) – ohne ihn sehe ich nicht, wer über meine Mails den Check startet.");
     if (tagesbetrieb.aktiv && !vorlagen.includes(tagesbetrieb.vorlage)) fehlt.push(`Der Tagesbetrieb ist an, aber die Vorlage „${tagesbetrieb.vorlage}“ fehlt.`);
 

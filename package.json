@@ -31,6 +31,7 @@
     "test:plattformen": "tsx scripts/test-plattformen.ts",
     "test:kosten": "tsx scripts/test-kosten.ts",
     "test:termine": "tsx scripts/test-termine.ts",
+    "test:imap": "tsx scripts/test-imap.ts",
     "nachweis:phase5": "tsx scripts/nachweis-phase5-claude.ts",
     "nachweis:ueberblick": "tsx scripts/nachweis-ueberblick.ts",
     "nachweis:phase7": "tsx scripts/nachweis-phase7.ts",
@@ -39,7 +40,10 @@
   },
   "dependencies": {
     "@prisma/client": "^6.16.3",
+    "imapflow": "^2.2.1",
+    "mailparser": "^3.9.33",
     "next": "16.3.5",
+    "nodemailer": "^10.0.13",
     "openai": "^7.20.0",
     "playwright-core": "^1.63.0",
     "react": "19.2.8",
@@ -48,7 +52,9 @@
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
+    "@types/mailparser": "^3.9.0",
     "@types/node": "^20",
+    "@types/nodemailer": "^8.0.2",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "eslint": "^9",

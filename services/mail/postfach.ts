@@ -1,12 +1,12 @@
 /**
  * Das Postfach, wie der Kopf es sieht: lesen, senden, antworten.
- * Einzige echte Umsetzung ist Apple Mail (`connectors/mail/apple.ts`); Tests setzen eine eigene ein.
+ * Echte Umsetzung: IMAP/SMTP beim Mailanbieter (`connectors/mail/imap.ts`); Tests setzen eine eigene ein.
  */
 
 export type MailKonto = { appleId: string; email: string };
 
 export type MailKopf = {
-  /** Opaker Verweis auf die Nachricht in Apple Mail; so an mail_lesen / mail_antworten zurückgeben. */
+  /** Opaker Verweis auf die Nachricht im Postfach; so an mail_lesen / mail_antworten zurückgeben. */
   ref: string;
   konto: string;
   von: string;

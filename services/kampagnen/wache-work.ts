@@ -1,8 +1,8 @@
-import { AppleMailPostfach } from "@/connectors/mail/apple";
+import { ImapPostfach } from "@/connectors/mail/imap";
 import { resolveHead } from "@/providers/ai/head";
 import { postfachWache } from "@/services/kampagnen/wache";
 
-const postfach = new AppleMailPostfach();
+const postfach = new ImapPostfach();
 
 /** Worker-Handler „postfach.wache“. */
 export async function postfachWacheWorkHandler(item: {

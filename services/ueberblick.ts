@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/prisma";
-import { parseMailAddress } from "@/lib/mail/apple";
+import { parseMailAddress } from "@/lib/mail/adressen";
 import { alleAuftraege } from "@/services/claude";
 import { termineAnzeigen } from "@/services/termine";
 import { kampagnenStand } from "@/services/kampagnen";
@@ -26,7 +26,7 @@ export async function tagesueberblick(input: { organizationId: string; postfach:
       neueste: mails.slice(0, 5).map((mail) => ({ von: parseMailAddress(mail.von).name || parseMailAddress(mail.von).email, betreff: mail.betreff })),
     };
   } catch (error) {
-    postfach = { fehler: `Apple Mail war nicht lesbar: ${error instanceof Error ? error.message : String(error)}` };
+    postfach = { fehler: `Das Postfach war nicht lesbar: ${error instanceof Error ? error.message : String(error)}` };
   }
 
   // Antworten aus Kampagnen, auf die noch keine Antwort rausging (Entwurf liegt evtl. schon bereit).

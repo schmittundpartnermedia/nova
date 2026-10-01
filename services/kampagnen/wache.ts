@@ -2,7 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import type { Communication } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
-import { istRuecklaeufer, normalisiereMessageId, parseMailAddress } from "@/lib/mail/apple";
+import { istRuecklaeufer, normalisiereMessageId, parseMailAddress } from "@/lib/mail/adressen";
 import { sperre } from "@/lib/mail/sperrliste";
 import { steerableMailAddresses } from "@/lib/mail/steerable";
 import { novaHomeDir } from "@/lib/gedaechtnis/paths";
@@ -74,7 +74,7 @@ export async function postfachWache(input: {
     const neueAntworten = await pruefeEingang(input, gesendet, jetzt);
     return { neueAntworten, weiter: true };
   } finally {
-    // Auch wenn Apple Mail gerade nicht antwortet: Die Wache bleibt geplant.
+    // Auch wenn das Postfach gerade nicht antwortet: Die Wache bleibt geplant.
     await planePostfachWache(input.organizationId, new Date(jetzt.getTime() + WACHE_INTERVALL_MS));
   }
 }

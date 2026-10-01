@@ -89,7 +89,7 @@ async function main() {
       assert.match(bericht.kurz, /2 Checks über meine Mails gestartet/);
       assert.match(inhalt, /1 Antworten eingegangen, 1 Abwesenheitsnotizen/);
     }],
-    ["Tagesüberblick: was wartet, was läuft, Zahlen seit gestern; Apple Mail nicht lesbar wird ehrlich gesagt", async () => {
+    ["Tagesüberblick: was wartet, was läuft, Zahlen seit gestern; Postfach nicht lesbar wird ehrlich gesagt", async () => {
       const { tagesueberblick } = await import("@/services/ueberblick");
       type Postfach = import("@/services/mail/postfach").Postfach;
       const ref = "ref-antwort-1";
@@ -123,7 +123,7 @@ async function main() {
 
       const kaputt: Postfach = { ...postfach, neueste: async () => { throw new Error("Mail antwortet nicht"); } };
       const ohneMail = await tagesueberblick({ organizationId: org.id, postfach: kaputt, checkQuelle: async () => ({ eingerichtet: true, checks: [] }) });
-      assert.deepEqual(ohneMail.postfach, { fehler: "Apple Mail war nicht lesbar: Mail antwortet nicht" });
+      assert.deepEqual(ohneMail.postfach, { fehler: "Das Postfach war nicht lesbar: Mail antwortet nicht" });
     }],
     ["Ohne Schlüssel: ehrlicher Hinweis statt Zahl, keine Netzabfrage", async () => {
       assert.deepEqual(await appCheckQuelle(new Date()), { eingerichtet: false, grund: "RANKPILOT_CHECKS_TOKEN fehlt in NOVAs .env" });

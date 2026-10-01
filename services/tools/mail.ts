@@ -1,5 +1,5 @@
 import { isSteerableMailAddress, steerableMailAddresses } from "@/lib/mail/steerable";
-import { parseMailAddress } from "@/lib/mail/apple";
+import { parseMailAddress } from "@/lib/mail/adressen";
 import { fuelleVorlage, importiereVorlagen, vorlagenDir } from "@/lib/mail/vorlagen";
 import { createStandingPolicy, revokeStandingPolicy } from "@/services/approvals";
 import { erstelleEntwurf, sendeEntwurf, type Entwurf } from "@/services/mail/entwuerfe";
@@ -30,7 +30,7 @@ function fehler(error: unknown): NovaToolResult {
 export const mailLesenTool: NovaToolDefinition = {
   name: "mail_lesen",
   description:
-    "Liest Apple Mail. modus=neueste oder ungelesen: Liste der letzten Mails aus dem gemeinsamen Posteingang (anzahl 1–15) mit Absender, Betreff, Eingang und Textanfang. modus=nachricht: vollständiger Text einer Mail; dafür ref aus einer vorherigen Liste angeben. Jede Mail hat eine ref, die du für mail_antworten brauchst.",
+    "Liest die Postfächer. modus=neueste oder ungelesen: Liste der letzten Mails aus den Posteingängen aller Konten (anzahl 1–15) mit Absender, Betreff, Eingang und Textanfang. modus=nachricht: vollständiger Text einer Mail; dafür ref aus einer vorherigen Liste angeben. Jede Mail hat eine ref, die du für mail_antworten brauchst.",
   parameters: {
     type: "object",
     properties: {
@@ -46,7 +46,7 @@ export const mailLesenTool: NovaToolDefinition = {
       const modus = str(args.modus);
       if (modus === "nachricht") {
         const mail = await ctx.postfach.lesen(str(args.ref));
-        if (!mail) return { ok: false, executed: false, error: "Diese Mail ist in Apple Mail nicht (mehr) zu finden." };
+        if (!mail) return { ok: false, executed: false, error: "Diese Mail ist im Postfach nicht (mehr) zu finden." };
         return { ok: true, executed: false, data: { ...mail, text: mail.text.slice(0, TEXT_LIMIT) } };
       }
       const anzahl = Math.min(Math.max(Math.round(Number(args.anzahl) || 5), 1), 15);
@@ -108,7 +108,7 @@ export const mailAntwortenTool: NovaToolDefinition = {
     try {
       const ref = str(args.ref);
       const original = await ctx.postfach.lesen(ref);
-      if (!original) return { ok: false, executed: false, error: "Die Originalmail ist in Apple Mail nicht zu finden." };
+      if (!original) return { ok: false, executed: false, error: "Die Originalmail ist im Postfach nicht zu finden." };
       const an = parseMailAddress(original.von).email;
       if (!an) return { ok: false, executed: false, error: "Absender der Originalmail ist unklar." };
       const absender = str(args.absender) || (isSteerableMailAddress(original.konto) ? original.konto : "");
@@ -138,7 +138,7 @@ export const mailAntwortenTool: NovaToolDefinition = {
 export const mailSendenTool: NovaToolDefinition = {
   name: "mail_senden",
   description:
-    "Sendet einen Entwurf über Apple Mail. Nur aufrufen, wenn der Nutzer das Senden ausdrücklich verlangt. Ohne Dauerfreigabe kommt status=freigabe_noetig mit freigabe_id zurück: dann den Nutzer einmal fragen (Empfänger + Betreff nennen) und erst nach seinem Ja erneut mit dieser freigabe_id aufrufen. Gesendet ist die Mail nur bei status=gesendet.",
+    "Sendet einen Entwurf über den Mailserver des Absenders. Nur aufrufen, wenn der Nutzer das Senden ausdrücklich verlangt. Ohne Dauerfreigabe kommt status=freigabe_noetig mit freigabe_id zurück: dann den Nutzer einmal fragen (Empfänger + Betreff nennen) und erst nach seinem Ja erneut mit dieser freigabe_id aufrufen. Gesendet ist die Mail nur bei status=gesendet.",
   parameters: {
     type: "object",
     properties: {

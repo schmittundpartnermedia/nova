@@ -1,7 +1,7 @@
 /**
  * Fettdruck in Mails: Vorlagen und Kopf markieren Wichtiges mit **so**.
- * Beim Senden über Apple Mail werden die Sternchen entfernt und die Stellen als Zeichenbereiche fett gesetzt.
- * Bereiche sind 1-basiert und inklusiv in UTF-16-Zeichen, wie AppleScript „characters i thru j“ sie zählt.
+ * Beim Senden werden daraus <strong>-Stellen in der HTML-Fassung; die Textfassung kommt ohne Sternchen.
+ * Bereiche (für die Chat-Karte) sind 1-basiert und inklusiv in UTF-16-Zeichen.
  */
 export type FettBereich = { von: number; bis: number };
 

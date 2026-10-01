@@ -1,8 +1,8 @@
-import { AppleMailPostfach } from "@/connectors/mail/apple";
+import { ImapPostfach } from "@/connectors/mail/imap";
 import { planeTagesbetriebTick, tagesbetriebTick, TICK_MS } from "@/services/tagesbetrieb";
 import { echterMxPruefer } from "@/services/tagesbetrieb/pruefen";
 
-const postfach = new AppleMailPostfach();
+const postfach = new ImapPostfach();
 
 /** Worker-Handler „tagesbetrieb.tick“: ein Takt, dann den nächsten planen (solange eingeschaltet). */
 export async function tagesbetriebTickWorkHandler(item: { organizationId: string }): Promise<{ ok: boolean; retry?: boolean; note?: string }> {

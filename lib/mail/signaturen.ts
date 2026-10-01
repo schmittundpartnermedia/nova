@@ -3,25 +3,31 @@ import path from "node:path";
 import { novaHomeDir } from "@/lib/gedaechtnis/paths";
 
 /**
- * Welche Apple-Mail-Signatur zu welchem Absender gehört: `~/Nova/signaturen.txt`,
- * eine Zeile je Konto, z. B. `joachim@rankpilot.de = rankpilot Joachim`.
+ * Signatur je Absender als Textdatei: `~/Nova/signaturen/<adresse>.txt` (z. B. joachim@rankpilot.de.txt).
+ * Wird unter jede Mail dieses Absenders gesetzt; **fett** ist erlaubt. Ohne Datei geht die Mail ohne Signatur raus.
  */
-export function signaturenDatei(): string {
-  return path.join(novaHomeDir(), "signaturen.txt");
-}
-
-export function alleSignaturen(): Array<{ absender: string; signatur: string }> {
-  const file = signaturenDatei();
-  if (!fs.existsSync(file)) return [];
-  return fs
-    .readFileSync(file, "utf8")
-    .split("\n")
-    .map((line) => line.match(/^\s*([^\s=#]+@[^\s=]+)\s*=\s*(.+?)\s*$/))
-    .filter((match): match is RegExpMatchArray => Boolean(match))
-    .map((match) => ({ absender: match[1]!.toLowerCase(), signatur: match[2]! }));
+export function signaturenOrdner(): string {
+  return path.join(novaHomeDir(), "signaturen");
 }
 
 export function signaturFuer(absender: string): string | undefined {
-  const email = absender.trim().toLowerCase();
-  return alleSignaturen().find((item) => item.absender === email)?.signatur;
+  const datei = path.join(signaturenOrdner(), `${absender.trim().toLowerCase()}.txt`);
+  try {
+    const text = fs.readFileSync(datei, "utf8").replace(/\s+$/, "");
+    return text || undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+export function alleSignaturen(): Array<{ absender: string }> {
+  try {
+    return fs
+      .readdirSync(signaturenOrdner())
+      .filter((name) => name.endsWith(".txt") && name.includes("@"))
+      .map((name) => ({ absender: name.slice(0, -4).toLowerCase() }))
+      .filter((item) => signaturFuer(item.absender));
+  } catch {
+    return [];
+  }
 }
