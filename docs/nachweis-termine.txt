@@ -1,0 +1,33 @@
+NOVA Nachweis Termine – 2026-10-01T15:16:53.950Z – jetzt laut Kopf: Donnerstag, 1. Oktober 2026, 17:16 Uhr (Zeitzone des Macs)
+Modell: gpt-6.1-sol (echte API). Postfach: Test-Postfach. Kalender: im Speicher (nicht Apple Kalender).
+
+— Antwort der Schreinerei Weber geht ein, Postfach-Wache läuft —
+  ✓ Antwort erkannt
+NOVA (Meldung): Thomas Weber findet das Angebot interessant und bittet um einen Rückruf am Donnerstagvormittag, ohne genaue Uhrzeit. Da es heute schon Nachmittag ist, schlage ich nächsten Donnerstag, den 8. Oktober, um 10 Uhr vor. Soll ich den Rückruf so eintragen?
+  ✓ Meldung nennt Donnerstag und fragt, ob sie eintragen soll
+  ✓ noch nichts eingetragen
+
+Joachim: Ja, trag es ein, um 10 Uhr.
+Werkzeuge: [{"name":"mail_lesen","executed":false},{"name":"termin_anlegen","executed":true}]
+NOVA: Der Rückruf bei Thomas Weber ist für Donnerstag, den 8. Oktober, um 10 Uhr im Apple Kalender eingetragen. Ich erinnere dich um 9:45 Uhr.
+  ✓ termin_anlegen ausgeführt
+  Termin: „Rückruf Thomas Weber, 07231 123456“, Thu Oct 08 2026 10:00:00 GMT+0200 (Central European Summer Time), Notiz: Thomas Weber, Schreinerei Weber. Telefon: 07231 123456. Angebot zur Sichtbarkeit bei Google findet er interessant und bittet um Rückruf am Donnerstagvormittag., Quelle: cmupogh1l000659rzisqutz2h
+  ✓ Donnerstag 10:00, in der Zukunft
+  ✓ Titel nennt Weber
+  ✓ Telefonnummer übernommen
+  ✓ Quelle ist die Antwort-Mail
+  ✓ im Kalender eingetragen
+  ✓ Erinnerung 15 Minuten vorher geplant
+
+Joachim: Was steht nächste Woche an?
+Werkzeuge: [{"name":"termine_anzeigen","executed":false}]
+NOVA: Nächste Woche ist bei mir ein Termin hinterlegt: Am Donnerstag, den 8. Oktober, um 10 Uhr rufst du Thomas Weber von der Schreinerei Weber an. Dafür sind 30 Minuten eingeplant, und ich erinnere dich um 9:45 Uhr.
+  ✓ liest die Termine
+  ✓ nennt den Rückruf bei Weber
+
+— Worker-Takt zur Erinnerungszeit —
+NOVA (Meldung): In 15 Minuten: Rückruf Thomas Weber, 07231 123456.
+  ✓ Erinnerung kommt
+
+ERGEBNIS: Nachweis Termine bestanden (echte API, Test-Postfach, Kalender im Speicher, Worker-Takt mit fester Zeit).
+Nicht geprüft: echter Apple Kalender (macOS-Freigabe), Erinnerung in NOVA.app – das ist Joachims Abnahme.

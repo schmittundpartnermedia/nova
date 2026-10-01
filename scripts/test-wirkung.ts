@@ -11,7 +11,8 @@ import path from "node:path";
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "nova-test-wirkung-"));
 process.env.DATABASE_URL = `file:${path.join(tmp, "test.db")}`;
 process.env.NOVA_HOME = path.join(tmp, "home");
-delete process.env.RANKPILOT_CHECKS_TOKEN;
+// Leer statt gelöscht: Prisma lädt beim Import die .env nach und würde den echten Schlüssel wieder setzen.
+process.env.RANKPILOT_CHECKS_TOKEN = "";
 
 async function main() {
   const push = spawnSync("npx", ["prisma", "db", "push", "--skip-generate", "--accept-data-loss"], { env: process.env, encoding: "utf8" });

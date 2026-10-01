@@ -30,10 +30,12 @@
     "test:wirkung": "tsx scripts/test-wirkung.ts",
     "test:plattformen": "tsx scripts/test-plattformen.ts",
     "test:kosten": "tsx scripts/test-kosten.ts",
+    "test:termine": "tsx scripts/test-termine.ts",
     "nachweis:phase5": "tsx scripts/nachweis-phase5-claude.ts",
     "nachweis:ueberblick": "tsx scripts/nachweis-ueberblick.ts",
     "nachweis:phase7": "tsx scripts/nachweis-phase7.ts",
-    "nachweis:kosten": "tsx scripts/nachweis-kosten.ts"
+    "nachweis:kosten": "tsx scripts/nachweis-kosten.ts",
+    "nachweis:termine": "tsx scripts/nachweis-termine.ts"
   },
   "dependencies": {
     "@prisma/client": "^6.16.3",

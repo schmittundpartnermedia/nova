@@ -53,7 +53,7 @@ function test(name: string, fn: () => Promise<void>) {
   tests.push([name, fn]);
 }
 
-test("Werkzeugliste: Gedächtnis (Phase 1), Mail und Vorlagen (Phase 2), Kampagnen (Phase 3), Kundensuche, Kontaktlisten und Tagesbetrieb (Phase 4), Claude-Aufträge (Phase 5), Wirkung der Mails, Tagesüberblick, Plattform-Einträge (Phase 7), Kosten – nichts sonst", async () => {
+test("Werkzeugliste: Gedächtnis (Phase 1), Mail und Vorlagen (Phase 2), Kampagnen (Phase 3), Kundensuche, Kontaktlisten und Tagesbetrieb (Phase 4), Claude-Aufträge (Phase 5), Wirkung der Mails, Tagesüberblick, Plattform-Einträge (Phase 7), Kosten, Termine – nichts sonst", async () => {
   assert.deepEqual(
     listTools().map((t) => t.name).sort(),
     [
@@ -89,6 +89,9 @@ test("Werkzeugliste: Gedächtnis (Phase 1), Mail und Vorlagen (Phase 2), Kampagn
       "tagesbetrieb",
       "tagesbetrieb_freigeben",
       "tagesueberblick",
+      "termin_aendern",
+      "termin_anlegen",
+      "termine_anzeigen",
       "vorlage_fuellen",
       "vorlage_liste",
       "web_suchen",

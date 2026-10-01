@@ -119,7 +119,7 @@ async function pruefeEingang(
     const eingang = new Date(mail.eingang);
     if (Number.isNaN(eingang.getTime()) || eingang <= original.sentAt) continue;
 
-    await prisma.communication.create({
+    const antwortZeile = await prisma.communication.create({
       data: {
         organizationId: input.organizationId,
         channel: "email",
@@ -155,6 +155,7 @@ async function pruefeEingang(
           `und sag Joachim in einem gesprochenen Satz, dass ${firma} abgesagt hat und nicht mehr angeschrieben wird.`,
         `Sonst: lege mit mail_antworten einen passenden Antwortentwurf von ${original.fromAddress} an, nicht senden. ` +
           `Sag Joachim dann in zwei, drei gesprochenen Sätzen, dass ${firma} geantwortet hat, worum es geht und was du kurz vorschlägst, und frag, ob du so senden oder etwas ergänzen sollst. Den Entwurf nicht wörtlich wiedergeben; er erscheint als Karte im Chat.`,
+        `Bittet ${firma} um einen Rückruf oder nennt einen Termin (z. B. „Rufen Sie mich Donnerstag an“): trag NICHTS ein, sondern nenne Tag und Uhrzeit (oder dass die Uhrzeit fehlt) und frag am Ende, ob du den Termin eintragen sollst (dann termin_anlegen mit quelle_id ${antwortZeile.id}, Telefonnummer aus der Mail in die Notiz). Ein Rückruf braucht keinen Antwortentwurf, außer die Mail fragt etwas.`,
       ].join("\n"),
       context: { organizationId: input.organizationId, postfach: input.postfach },
     });
@@ -162,7 +163,8 @@ async function pruefeEingang(
       organizationId: input.organizationId,
       anlass: `kampagne-antwort:${kennung}`,
       text: kopf.reply,
-      werkzeugNotiz: kopf.werkzeugNotiz,
+      // Die Mail-ID braucht der Kopf, wenn Joachim später „ja, trag den Termin ein“ sagt.
+      werkzeugNotiz: [kopf.werkzeugNotiz, `Antwort-Mail ${firma}: communication ${antwortZeile.id}, ref ${mail.ref}`].filter(Boolean).join("\n"),
     });
   }
 

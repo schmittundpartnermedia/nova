@@ -22,6 +22,7 @@ model Organization {
   jobs                    Job[]
   campaigns               Campaign[]
   plattformen             Plattform[]
+  termine                 Termin[]
   jobSteps                JobStep[]
   activities              Activity[]
   memoryEntries           MemoryEntry[]
@@ -1450,4 +1451,30 @@ model Plattform {
 
   @@unique([organizationId, name])
   @@map("plattformen")
+}
+
+/// Termine und Rückrufe (z. B. aus Antworten auf Kampagnen-Mails). NOVA erinnert zur eingestellten Zeit;
+/// auf Wunsch zusätzlich im Apple Kalender (kalenderUid).
+model Termin {
+  id                String   @id @default(cuid())
+  organizationId    String   @map("organization_id")
+  titel             String
+  beginn            DateTime
+  dauerMinuten      Int      @default(30) @map("dauer_minuten")
+  notiz             String?
+  /// Erinnerung so viele Minuten vorher (0 = keine).
+  erinnerungMinuten Int      @default(15) @map("erinnerung_minuten")
+  /// geplant | erinnert | erledigt | abgesagt
+  status            String   @default("geplant")
+  /// Woher: z. B. Kampagnen-Antwort (communications.id).
+  quelleId          String?  @map("quelle_id")
+  kalenderName      String?  @map("kalender_name")
+  kalenderUid       String?  @map("kalender_uid")
+  createdAt         DateTime @default(now()) @map("created_at")
+  updatedAt         DateTime @updatedAt @map("updated_at")
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, beginn])
+  @@map("termine")
 }

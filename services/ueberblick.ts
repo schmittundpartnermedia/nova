@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { parseMailAddress } from "@/lib/mail/apple";
 import { alleAuftraege } from "@/services/claude";
+import { termineAnzeigen } from "@/services/termine";
 import { kampagnenStand } from "@/services/kampagnen";
 import { leseEinstellungen } from "@/services/tagesbetrieb/einstellungen";
 import { wirkung } from "@/services/wirkung";
@@ -9,7 +10,7 @@ import { schliesseAbgelaufeneFreigaben } from "@/services/approvals";
 import type { CheckQuelle } from "@/lib/rankpilot/checks";
 
 /**
- * Tagesüberblick („Was liegt heute an?“): was auf Joachim wartet (Antworten, Freigaben, Entwürfe, Claude-Ergebnisse),
+ * Tagesüberblick („Was liegt heute an?“): was auf Joachim wartet (Antworten, Freigaben, Entwürfe, Claude-Ergebnisse, Termine),
  * was läuft (Kampagnen, Nachfass, Tagesbetrieb, Claude) und die Zahlen seit gestern. Alles aus dem echten Zustand.
  */
 export async function tagesueberblick(input: { organizationId: string; postfach: Postfach; jetzt?: Date; checkQuelle?: CheckQuelle }) {
@@ -71,6 +72,10 @@ export async function tagesueberblick(input: { organizationId: string; postfach:
             : "läuft",
     }));
 
+  // Heute und morgen; bereits erinnerte Termine von heute bleiben drin, bis sie erledigt sind.
+  const heuteFrueh = new Date(jetzt.getFullYear(), jetzt.getMonth(), jetzt.getDate());
+  const termine = await termineAnzeigen({ organizationId: org, von: heuteFrueh, bis: new Date(heuteFrueh.getTime() + 2 * 86_400_000) });
+
   const cfg = leseEinstellungen();
   const wirkt = await wirkung({ organizationId: org, seit: gestern, bis: jetzt, quelle: input.checkQuelle });
   const gesendetSeitGestern = await prisma.communication.count({
@@ -83,6 +88,7 @@ export async function tagesueberblick(input: { organizationId: string; postfach:
       offene_freigaben: freigaben.map((item) => item.description),
       entwuerfe_nicht_gesendet: entwuerfe.map((row) => ({ an: row.recipientName || row.toAddress, betreff: row.subject })),
       claude_auftraege: claude,
+      termine_heute_und_morgen: termine.map((t) => ({ wann: t.wann, titel: t.titel, notiz: t.notiz })),
     },
     laeuft: {
       kampagnen: staende.map((stand) => ({ name: stand.name, status: stand.status, gesendet: stand.gesendet, gesamt: stand.gesamt })),

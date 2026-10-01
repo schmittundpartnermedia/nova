@@ -264,6 +264,18 @@ Abschluss dieser Runde: `tsc`, `eslint`, `next build`, `npm run macos:build` gr�
 - Auf Joachims Wort: `.env`-Dateien unter `/var/www` (dn-masterclass, rankpilot, rankpilot-website samt Sicherungen) von 644 auf 600 (nur root); alle Node-Prozesse laufen als root, nginx (www-data) kann sie nicht mehr lesen – geprüft; alle Prozesse online, rankpilot.de und app.rankpilot.de 200.
 - NOVA.app muss neu gestartet werden, damit sie den Schlüssel liest.
 
+**01.10.2026, ~17:30 – Termine und Rückrufe gebaut (Claude Code), Abnahme steht aus.** Joachims Auftrag: „Termine aus Antworten wie ‚Rufen Sie mich Donnerstag an‘ werden eingetragen, und NOVA erinnert dich.“
+- Kopf kennt jetzt Datum und Uhrzeit (`jetztText()` in den Anweisungen); vorher wusste er nicht, welcher Tag „Donnerstag“ ist.
+- Modell `Termin` (Migration `20261001170000_termine`, in die echte DB eingespielt, vorher gesichert). Werkzeuge `termin_anlegen`, `termine_anzeigen`, `termin_aendern` (verschieben, erledigt, absagen).
+- Erinnerung über den Hintergrund-Läufer (Work-Item `termin.erinnerung`, Standard 15 Min. vorher): kurze Meldung „In 15 Minuten: Rückruf …“, nur einmal; verschoben → alte Erinnerung gestrichen; Worker zu spät (Mac schlief) → „Verpasst, war …“. Handler bekommen dafür die Zeit des Worker-Takts (`now`).
+- Apple Kalender (`lib/kalender/apple.ts`) über den NOVA-Helfer wie Apple Mail: eintragen (mit Kalender-Hinweis), ändern, bei Absage entfernen. Nur Skripte `tell application "Calendar"`, kein Shell. Kalender: `~/Nova/kalender.json` ({"kalender": "Name"}), sonst der erste beschreibbare. Scheitert der Kalender, bleibt der Termin bei NOVA gespeichert und erinnert; NOVA sagt den Grund.
+- Postfach-Wache: Bittet ein Betrieb um Rückruf/Termin, trägt NOVA nichts ein, sondern fragt („Soll ich den Rückruf für Donnerstag, 8. Oktober, 10 Uhr eintragen?“). Nach Joachims Ja liest sie die Mail nach und übernimmt Telefonnummer und Ansprechpartner. Termine von heute und morgen stehen im Tagesüberblick.
+- Nebenbei: `test:wirkung` fragte seit dem gesetzten Token die echte App ab (Prisma lädt beim Import die `.env` nach) – Test abgedichtet.
+
+Nachweise: `tsc`, `eslint` grün; `test:termine` 8/8 (neu, Kalender im Speicher, Erinnerung über den echten Worker-Takt; Gegenprobe: alte Erinnerung nicht gestrichen → Test schlägt fehl), alle anderen Tests grün (kopf 10, mail 19, kampagne 14, kunden 9, tagesbetrieb 15, claude 8, nachfass 6, wirkung 5, plattformen 10, kosten 5). `npm run nachweis:termine` → `docs/nachweis-termine.txt`: echte API, Test-Postfach, Kalender im Speicher – Vorschlag, „Ja, um 10“, Termin Do 8.10. 10:00 mit Telefonnummer, Erinnerung kommt.
+
+Nicht geprüft: echter Apple Kalender (das AppleScript lief nie gegen Calendar; beim ersten Eintrag fragt macOS, ob der NOVA-Helfer den Kalender steuern darf – der Text im Dialog spricht noch von Apple Mail, weil eine Änderung den Helfer neu signieren würde), Erinnerung in NOVA.app (braucht Neustart).
+
 ## Dran
 
 **Joachim (Abnahme Phase 7), nach Feierabend des Tagesbetriebs oder morgen früh:**
@@ -271,7 +283,11 @@ Abschluss dieser Runde: `tsc`, `eslint`, `next build`, `npm run macos:build` gr�
 2. Profiltext diktieren, falls NOVA nachfragt (Beschreibung, Kategorien, welche E-Mail für Plattform-Konten).
 3. „Such mir die Plattformen, auf denen rankpilot eingetragen sein sollte.“ → Liste.
 4. „Fang mit <zwei Plattformen deiner Wahl> an.“ → Chrome öffnet sich, NOVA füllt aus, ruft dich bei Captcha/Mail → „weiter“ → am Ende speicherst du. Prüfen: Profile angelegt, Zugangsdaten im Schlüsselbund (Schlüsselbundverwaltung, Suche „NOVA:“), Liste zeigt den Stand.
-Danach offen: Kalender.
+**Joachim (Abnahme Termine), nach Neustart von NOVA.app:**
+1. „Trag mir für morgen 9 Uhr einen Rückruf bei Schreinerei Test ein.“ → beim ersten Mal macOS-Abfrage „Kalender steuern“ erlauben → Eintrag im Apple Kalender prüfen.
+2. Um 8:45 meldet sich NOVA: „In 15 Minuten: …“.
+3. „Sag den Termin ab.“ → verschwindet aus dem Kalender.
+Optional: Kalender festlegen in `~/Nova/kalender.json`, z. B. `{"kalender": "Arbeit"}`.
 
 ## Was Joachim liefert (siehe Auftrag, Anhang)
 

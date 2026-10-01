@@ -17,6 +17,7 @@ import { scannerLaufWorkHandler } from "@/services/leads/work";
 import { tagesbetriebTickWorkHandler } from "@/services/tagesbetrieb/work";
 import { nachfassTickWorkHandler } from "@/services/nachfass/work";
 import { claudeLaufWorkHandler, claudeLiveWorkHandler } from "@/services/claude/work";
+import { terminErinnerungWorkHandler } from "@/services/termine-work";
 
 export type WorkHandler = (item: {
   id: string;
@@ -25,6 +26,8 @@ export type WorkHandler = (item: {
   kind: string;
   payload: Record<string, unknown>;
   attempts: number;
+  /** Zeit des Worker-Takts. */
+  now: Date;
 }) => Promise<{ ok: boolean; retry?: boolean; note?: string }>;
 
 const handlers = new Map<string, WorkHandler>();
@@ -48,6 +51,8 @@ registerWorkHandler("claude.lauf", claudeLaufWorkHandler);
 registerWorkHandler("claude.live", claudeLiveWorkHandler);
 
 registerWorkHandler("nachfass.tick", nachfassTickWorkHandler);
+
+registerWorkHandler("termin.erinnerung", terminErinnerungWorkHandler);
 
 export async function tickWorker(workerId: string, now = new Date()) {
   await prisma.$queryRawUnsafe("PRAGMA journal_mode=WAL;");
@@ -76,6 +81,7 @@ export async function tickWorker(workerId: string, now = new Date()) {
         kind: item.kind,
         payload,
         attempts: item.attempts,
+        now,
       });
       const current = await prisma.workItem.findFirst({
         where: { id: item.id, organizationId: item.organizationId },
