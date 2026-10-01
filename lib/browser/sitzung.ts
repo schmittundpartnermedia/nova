@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
-import { chromium, type BrowserContext, type Page } from "playwright-core";
+import { chromium, type BrowserContext, type Frame, type Locator, type Page } from "playwright-core";
 import { novaHomeDir } from "@/lib/gedaechtnis/paths";
 import { asUntrustedDataBlock, wrapExternalContent } from "@/lib/research/injection";
 
@@ -34,7 +34,8 @@ export type SeitenStand = {
 
 export type PasswortQuelle = () => Promise<string | null>;
 
-type Sitzung = { context: BrowserContext; page: Page };
+/** refs: welche Nummer in welchem Rahmen (iframe) steht – Formulare stecken oft in eingebetteten Rahmen. */
+type Sitzung = { context: BrowserContext; page: Page; refs: Map<string, Frame> };
 type Starter = () => Promise<BrowserContext>;
 
 const globalRef = globalThis as unknown as { __novaBrowser?: Sitzung; __novaBrowserStarter?: Starter };
@@ -65,13 +66,15 @@ export function setzeBrowserStarter(starter: Starter | null): void {
 
 async function sitzung(): Promise<Sitzung> {
   const vorhanden = globalRef.__novaBrowser;
+  // Ein Fenster aus einer älteren Programmversion hat noch keine Rahmen-Zuordnung.
+  if (vorhanden && !vorhanden.refs) vorhanden.refs = new Map();
   if (vorhanden && !vorhanden.page.isClosed()) return vorhanden;
   const context = vorhanden?.context ?? (await (globalRef.__novaBrowserStarter ?? echterStarter)());
   context.on("close", () => {
     if (globalRef.__novaBrowser?.context === context) globalRef.__novaBrowser = undefined;
   });
   const page = context.pages()[0] ?? (await context.newPage());
-  globalRef.__novaBrowser = { context, page };
+  globalRef.__novaBrowser = { context, page, refs: new Map() };
   return globalRef.__novaBrowser;
 }
 
@@ -92,94 +95,161 @@ export async function oeffneSeite(url: string): Promise<SeitenStand> {
 }
 
 /** Läuft in der Seite: vergibt Nummern (data-nova-ref) und sammelt Felder, Knöpfe, Text, iframes. */
-const SEITEN_SKRIPT = String.raw`(() => {
+const SEITEN_SKRIPT = String.raw`((praefix) => {
   const sichtbar = (el) => {
     const r = el.getBoundingClientRect();
     const s = getComputedStyle(el);
     return (r.width > 0 || r.height > 0) && s.visibility !== "hidden" && s.display !== "none";
   };
+  const wurzelVon = (el) => el.getRootNode ? el.getRootNode() : document;
   const beschriftung = (el) => {
     const id = el.getAttribute("id");
-    const fuer = id ? document.querySelector('label[for="' + CSS.escape(id) + '"]') : null;
+    const wurzel = wurzelVon(el);
+    const fuer = id && wurzel.querySelector ? wurzel.querySelector('label[for="' + CSS.escape(id) + '"]') : null;
     const umschliessend = el.closest("label");
+    const beschrieben = el.getAttribute("aria-labelledby");
+    const ueber = beschrieben && wurzel.getElementById ? wurzel.getElementById(beschrieben.split(" ")[0]) : null;
     return (el.getAttribute("aria-label") || (fuer && fuer.textContent) || (umschliessend && umschliessend.textContent) ||
-      el.getAttribute("placeholder") || el.getAttribute("title") || "").replace(/\s+/g, " ").trim().slice(0, 120);
+      (ueber && ueber.textContent) || el.getAttribute("placeholder") || el.getAttribute("title") || el.getAttribute("name") || "")
+      .replace(/\s+/g, " ").trim().slice(0, 120);
   };
+  // Alle Elemente, auch in offenen Shadow-DOM-Bäumen (Web-Komponenten).
+  const alle = [];
+  const sammle = (wurzel) => {
+    for (const el of Array.from(wurzel.querySelectorAll("*"))) {
+      alle.push(el);
+      if (el.shadowRoot) sammle(el.shadowRoot);
+    }
+  };
+  sammle(document);
   let n = 0;
-  document.querySelectorAll("[data-nova-ref]").forEach((el) => el.removeAttribute("data-nova-ref"));
+  alle.forEach((el) => el.removeAttribute && el.removeAttribute("data-nova-ref"));
   const felder = [];
   const knoepfe = [];
-  for (const el of Array.from(document.querySelectorAll("input, select, textarea, button, a[href], [role=button]"))) {
+  const passt = (el) => el.matches && el.matches("input, select, textarea, button, a[href], [role=button], [role=checkbox], [role=combobox], [contenteditable=true]");
+  for (const el of alle.filter(passt)) {
     const istDatei = el instanceof HTMLInputElement && el.type === "file";
     if (!sichtbar(el) && !istDatei) continue;
     if (el instanceof HTMLInputElement && el.type === "hidden") continue;
-    const ref = String(++n);
+    const ref = praefix + String(++n);
     el.setAttribute("data-nova-ref", ref);
-    if (el instanceof HTMLInputElement || el instanceof HTMLSelectElement || el instanceof HTMLTextAreaElement) {
+    if (el instanceof HTMLInputElement || el instanceof HTMLSelectElement || el instanceof HTMLTextAreaElement || el.getAttribute("contenteditable") === "true") {
       const typ = el instanceof HTMLInputElement ? el.type : el instanceof HTMLSelectElement ? "select" : "textarea";
       if (typ === "submit" || typ === "button" || typ === "image") {
         knoepfe.push({ ref, text: el.value || beschriftung(el), art: "knopf" });
         continue;
       }
       // Passwörter werden nie ausgelesen.
-      const wert = typ === "password" ? (el.value ? "(ausgefüllt)" : "")
+      const roh = el.value == null ? el.textContent || "" : el.value;
+      const wert = typ === "password" ? (roh ? "(ausgefüllt)" : "")
         : typ === "checkbox" || typ === "radio" ? (el.checked ? "ja" : "nein")
-        : String(el.value == null ? "" : el.value).slice(0, 200);
+        : String(roh).slice(0, 200);
       felder.push({
-        ref, typ, name: el.getAttribute("name") || "", beschriftung: beschriftung(el), pflicht: el.required, wert,
+        ref, typ, name: el.getAttribute("name") || "", beschriftung: beschriftung(el), pflicht: !!el.required || el.getAttribute("aria-required") === "true", wert,
         optionen: el instanceof HTMLSelectElement ? Array.from(el.options).map((o) => o.text.trim()).slice(0, 60) : undefined,
       });
     } else {
-      const text = (el.innerText || el.getAttribute("aria-label") || "").replace(/\s+/g, " ").trim().slice(0, 80);
+      const text = (el.innerText || el.getAttribute("aria-label") || el.getAttribute("title") || "").replace(/\s+/g, " ").trim().slice(0, 80);
       if (!text) continue;
       knoepfe.push({ ref, text, art: el.tagName === "A" ? "link" : "knopf", ziel: el.getAttribute("href") || undefined });
     }
   }
-  const frames = Array.from(document.querySelectorAll("iframe")).map((f) => f.getAttribute("src") || "");
   const text = ((document.body && document.body.innerText) || "").replace(/\n{3,}/g, "\n\n").slice(0, 7000);
-  return { titel: document.title, text, felder, knoepfe: knoepfe.slice(0, 120), frames };
-})()`;
+  return { titel: document.title, text, felder, knoepfe: knoepfe.slice(0, 120) };
+})`;
 
-/** Liest die aktuelle Seite: Text, Felder und Knöpfe mit Nummern. */
-export async function leseSeite(): Promise<SeitenStand> {
-  const { page } = await sitzung();
-  // Als Text übergeben: Der TypeScript-Übersetzer würde in eine Funktion Hilfscode einbauen, den die Seite nicht kennt.
-  const roh = (await page.evaluate(SEITEN_SKRIPT)) as {
-    titel: string;
-    text: string;
-    felder: Array<Record<string, unknown>>;
-    knoepfe: Array<Record<string, unknown>>;
-    frames: string[];
-  };
+type RahmenRoh = { titel: string; text: string; felder: Array<Record<string, unknown>>; knoepfe: Array<Record<string, unknown>> };
+
+/** Ist dieser eingebettete Rahmen sichtbar groß genug, um etwas Bedienbares zu enthalten? */
+async function rahmenSichtbar(frame: Frame): Promise<{ breite: number; hoehe: number } | null> {
+  const element = await frame.frameElement().catch(() => null);
+  const box = element ? await element.boundingBox().catch(() => null) : null;
+  return box && box.width >= 40 && box.height >= 20 ? { breite: box.width, hoehe: box.height } : null;
+}
+
+/** Ein sichtbares Captcha zum Anklicken – unsichtbare Prüfungen (reCAPTCHA v3, „size=invisible“) zählen nicht. */
+function istSichtbaresCaptcha(url: string, groesse: { breite: number; hoehe: number } | null): boolean {
+  if (!groesse || !/recaptcha|hcaptcha|turnstile|challenges\.cloudflare|captcha/i.test(url)) return false;
+  if (/size=invisible|recaptcha\/api2\/bframe/i.test(url) && groesse.hoehe < 100) return false;
+  return groesse.breite >= 150 && groesse.hoehe >= 60;
+}
+
+async function leseEinmal(sitz: Sitzung): Promise<SeitenStand> {
+  const { page } = sitz;
+  sitz.refs.clear();
+  const felder: Feld[] = [];
+  const knoepfe: Knopf[] = [];
+  const texte: string[] = [];
   const hinweise: string[] = [];
-  if (roh.frames.some((src) => /recaptcha|hcaptcha|turnstile|captcha/i.test(src)) || /captcha|ich bin kein roboter|i'm not a robot/i.test(roh.text)) {
-    hinweise.push("Captcha auf der Seite – das muss Joachim lösen (browser_braucht_nutzer).");
+  let titel = "";
+  let captcha = false;
+  const frames = page.frames();
+  for (let i = 0; i < frames.length; i++) {
+    const frame = frames[i]!;
+    const hauptseite = frame === page.mainFrame();
+    const groesse = hauptseite ? null : await rahmenSichtbar(frame);
+    if (!hauptseite && istSichtbaresCaptcha(frame.url(), groesse)) captcha = true;
+    if (!hauptseite && !groesse) continue;
+    const praefix = hauptseite ? "" : `r${i}-`;
+    // Als Text übergeben: Der TypeScript-Übersetzer würde in eine Funktion Hilfscode einbauen, den die Seite nicht kennt.
+    const roh = (await frame.evaluate(`${SEITEN_SKRIPT}(${JSON.stringify(praefix)})`).catch(() => null)) as RahmenRoh | null;
+    if (!roh) continue;
+    if (hauptseite) titel = roh.titel;
+    for (const f of roh.felder) {
+      const typ = String(f.typ);
+      sitz.refs.set(String(f.ref), frame);
+      felder.push({
+        ref: String(f.ref),
+        art: typ === "select" ? "auswahl" : typ === "textarea" ? "text" : typ === "checkbox" ? "haken" : typ === "radio" ? "option" : typ === "file" ? "datei" : "eingabe",
+        typ,
+        beschriftung: String(f.beschriftung),
+        name: String(f.name),
+        pflicht: Boolean(f.pflicht),
+        wert: String(f.wert),
+        ...(Array.isArray(f.optionen) ? { optionen: f.optionen as string[] } : {}),
+      });
+    }
+    for (const k of roh.knoepfe) {
+      sitz.refs.set(String(k.ref), frame);
+      knoepfe.push(k as Knopf);
+    }
+    if (roh.text.trim()) texte.push(hauptseite ? roh.text : `[eingebetteter Rahmen ${frame.url().slice(0, 80)}]\n${roh.text.slice(0, 3000)}`);
   }
-  if (/bestätigungs(code|mail)|verification code|code eingeben|zwei-faktor|2fa|one-time code/i.test(roh.text)) {
+  const alleTexte = texte.join("\n\n");
+  if (captcha || /ich bin kein roboter|i'm not a robot/i.test(alleTexte)) {
+    hinweise.push("Sichtbares Captcha auf der Seite – das muss Joachim lösen (browser_braucht_nutzer).");
+  }
+  if (/bestätigungs(code|mail)|verification code|code eingeben|zwei-faktor|2fa|one-time code/i.test(alleTexte)) {
     hinweise.push("Die Seite will einen Code oder eine Bestätigung – Joachim fragen (browser_braucht_nutzer).");
   }
-  const felder: Feld[] = (roh.felder as Array<Record<string, unknown>>).map((f) => {
-    const typ = String(f.typ);
-    return {
-      ref: String(f.ref),
-      art: typ === "select" ? "auswahl" : typ === "textarea" ? "text" : typ === "checkbox" ? "haken" : typ === "radio" ? "option" : typ === "file" ? "datei" : "eingabe",
-      typ,
-      beschriftung: String(f.beschriftung),
-      name: String(f.name),
-      pflicht: Boolean(f.pflicht),
-      wert: String(f.wert),
-      ...(Array.isArray(f.optionen) ? { optionen: f.optionen as string[] } : {}),
-    };
-  });
   return {
     url: page.url(),
-    titel: roh.titel,
+    titel,
     // Seitentext ist fremder Inhalt: Daten, keine Anweisungen.
-    text: asUntrustedDataBlock(wrapExternalContent(page.url(), roh.text)),
+    text: asUntrustedDataBlock(wrapExternalContent(page.url(), alleTexte)),
     felder,
-    knoepfe: roh.knoepfe as Knopf[],
+    knoepfe: knoepfe.slice(0, 150),
     hinweise,
   };
+}
+
+/** Liest die aktuelle Seite samt sichtbarer eingebetteter Rahmen: Text, Felder und Knöpfe mit Nummern. */
+export async function leseSeite(): Promise<SeitenStand> {
+  const sitz = await sitzung();
+  const stand = await leseEinmal(sitz);
+  if (stand.felder.length) return stand;
+  // Formulare laden oft verzögert nach (Skripte, eingebettete Rahmen): kurz warten und noch einmal lesen.
+  await sitz.page.waitForTimeout(2500);
+  return leseEinmal(sitz);
+}
+
+async function finde(ref: string): Promise<Locator> {
+  const sitz = await sitzung();
+  const sauber = ref.trim().replace(/[^a-z0-9-]/gi, "");
+  const frame = sitz.refs.get(sauber) ?? sitz.page.mainFrame();
+  const ziel = frame.locator(`[data-nova-ref="${sauber}"]`);
+  if (!(await ziel.count())) throw new Error(`Element ${ref} gibt es nicht (Seite neu lesen).`);
+  return ziel;
 }
 
 /**
@@ -187,11 +257,9 @@ export async function leseSeite(): Promise<SeitenStand> {
  * {{datei:<name>}} (nur Dateien aus ~/Nova/assets/, z. B. das Logo), „ja“/„nein“ für Haken, Optionstext für Auswahllisten.
  */
 export async function fuelleAus(eintraege: Array<{ ref: string; wert: string }>, passwort: PasswortQuelle): Promise<string[]> {
-  const { page } = await sitzung();
   const erledigt: string[] = [];
   for (const { ref, wert } of eintraege) {
-    const feld = page.locator(`[data-nova-ref="${ref.replace(/[^0-9]/g, "")}"]`);
-    if (!(await feld.count())) throw new Error(`Feld ${ref} gibt es nicht (Seite neu lesen).`);
+    const feld = await finde(ref);
     const typ = await feld.evaluate((el) => (el instanceof HTMLInputElement ? el.type : el instanceof HTMLSelectElement ? "select" : el.tagName.toLowerCase()));
     if (wert.includes("{{passwort}}")) {
       if (typ !== "password") throw new Error(`{{passwort}} gehört nur in ein Passwortfeld, Feld ${ref} ist „${typ}“.`);
@@ -230,8 +298,7 @@ export async function fuelleAus(eintraege: Array<{ ref: string; wert: string }>,
 
 export async function klicke(ref: string): Promise<SeitenStand> {
   const { page } = await sitzung();
-  const ziel = page.locator(`[data-nova-ref="${ref.replace(/[^0-9]/g, "")}"]`);
-  if (!(await ziel.count())) throw new Error(`Knopf ${ref} gibt es nicht (Seite neu lesen).`);
+  const ziel = await finde(ref);
   await ziel.click({ timeout: 10_000 });
   await page.waitForLoadState("domcontentloaded", { timeout: 15_000 }).catch(() => undefined);
   await page.waitForLoadState("networkidle", { timeout: 5_000 }).catch(() => undefined);

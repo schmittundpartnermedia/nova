@@ -45,12 +45,33 @@ const CAPTCHA = `<!doctype html><html><head><title>Bestätigung</title></head><b
 <h1>Fast geschafft</h1><iframe src="https://www.google.com/recaptcha/api2/anchor?k=test" width="300" height="80"></iframe>
 <button>Weiter</button></body></html>`;
 
+const MIT_RAHMEN = `<!doctype html><html><head><title>Für Software-Anbieter</title></head><body>
+<h1>Software kostenfrei listen</h1><p>Füllen Sie das Formular aus.</p>
+<iframe src="formular.html" width="600" height="420" title="Anmeldeformular"></iframe>
+<iframe src="https://www.google.com/recaptcha/api2/anchor?k=x&size=invisible" width="256" height="60" style="position:absolute;top:-9999px"></iframe>
+<iframe src="https://www.google.com/recaptcha/api2/bframe?k=x" width="0" height="0"></iframe>
+</body></html>`;
+const FORMULAR = `<!doctype html><html><body>
+<form id="f"><label for="sw">Name der Software</label><input id="sw" required>
+<label for="m">Geschäftliche E-Mail</label><input id="m" type="email" required>
+<button type="submit">Absenden</button></form>
+<script>document.getElementById("f").addEventListener("submit",(e)=>{e.preventDefault();document.body.innerHTML="<p>Danke: "+document.getElementById("sw").value+" / "+document.getElementById("m").value+"</p>";});</script>
+</body></html>`;
+const SPAETER = `<!doctype html><html><body><h1>Lädt …</h1><div id="ziel"></div>
+<script>
+customElements.define("nova-feld", class extends HTMLElement { constructor(){ super(); const r=this.attachShadow({mode:"open"}); r.innerHTML='<label for="x">Firmenname</label><input id="x">'; } });
+setTimeout(()=>{ document.getElementById("ziel").innerHTML='<nova-feld></nova-feld>'; }, 1200);
+</script></body></html>`;
+
 async function main() {
   const push = spawnSync("npx", ["prisma", "db", "push", "--skip-generate", "--accept-data-loss"], { env: process.env, encoding: "utf8" });
   if (push.status !== 0) throw new Error(`Test-Datenbank konnte nicht angelegt werden:\n${push.stderr}`);
   fs.mkdirSync(path.join(tmp, "seiten"), { recursive: true });
   fs.writeFileSync(path.join(tmp, "seiten", "registrierung.html"), REGISTRIERUNG);
   fs.writeFileSync(path.join(tmp, "seiten", "captcha.html"), CAPTCHA);
+  fs.writeFileSync(path.join(tmp, "seiten", "anbieter.html"), MIT_RAHMEN);
+  fs.writeFileSync(path.join(tmp, "seiten", "formular.html"), FORMULAR);
+  fs.writeFileSync(path.join(tmp, "seiten", "spaeter.html"), SPAETER);
   fs.mkdirSync(path.join(process.env.NOVA_HOME!, "assets"), { recursive: true });
   fs.writeFileSync(path.join(process.env.NOVA_HOME!, "assets", "logo.png"), Buffer.from("89504e470d0a1a0a", "hex"));
   fs.writeFileSync(path.join(tmp, "geheim.txt"), "nicht hochladen");
@@ -166,6 +187,29 @@ async function main() {
     ["Das Passwort steht in keinem Werkzeugergebnis", async () => {
       const geheim = bund.get("NOVA: Testverzeichnis")!.passwort;
       for (const text of ergebnisse) assert.ok(!text.includes(geheim), "Passwort darf nie im Ergebnis stehen");
+    }],
+    ["Formular im eingebetteten Rahmen wird gelesen, ausgefüllt und abgeschickt; unsichtbares Captcha ist kein Alarm", async () => {
+      const r = await run("browser_oeffnen", { url: url("anbieter.html") });
+      assert.equal(r.ok, true, r.error);
+      const seite = r.data as Seite;
+      assert.deepEqual(seite.felder.map((f) => f.beschriftung), ["Name der Software", "Geschäftliche E-Mail"]);
+      assert.ok(seite.felder.every((f) => /^r\d+-\d+$/.test(f.ref)), "Nummern tragen den Rahmen");
+      assert.deepEqual(seite.hinweise, [], "unsichtbare reCAPTCHA-Rahmen lösen keinen Captcha-Hinweis aus");
+      const aus = await run("browser_ausfuellen", { plattform: "", felder: [{ ref: seite.felder[0]!.ref, wert: "rankPilot" }, { ref: seite.felder[1]!.ref, wert: "info@rankpilot.de" }] });
+      assert.equal(aus.ok, true, aus.error);
+      const knopf = seite.knoepfe.find((k) => k.text === "Absenden")!;
+      const nach = await run("browser_klicken", { ref: knopf.ref });
+      assert.equal(nach.ok, true, nach.error);
+      assert.match((nach.data as Seite).text, /Danke: rankPilot \/ info@rankpilot\.de/);
+    }],
+    ["Nachladendes Formular in einer Web-Komponente (Shadow DOM) wird gefunden", async () => {
+      const r = await run("browser_oeffnen", { url: url("spaeter.html") });
+      const seite = r.data as Seite;
+      const feld = seite.felder.find((f) => f.beschriftung === "Firmenname");
+      assert.ok(feld, `Feld gefunden (${JSON.stringify(seite.felder)})`);
+      const aus = await run("browser_ausfuellen", { plattform: "", felder: [{ ref: feld!.ref, wert: "rankPilot" }] });
+      assert.equal(aus.ok, true, aus.error);
+      assert.equal(((await run("browser_lesen", {})).data as Seite).felder.find((f) => f.beschriftung === "Firmenname")!.wert, "rankPilot");
     }],
     ["Lokale Dateien lassen sich ohne Testmodus nicht öffnen", async () => {
       process.env.NOVA_BROWSER_TESTSEITEN = "";

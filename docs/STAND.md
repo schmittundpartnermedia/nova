@@ -256,6 +256,8 @@ Abschluss dieser Runde: `tsc`, `eslint`, `next build`, `npm run macos:build` gr�
 
 **01.10.2026, ~17:00 – Aufgeräumt (Joachim: „ist alles erledigt“):** 6 alte offene Freigaben (Cursor-Tests 28.09., Test-Mails 30.09., zwei liegen gebliebene Scanner-Freigaben von heute) auf `expired`, Entwurf „AW: Neue Webseite“ an diekuehlenretter.de auf `cancelled` – nichts gelöscht. Neu: offene Freigaben laufen nach 48 Stunden automatisch ab (`schliesseAbgelaufeneFreigaben`, bei jeder Anfrage an NOVA und im Tagesüberblick; erteilte bleiben unberührt; Status `expired` im Typ). Neuer Fall in `test:mail` (19/19), alle anderen Tests grün.
 
+**01.10.2026, ~15:10 – Phase-7-Test durch Joachim: Formular nicht erkannt – behoben.** Ursache 1: Das OMR-Formular („Software kostenfrei listen“) steckt in einem eingebetteten Rahmen (iframe, HubSpot); NOVA las nur die Hauptseite. Ursache 2: Fehlalarm „Captcha lösen“ durch ein unsichtbares reCAPTCHA. Jetzt: Lesen über alle sichtbaren Rahmen (Nummern `r<rahmen>-<n>`, Ausfüllen/Klicken im richtigen Rahmen), offene Shadow-DOM-Bäume, Beschriftung auch über aria-labelledby/name, einmaliges Nachlesen nach 2,5 s bei nachladenden Formularen, Captcha-Hinweis nur bei sichtbarem Captcha-Rahmen. Kopf-Regel: Cookie-Banner ablehnen/„nur notwendige“. `test:plattformen` 10/10 (neu: Formular im Rahmen + unsichtbares Captcha, nachladende Web-Komponente; Gegenprobe ohne Rahmen schlägt fehl). Echte OMR-Seite unsichtbar gelesen (Wegwerf-Profil, nichts abgeschickt): 10 Felder + „Einsenden“ erkannt, kein Captcha-Alarm.
+
 ## Dran
 
 **Joachim (Abnahme Phase 7), nach Feierabend des Tagesbetriebs oder morgen früh:**
