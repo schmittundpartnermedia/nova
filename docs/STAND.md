@@ -261,7 +261,7 @@ Abschluss dieser Runde: `tsc`, `eslint`, `next build`, `npm run macos:build` gr�
 **01.10.2026, ~16:00 – Check-Zählung ganz live; Fehler in rankPilot behoben (auf Joachims Ja).**
 - App: Zweig `nova/check-herkunft` auf Joachims aufgeräumten Stand übernommen (c426b50f), tsc + vitest 1853/1853, gepusht, Blau-Grün-Deploy OK. `GET /api/internal/nova/checks` antwortet ohne Schlüssel mit 401.
 - **Fund:** Auf dem Server war `ADS_CHECK_INGEST_SECRET` nirgends gesetzt – die Webseite hat Checks nie an die App übergeben (80× „ADS_CHECK_INGEST_SECRET fehlt – kein App-Ingest“ im Log; 44 Checks nur als Dateien auf dem Webseiten-Server). Behoben: zufälliger Schlüssel (nie angezeigt) in `/var/www/rankpilot-website/.env` und `/var/www/rankpilot/.env` ergänzt (Sicherungen `.env.vor-nova-20261001`), Webseite neu gestartet (Health 200), App per Blau-Grün neu veröffentlicht (Health OK). Derselbe Schlüssel als `RANKPILOT_CHECKS_TOKEN` in NOVAs `.env` (nicht in Git). NOVAs Abfrage der App getestet: eingerichtet, 0 Checks mit NOVA-Herkunft (richtig, bisher kam ja nichts an). Die 44 alten Checks auf dem Server an die App nachgereicht: 44/44 übernommen.
-- Hinweis: Die `.env`-Dateien auf dem Server sind für alle Server-Nutzer lesbar (644) – kein NOVA-Thema, Joachim entscheidet.
+- Auf Joachims Wort: `.env`-Dateien unter `/var/www` (dn-masterclass, rankpilot, rankpilot-website samt Sicherungen) von 644 auf 600 (nur root); alle Node-Prozesse laufen als root, nginx (www-data) kann sie nicht mehr lesen – geprüft; alle Prozesse online, rankpilot.de und app.rankpilot.de 200.
 - NOVA.app muss neu gestartet werden, damit sie den Schlüssel liest.
 
 ## Dran
