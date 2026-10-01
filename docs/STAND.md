@@ -242,6 +242,10 @@ Abschluss dieser Runde: `tsc`, `eslint`, `next build`, `npm run macos:build` gr�
 - **Nicht geprüft:** echte Plattform, echter macOS-Schlüsselbund, sichtbares Chrome in NOVA.app. `next.config.ts` (playwright-core extern) wirkt erst nach Neustart der App.
 - **Fund nebenbei:** `Projekte/joachim/rankpilot-website` und `rankPilot-app` sind Verknüpfungen (Symlinks) auf `/Volumes/My Book 24/Webseiten/…` – Webseite und App liegen also noch auf der My Book 24, nicht auf ELEVUM. Ohne angeschlossene My Book 24 gehen Claude-Aufträge und Live-Stellen dort nicht. Nichts geändert.
 
+**01.10.2026 – Webseite und App auf die ELEVUM umgezogen (Joachims Vorgabe: alles auf ELEVUM, My Book 24 wird gelöscht).** `Projekte/joachim/rankpilot-website` und `rankPilot-app` waren Verknüpfungen auf `/Volumes/My Book 24/Webseiten/…`. Mit `rsync -a` vollständig kopiert (19 790 bzw. 43 061 Dateien, `diff -rq` ohne inhaltlichen Unterschied, inkl. `.env`), die Verknüpfungen in den Papierkorb, Kopien an ihre Stelle. Git sauber auf `main`, `npm run check` beider Projekte grün, NOVA findet beide unter ELEVUM; keine Verknüpfung unter `Projekte` zeigt mehr auf die My Book 24, auch Terminal-Profil, LaunchAgents, NOVA und Projekt-Skripte nicht. Auf der My Book 24 nichts geändert.
+- Offen (Joachim entscheidet): `Projekte/joachim/rankPilot` ist eine ältere Kopie der Webseite (Stand 23.09., gleiches GitHub-Repo) – Verwechslungsgefahr.
+- Warnung: Auf der My Book 24 liegen weitere Ordner, die auf der ELEVUM nicht gefunden wurden (privat, Firmen, FIRMEN, Raw, raw-melina-wedding-alle-hd-unbearbeitet, Toskana, Fulda 2026, DN-wagyu, Capcut, RANK PILOT, rankpilot-Ki-clips, Desktop u. a.). Vor dem Löschen sichern.
+
 ## Dran
 
 **Joachim (Abnahme Phase 7), nach Feierabend des Tagesbetriebs oder morgen früh:**
