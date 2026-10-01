@@ -38,7 +38,8 @@ async function main() {
   const home = process.env.NOVA_HOME!;
   const { prisma } = await import("@/lib/prisma");
   const { executeTool } = await import("@/services/tools/registry");
-  const { tagesbetriebTick, fuehreTagessucheAus } = await import("@/services/tagesbetrieb");
+  const { tagesbetriebTick } = await import("@/services/tagesbetrieb");
+  const { fuehreGebietssucheAus } = await import("@/services/leads");
   const { leseEinstellungen } = await import("@/services/tagesbetrieb/einstellungen");
   const { holeNeueMeldungen } = await import("@/services/meldungen");
   type Postfach = import("@/services/mail/postfach").Postfach;
@@ -69,6 +70,8 @@ async function main() {
     return { csvPfad: pfad, ausgabe: `Gebiet: 7 Betriebe, 6 mit E-Mail, 120 Anfragen\nCSV geschrieben: ${pfad}` };
   };
   const { naechsteBranche } = await import("@/services/tagesbetrieb/suchplan");
+  const sucheGebiet = (branche: string) =>
+    fuehreGebietssucheAus({ organizationId: org.id, auftrag: { branche, mitte: "Pforzheim", radiusKm: 40 }, runner, mx });
 
   const tests: Array<[string, () => Promise<void>]> = [
     ["Ausgeschaltet: der Takt tut nichts und plant sich nicht neu", async () => {
@@ -94,21 +97,30 @@ async function main() {
       assert.equal(meldungen.length, 1);
       assert.match(meldungen[0]!.text, /Vorlage „kunden“ fehlt/);
     }],
-    ["Ohne Dauerfreigabe für den Scanner: melden statt suchen", async () => {
+    ["Vorrat leer: NOVA schlägt die nächste Branche mit Kosten vor und sucht NICHT selbst – auch mit Dauerfreigabe", async () => {
       fs.mkdirSync(path.join(home, "vorlagen"), { recursive: true });
       fs.writeFileSync(path.join(home, "vorlagen", "kunden.md"), "Betreff: Mehr Sichtbarkeit für {{firma}}\n\n{{anrede}},\n\nbei {{firma}} in {{ort}} ist uns aufgefallen: {{befunde}}.\n");
-      await tick(t(7, 40));
-      assert.equal(await prisma.workItem.count({ where: { kind: "tagesbetrieb.suche" } }), 0);
-      const meldungen = await holeNeueMeldungen(org.id);
-      assert.match(meldungen[0]!.text, /Dauerfreigabe für den Lead-Scanner/);
-    }],
-    ["Mit Dauerfreigabe: Vorrat leer → genau eine Suche geplant", async () => {
       await run("freigabe_scanner_dauer", { aktion: "erteilen", max_pro_tag: 5 });
+      await tick(t(7, 40));
       await tick(t(7, 45));
+      assert.equal(await prisma.workItem.count({ where: { kind: "scanner.lauf" } }), 0, "keine Suche ohne Joachims Ja");
+      const meldungen = await holeNeueMeldungen(org.id);
+      assert.equal(meldungen.length, 1, "Vorschlag nur einmal");
+      assert.match(meldungen[0]!.text, /Im Vorrat für den Tagesbetrieb ist kein Betrieb mehr\. Als Nächstes würde ich alle Betriebe der Branche „Schreinerei“ im Umkreis von 40 km um Pforzheim suchen, etwa [\d,]+ \$, höchstens [\d,]+ \$\. Soll ich das machen, oder lieber eine andere Branche\?/);
+      const gespeichert = await prisma.conversationMessage.findFirstOrThrow({ where: { id: meldungen[0]!.id } });
+      assert.match(gespeichert.metadata ?? "", /freigabe_id/, "Freigabe geht im Werkzeugprotokoll mit");
+    }],
+    ["Joachims Ja zum Vorschlag startet genau diese Gebietssuche", async () => {
+      const meldung = await prisma.conversationMessage.findFirstOrThrow({ where: { content: { contains: "Als Nächstes würde ich" } } });
+      const freigabeId = String(JSON.parse(meldung.metadata ?? "{}").werkzeuge).match(/"freigabe_id":"([^"]+)"/)![1]!;
+      await run("freigabe_scanner_dauer", { aktion: "widerrufen", max_pro_tag: 0 });
+      const ja = await run("kunden_suchen", { branche: "Schreinerei", ort: "Pforzheim", radius_km: 40, freigabe_id: freigabeId });
+      assert.equal((ja.data as { status: string }).status, "gestartet", ja.error);
+      const auftrag = await prisma.workItem.findFirstOrThrow({ where: { kind: "scanner.lauf" } });
+      assert.deepEqual(JSON.parse(auftrag.payload), { branche: "Schreinerei", mitte: "Pforzheim", radiusKm: 40 });
+      // Solange die Suche läuft, schlägt NOVA nichts Neues vor.
       await tick(t(7, 50));
-      assert.equal(await prisma.workItem.count({ where: { kind: "tagesbetrieb.suche" } }), 1);
-      const auftrag = await prisma.workItem.findFirstOrThrow({ where: { kind: "tagesbetrieb.suche" } });
-      assert.deepEqual(JSON.parse(auftrag.payload), { branche: "Schreinerei" }, "erste Branche des Plans");
+      assert.equal((await holeNeueMeldungen(org.id)).length, 0);
     }],
     ["Suche + Prüfung: ganze Branche im Suchgebiet, gültige Adressen geprüft, andere mit Grund verworfen, Branche abgehakt", async () => {
       fs.mkdirSync(path.join(home, "kampagnen"), { recursive: true });
@@ -116,7 +128,7 @@ async function main() {
       await prisma.communication.create({
         data: { organizationId: org.id, channel: "email", direction: "outbound", subject: "alt", body: "alt", status: "sent", toAddress: "hallo@schon.de", sentAt: new Date(Date.now() - 20 * 86_400_000) },
       });
-      const result = await fuehreTagessucheAus({ organizationId: org.id, branche: "Schreinerei", runner, mx });
+      const result = await sucheGebiet("Schreinerei");
       assert.equal(result.ok, true);
       assert.deepEqual(suchAuftraege[0], { branche: "Schreinerei", mitte: "Pforzheim", radiusKm: 40, maxAnfragen: (await import("@/lib/leads/scanner")).schaetzeKosten(40).maxAnfragen });
       assert.equal(result.ok && result.gefunden, 7);
@@ -124,8 +136,8 @@ async function main() {
       assert.equal(naechsteBranche(leseEinstellungen()), "Zahnarztpraxis", "Schreinerei ist im Suchplan abgehakt");
       // wie der Worker: geplanten Auftrag mit Ergebnis-Notiz abschließen
       const { completeWorkItem } = await import("@/services/worker/queue");
-      const auftrag = await prisma.workItem.findFirstOrThrow({ where: { kind: "tagesbetrieb.suche" } });
-      await completeWorkItem(auftrag.id, org.id, "2 Kombi(s), 7 neue Betriebe");
+      const auftrag = await prisma.workItem.findFirstOrThrow({ where: { kind: "scanner.lauf" } });
+      await completeWorkItem(auftrag.id, org.id, "7 Betriebe, 3 neu im Vorrat, 120 Anfragen → liste");
       const leads = await prisma.lead.findMany({ orderBy: { firma: "asc" } });
       const nachFirma = Object.fromEntries(leads.map((lead) => [lead.firma, [lead.status, lead.grund]]));
       assert.deepEqual(nachFirma["Holz Maier"], ["geprueft", null]);
@@ -135,22 +147,18 @@ async function main() {
       assert.deepEqual(nachFirma["Tote Domain"], ["verworfen", "Domain tot.de nimmt keine Mail an"]);
       assert.deepEqual(nachFirma["Gesperrt AG"], ["verworfen", "steht auf der Sperrliste"]);
       assert.deepEqual(nachFirma["Schon Kunde"], ["verworfen", "wurde schon angeschrieben"]);
-      const nochmal = await fuehreTagessucheAus({ organizationId: org.id, branche: "Schreinerei", runner, mx });
+      const nochmal = await sucheGebiet("Schreinerei");
       assert.equal(nochmal.ok && nochmal.neuImVorrat, 0, "gleiche Adressen werden nicht doppelt eingelesen");
-    }],
-    ["Suchläufe des Tagesbetriebs zählen gegen das Tageslimit der Scanner-Freigabe", async () => {
-      const { scannerRunsToday } = await import("@/services/approvals");
-      assert.equal(await scannerRunsToday(org.id), await prisma.workItem.count({ where: { kind: "tagesbetrieb.suche" } }));
-      assert.ok((await scannerRunsToday(org.id)) >= 1);
     }],
     ["Zurückgestellter Betrieb wird wieder aufgenommen, wenn der Scanner ihn in seiner Branche wiederfindet", async () => {
       const maier = await prisma.lead.findFirstOrThrow({ where: { firma: "Holz Maier" } });
       await prisma.lead.update({ where: { id: maier.id }, data: { status: "zurueckgestellt", grund: "Branche kommt später" } });
-      const wieder = await fuehreTagessucheAus({ organizationId: org.id, branche: "Schreinerei", runner, mx });
+      const wieder = await sucheGebiet("Schreinerei");
       assert.equal(wieder.ok && wieder.neuImVorrat, 1, "nur der zurückgestellte Betrieb kommt neu in den Vorrat");
       const danach = await prisma.lead.findUniqueOrThrow({ where: { id: maier.id } });
       assert.deepEqual([danach.status, danach.grund], ["geprueft", null]);
       assert.equal(await prisma.lead.count({ where: { firma: "Holz Maier" } }), 1, "kein zweiter Eintrag");
+      await holeNeueMeldungen(org.id);
     }],
     ["Morgens: Tageskampagne mit EINER Beispiel-Mail zur Freigabe vorgelegt, nichts gesendet", async () => {
       await holeNeueMeldungen(org.id);
@@ -162,7 +170,12 @@ async function main() {
       assert.equal(entwuerfe[0]!.toAddress, "info@holz-maier.de", "Lead mit höchstem Score zuerst");
       assert.equal(entwuerfe[0]!.subject, "Mehr Sichtbarkeit für Holz Maier");
       assert.equal(entwuerfe[0]!.body, "Guten Tag Anton Maier,\n\nbei Holz Maier in Pforzheim ist uns aufgefallen: kein SSL.");
-      const meldungen = await holeNeueMeldungen(org.id);
+      const alle = await holeNeueMeldungen(org.id);
+      // Nur noch 3 im Vorrat (< 5): zusätzlich der Vorschlag für die nächste Branche – gesucht wird nicht.
+      const vorschlag = alle.filter((m) => /Als Nächstes würde ich/.test(m.text));
+      assert.equal(vorschlag.length, 1);
+      assert.match(vorschlag[0]!.text, /Durchsucht sind bisher: Schreinerei\. Als Nächstes würde ich alle Betriebe der Branche „Zahnarztpraxis“/);
+      const meldungen = alle.filter((m) => !/Als Nächstes würde ich/.test(m.text));
       assert.equal(meldungen.length, 1);
       assert.match(meldungen[0]!.text, /bis zu 50 Mails .* 08:00–17:00 Uhr, alle 5 Minuten/);
       const zeile = await prisma.conversationMessage.findFirstOrThrow({ where: { id: meldungen[0]!.id } });
@@ -209,7 +222,7 @@ async function main() {
       assert.match(bericht, /2 Mails gesendet, 1 fehlgeschlagen/);
       assert.ok(bericht.includes(`| 08:10 | Holz Maier | info@holz-maier.de | Mehr Sichtbarkeit für Holz Maier | Kunden-Tagesbetrieb ${datum} |`));
       assert.match(bericht, /1 Kundensuchen|2 Kundensuchen/);
-      assert.match(bericht, /Geschätzte Google-Kosten: mindestens/);
+      assert.match(bericht, /Google-Kosten: etwa 4,20 \$ \(120 Anfragen/);
       assert.match(bericht, /1 × Domain tot.de nimmt keine Mail an/);
       const meldungen = await holeNeueMeldungen(org.id);
       assert.equal(meldungen.length, 1);
@@ -217,15 +230,13 @@ async function main() {
       assert.equal((await tick(t(17, 10))).aktion, "ausserhalb");
       assert.equal((await holeNeueMeldungen(org.id)).length, 0);
     }],
-    ["Alle Branchen im Gebiet durchsucht: keine Suche mehr, einmal melden", async () => {
+    ["Alle Branchen im Gebiet durchsucht: kein Vorschlag mehr, einmal melden", async () => {
       await holeNeueMeldungen(org.id);
-      // Frühere Testschritte haben Suchaufträge geplant; die gelten hier als erledigt (sonst wartet NOVA zu Recht auf sie).
-      await prisma.workItem.updateMany({ where: { kind: "tagesbetrieb.suche", status: "queued" }, data: { status: "completed" } });
       fs.writeFileSync(path.join(home, "tagesbetrieb.json"), JSON.stringify({ ...leseEinstellungen(), branchen: ["Schreinerei"], vorratMindestens: 999 }));
-      const suchenVorher = await prisma.workItem.count({ where: { kind: "tagesbetrieb.suche" } });
+      const suchenVorher = await prisma.workItem.count({ where: { kind: "scanner.lauf" } });
       await tick(t(16, 0));
       await tick(t(16, 5));
-      assert.equal(await prisma.workItem.count({ where: { kind: "tagesbetrieb.suche" } }), suchenVorher);
+      assert.equal(await prisma.workItem.count({ where: { kind: "scanner.lauf" } }), suchenVorher);
       const meldungen = await holeNeueMeldungen(org.id);
       assert.equal(meldungen.length, 1);
       assert.match(meldungen[0]!.text, /Alle 1 Branchen im Umkreis von 40 km um Pforzheim sind durchsucht/);

@@ -1,15 +1,14 @@
 import { prisma } from "@/lib/prisma";
 import { assertOrganizationId } from "@/services/tenant";
 import { fuelleVorlage, leseVorlagen } from "@/lib/mail/vorlagen";
-import { createApprovalRequest, decideApproval, findMatchingPolicy, policyMaxPerDay, scannerRunsToday } from "@/services/approvals";
+import { createApprovalRequest, decideApproval } from "@/services/approvals";
 import { erstelleEntwurf, sendeEntwurf } from "@/services/mail/entwuerfe";
 import type { Postfach } from "@/services/mail/postfach";
 import { enqueueWorkItem } from "@/services/worker/queue";
 import { kuerzlichGemeldet, meldeNutzer } from "@/services/meldungen";
 import { nachfassEinstellung, planePostfachWache } from "@/services/kampagnen";
 import { schreibeTagesbericht } from "@/services/tagesbericht";
-import type { GebietsRunner } from "@/lib/leads/scanner";
-import { fuehreGebietssucheAus } from "@/services/leads";
+import { schaetzeKosten } from "@/lib/leads/scanner";
 import { erledigteBranchen, naechsteBranche } from "@/services/tagesbetrieb/suchplan";
 import { leseEinstellungen, lokalesDatum, zeitfenster, type TagesbetriebEinstellungen } from "@/services/tagesbetrieb/einstellungen";
 import { feststellungAus } from "@/lib/leads/feststellung";
@@ -18,8 +17,8 @@ import { pruefeAdresse, type MxPruefer } from "@/services/tagesbetrieb/pruefen";
 
 /**
  * Kunden-Tagesbetrieb (Worker-Job „tagesbetrieb.tick“ alle 5 Minuten, solange eingeschaltet):
- * 1. Vorrat: Unter N geprüften Adressen sucht der Scanner die nächste Branche im ganzen Suchgebiet („tagesbetrieb.suche“,
- *    Gebietssuche, Reihenfolge laut Einstellungen) – nur mit Dauerfreigabe scanner.start.
+ * 1. Vorrat: Unter N geprüften Adressen schlägt NOVA die nächste Branche im Suchgebiet vor (Reihenfolge laut Einstellungen,
+ *    mit Kosten und Freigabe); gesucht wird erst nach Joachims Ja – über kunden_suchen (Gebietssuche, Worker „scanner.lauf“).
  * 2. Morgens: eine Tageskampagne mit EINER Beispiel-Mail und einer Freigabe; NOVA legt sie im Chat vor.
  * 3. Nach dem Ja: pro Takt eine Mail (geprüfte Adresse → Entwurf aus der Vorlage → Versand), bis Tageslimit oder Feierabend.
  * 4. Nach Feierabend: Tagesbericht in den Chat und nach ~/Nova/berichte/.
@@ -52,17 +51,6 @@ function werteAus(lead: {
     feststellung: feststellungAus(lead.befunde),
     aufhaenger: lead.aufhaenger ?? "",
   };
-}
-
-/** Worker-Teil „tagesbetrieb.suche“: nächste Branche im Suchgebiet vollständig suchen, einlesen, prüfen (Suchplan hakt fuehreGebietssucheAus ab). */
-export async function fuehreTagessucheAus(input: { organizationId: string; branche: string; runner: GebietsRunner; mx: MxPruefer }) {
-  const cfg = leseEinstellungen();
-  return fuehreGebietssucheAus({
-    organizationId: input.organizationId,
-    auftrag: { branche: input.branche, mitte: cfg.suchgebiet.mitte, radiusKm: cfg.suchgebiet.radiusKm },
-    runner: input.runner,
-    mx: input.mx,
-  });
 }
 
 /** Nächste geprüfte Adresse als Entwurf der Tageskampagne; unpassende Leads werden mit Grund verworfen. */
@@ -106,14 +94,35 @@ async function naechsterEntwurf(input: {
   }
 }
 
-async function scannerDarf(organizationId: string): Promise<{ ok: true } | { ok: false; grund: string }> {
-  const policy = await findMatchingPolicy({ organizationId, actionType: "scanner.start" });
-  if (!policy) return { ok: false, grund: "Für den Tagesbetrieb fehlt die Dauerfreigabe für den Lead-Scanner." };
-  const max = policyMaxPerDay(policy);
-  if (max > 0 && (await scannerRunsToday(organizationId)) >= max) {
-    return { ok: false, grund: `Tageslimit der Scanner-Läufe erreicht (${max}).` };
-  }
-  return { ok: true };
+/**
+ * Vorschlag statt eigenmächtiger Suche (Joachims Wunsch 01.10.2026): NOVA nennt die nächste Branche im Suchgebiet
+ * mit Kosten und legt eine Freigabe genau dieser Suche an. Joachim sagt ja – oder nennt eine andere Branche.
+ */
+async function schlageSucheVor(input: { organizationId: string; cfg: TagesbetriebEinstellungen; branche: string; vorrat: number }) {
+  const auftrag = { branche: input.branche, mitte: input.cfg.suchgebiet.mitte, radiusKm: input.cfg.suchgebiet.radiusKm };
+  const kosten = schaetzeKosten(auftrag.radiusKm);
+  const euro = (usd: number) => usd.toFixed(2).replace(".", ",");
+  const freigabe = await createApprovalRequest({
+    organizationId: input.organizationId,
+    actionType: "scanner.start",
+    description: `Lead-Scanner: alle ${auftrag.branche} im Umkreis von ${auftrag.radiusKm} km um ${auftrag.mitte} (ca. ${euro(kosten.kostenUsd)} $, höchstens ${euro(kosten.maxKostenUsd)} $)`,
+    payload: auftrag,
+  });
+  const erledigt = erledigteBranchen(input.cfg);
+  await meldeNutzer({
+    organizationId: input.organizationId,
+    anlass: `tagesbetrieb-vorschlag:${auftrag.branche}:${auftrag.mitte}:${auftrag.radiusKm}`,
+    text:
+      (input.vorrat === 0 ? "Im Vorrat für den Tagesbetrieb ist kein Betrieb mehr. " : `Im Vorrat für den Tagesbetrieb sind nur noch ${input.vorrat} Betriebe. `) +
+      (erledigt.length ? `Durchsucht sind bisher: ${erledigt.join(", ")}. ` : "") +
+      `Als Nächstes würde ich alle Betriebe der Branche „${auftrag.branche}“ im Umkreis von ${auftrag.radiusKm} km um ${auftrag.mitte} suchen, ` +
+      `etwa ${euro(kosten.kostenUsd)} $, höchstens ${euro(kosten.maxKostenUsd)} $. Soll ich das machen, oder lieber eine andere Branche?`,
+    werkzeugNotiz: `kunden_suchen: ${JSON.stringify({
+      ok: true,
+      executed: false,
+      data: { status: "freigabe_noetig", freigabe_id: freigabe.id, branche: auftrag.branche, ort: auftrag.mitte, radius_km: auftrag.radiusKm, vorschlag_tagesbetrieb: true },
+    })}`,
+  });
 }
 
 export type TickErgebnis = { weiter: boolean; aktion: string };
@@ -157,11 +166,11 @@ export async function tagesbetriebTick(input: {
     return { weiter: true, aktion: "vorlage fehlt" };
   }
 
-  // Vorrat auffüllen: nächste Branche im ganzen Suchgebiet.
+  // Vorrat knapp: nächste Branche im Suchgebiet VORSCHLAGEN (gesucht wird erst nach Joachims Ja).
   const vorrat = await prisma.lead.count({ where: { organizationId, status: "geprueft" } });
   if (vorrat < cfg.vorratMindestens) {
     const laufend = await prisma.workItem.count({
-      where: { organizationId, kind: "tagesbetrieb.suche", status: { in: ["queued", "leased", "running"] } },
+      where: { organizationId, kind: "scanner.lauf", status: { in: ["queued", "leased", "running"] } },
     });
     const branche = naechsteBranche(cfg);
     if (!laufend && !branche) {
@@ -172,19 +181,12 @@ export async function tagesbetriebTick(input: {
           text: `Alle ${cfg.branchen.length} Branchen im Umkreis von ${cfg.suchgebiet.radiusKm} km um ${cfg.suchgebiet.mitte} sind durchsucht. Für neue Betriebe brauche ich ein neues Gebiet oder weitere Branchen.`,
         });
       }
-    } else if (!laufend && branche) {
-      const darf = await scannerDarf(organizationId);
-      if (darf.ok) {
-        await enqueueWorkItem({
-          organizationId,
-          kind: "tagesbetrieb.suche",
-          idempotencyKey: `tagesbetrieb.suche:${branche}:${jetzt.getTime()}`,
-          payload: { branche },
-          maxAttempts: 1,
-        });
-      } else if (!(await kuerzlichGemeldet(organizationId, `tagesbetrieb-scanner:${datum}`, 24 * 60))) {
-        await meldeNutzer({ organizationId, anlass: `tagesbetrieb-scanner:${datum}`, text: `Kunden-Tagesbetrieb: ${darf.grund}` });
-      }
+    } else if (
+      !laufend &&
+      branche &&
+      !(await kuerzlichGemeldet(organizationId, `tagesbetrieb-vorschlag:${branche}:${cfg.suchgebiet.mitte}:${cfg.suchgebiet.radiusKm}`, 24 * 60))
+    ) {
+      await schlageSucheVor({ organizationId, cfg, branche, vorrat });
     }
   }
 

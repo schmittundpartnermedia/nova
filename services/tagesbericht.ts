@@ -47,7 +47,7 @@ export async function schreibeTagesbericht(input: { organizationId: string; datu
   const abwesend = eingang.filter((mail) => mail.status === "autoreply");
   const rueck = eingang.filter((mail) => mail.status === "bounce");
   const suchen = await prisma.workItem.findMany({
-    where: { organizationId, kind: { in: ["scanner.lauf", "tagesbetrieb.suche"] }, createdAt: { gte: von, lt: bis } },
+    where: { organizationId, kind: "scanner.lauf", createdAt: { gte: von, lt: bis } },
     orderBy: { createdAt: "asc" },
   });
   const leadsNeu = await prisma.lead.count({ where: { organizationId, createdAt: { gte: von, lt: bis } } });
@@ -59,9 +59,10 @@ export async function schreibeTagesbericht(input: { organizationId: string; datu
     const grund = (lead.grund ?? "ohne Grund").replace(/\(.*\)/, "").trim();
     gruende.set(grund, (gruende.get(grund) ?? 0) + 1);
   }
-  const kombis = suchen.reduce((summe, item) => {
+  // Google-Anfragen laut Ergebnis-Notiz der Gebietssuche („…, 131 Anfragen → liste“).
+  const anfragen = suchen.reduce((summe, item) => {
     const audit = item.audit ?? "";
-    return summe + Number(audit.match(/(\d+) Kombi/)?.[1] ?? 0);
+    return summe + Number(audit.match(/(\d+) Anfragen/)?.[1] ?? 0);
   }, 0);
 
   const wirkt = await wirkung({ organizationId, seit: von, bis, quelle: input.checkQuelle });
@@ -104,11 +105,11 @@ export async function schreibeTagesbericht(input: { organizationId: string; datu
   zeilen.push("", "## Kundensuchen (Lead-Scanner)", "");
   if (suchen.length) {
     for (const item of suchen) {
-      const auftrag = JSON.parse(item.payload || "{}") as { branche?: string; ort?: string; anzahl?: number };
-      const was = item.kind === "tagesbetrieb.suche" ? "Tageslauf" : `${auftrag.anzahl ?? "?"} × ${auftrag.branche ?? "?"} in ${auftrag.ort ?? "?"}`;
+      const auftrag = JSON.parse(item.payload || "{}") as { branche?: string; mitte?: string; radiusKm?: number };
+      const was = `alle ${auftrag.branche ?? "?"} im Umkreis von ${auftrag.radiusKm ?? "?"} km um ${auftrag.mitte ?? "?"}`;
       zeilen.push(`- ${zeit(item.createdAt)} ${was} – ${item.status}${item.lastError ? `: ${item.lastError}` : ""}`);
     }
-    if (kombis) zeilen.push("", `Geschätzte Google-Kosten: mindestens ${(kombis * 0.035).toFixed(2)} $ (${kombis} Suchanfragen à ~0,035 $).`);
+    if (anfragen) zeilen.push("", `Google-Kosten: etwa ${(anfragen * 0.035).toFixed(2).replace(".", ",")} $ (${anfragen} Anfragen à ~0,035 $).`);
   } else zeilen.push("Keine.");
   zeilen.push("", "## Verworfene Adressen", "");
   if (gruende.size) {

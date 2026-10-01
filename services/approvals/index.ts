@@ -83,8 +83,7 @@ export async function mailsSentToday(organizationId: string): Promise<number> {
 export async function scannerRunsToday(organizationId: string): Promise<number> {
   assertOrganizationId(organizationId);
   return prisma.workItem.count({
-    // Einzelsuchen und Suchläufe des Tagesbetriebs zählen beide gegen das Tageslimit der Dauerfreigabe.
-    where: { organizationId, kind: { in: ["scanner.lauf", "tagesbetrieb.suche"] }, status: { not: "cancelled" }, createdAt: { gte: startOfToday() } },
+    where: { organizationId, kind: "scanner.lauf", status: { not: "cancelled" }, createdAt: { gte: startOfToday() } },
   });
 }
 

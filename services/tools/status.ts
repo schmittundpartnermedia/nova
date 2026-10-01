@@ -56,7 +56,6 @@ export const novaStatusTool: NovaToolDefinition = {
     if (!vorlagen.includes("kunden")) fehlt.push("Kunden-Vorlage (~/Nova/vorlagen/kunden.md) – ohne sie kann ich keine Kunden anschreiben und der Tagesbetrieb startet nicht.");
     if (!vorlagen.includes("sponsoren")) fehlt.push("Sponsoren-Vorlage (~/Nova/vorlagen/sponsoren.md).");
     if (!alleSignaturen().length) fehlt.push("Signatur-Zuordnung (~/Nova/signaturen.txt).");
-    if (!scannerDauer) fehlt.push("Dauerfreigabe für den Lead-Scanner – nötig für den Tagesbetrieb (sag z. B. „Erteile die Dauerfreigabe für den Scanner, höchstens 5 Läufe am Tag“).");
     if (!process.env.RANKPILOT_CHECKS_TOKEN?.trim()) fehlt.push("Schlüssel für die Check-Zählung (RANKPILOT_CHECKS_TOKEN in NOVAs .env) – ohne ihn sehe ich nicht, wer über meine Mails den Check startet.");
     if (tagesbetrieb.aktiv && !vorlagen.includes(tagesbetrieb.vorlage)) fehlt.push(`Der Tagesbetrieb ist an, aber die Vorlage „${tagesbetrieb.vorlage}“ fehlt.`);
 

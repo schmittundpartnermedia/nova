@@ -18,6 +18,6 @@ export async function scannerLaufWorkHandler(item: {
     mx: echterMxPruefer,
   });
   return result.ok
-    ? { ok: true, note: `${result.gefunden} Betriebe, ${result.neuImVorrat} neu im Vorrat → ${result.liste}` }
+    ? { ok: true, note: `${result.gefunden} Betriebe, ${result.neuImVorrat} neu im Vorrat, ${result.anfragen ?? "?"} Anfragen → ${result.liste}` }
     : { ok: false, retry: false, note: result.grund };
 }

@@ -14,7 +14,7 @@ import { pauseAbandonedJobs } from "@/services/jobs/recover";
 import { mailSendWorkHandler } from "@/services/mail/send-work";
 import { postfachWacheWorkHandler } from "@/services/kampagnen/wache-work";
 import { scannerLaufWorkHandler } from "@/services/leads/work";
-import { tagesbetriebSucheWorkHandler, tagesbetriebTickWorkHandler } from "@/services/tagesbetrieb/work";
+import { tagesbetriebTickWorkHandler } from "@/services/tagesbetrieb/work";
 import { nachfassTickWorkHandler } from "@/services/nachfass/work";
 import { claudeLaufWorkHandler, claudeLiveWorkHandler } from "@/services/claude/work";
 
@@ -42,8 +42,6 @@ registerWorkHandler("postfach.wache", postfachWacheWorkHandler);
 registerWorkHandler("scanner.lauf", scannerLaufWorkHandler);
 
 registerWorkHandler("tagesbetrieb.tick", tagesbetriebTickWorkHandler);
-
-registerWorkHandler("tagesbetrieb.suche", tagesbetriebSucheWorkHandler);
 
 registerWorkHandler("claude.lauf", claudeLaufWorkHandler);
 
