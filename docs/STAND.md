@@ -276,18 +276,30 @@ Nachweise: `tsc`, `eslint` grün; `test:termine` 8/8 (neu, Kalender im Speicher,
 
 Nicht geprüft: echter Apple Kalender (das AppleScript lief nie gegen Calendar; beim ersten Eintrag fragt macOS, ob der NOVA-Helfer den Kalender steuern darf – der Text im Dialog spricht noch von Apple Mail, weil eine Änderung den Helfer neu signieren würde), Erinnerung in NOVA.app (braucht Neustart).
 
+**02.10.2026, 00:30–01:30 – Umzug auf den Server begonnen (Joachims Entscheidung, Claude Code allein).** Joachim: alles auf den IONOS-Server (87.106.179.99), alles getrennt, ELEVUM bleibt unverändert, bis oben alles läuft. Gearbeitet im Zweig **`server/umzug`** (getrennter Ordner `~/Entwicklung/NOVA-server`); **die NOVA auf dem Mac (main) läuft unverändert weiter**, inkl. Tagesbetrieb. Einzelheiten und offene Punkte: `docs/SERVER.md` im Zweig.
+- Server: Firewall (ufw) an, eingehend nur 22/80/443 (alle 7 Seiten danach 200; davor sperrte schon die IONOS-Firewall die Node-Ports). Benutzer `nova` ohne sudo; eigener Postgres-Dienst `16/nova` auf 127.0.0.1:5433; geprüft: `nova` kommt nicht an die rankPilot-Datenbank und nicht an `/var/www`.
+- 10 Projekte unter `/home/nova/projekte` (adfiltec, diekuehlenretter, DN-masterclass, ELEVUM, lead-scanner, PandB-Pflegekonzept, planexus, Projekt-seedance-studio, rankPilot-app, rankpilot-website), ohne `.env` (Live-Zugänge) und ohne node_modules; Git-Stand und Dateizahl mit der ELEVUM verglichen, gleich. Nicht hoch (Joachim): Wichtiges, ZIP-daten, rankPilot-server-backup, Projekt OverPark, rankPilot (alte Kopie). Stand von heute Nacht – beim Umschalten wird nachgeglichen.
+- NOVA auf Postgres (Tests laufen je Lauf gegen eine Wegwerf-Postgres); Datenübernahme `scripts/umzug-daten.ts` mit Feldvergleich jeder Zeile – Kopie der echten DB (00:41) auf dem Server eingespielt: 51 Tabellen, 16 097 Zeilen, alles gleich.
+- Mail direkt über IMAP/SMTP bei IONOS statt Apple Mail (HTML-Fettdruck, Signatur als Datei je Absender, „gesendet“ = vom Mailserver angenommen, dann in „Gesendet“ abgelegt). Kalender über CalDAV statt Apple Kalender. Apple-Mail-/Apple-Kalender-Code im Zweig gelöscht.
+- Server läuft in UTC → alle NOVA-Prozesse mit TZ=Europe/Berlin.
+- Probe läuft: Web-App unter pm2 von `nova` (nur 127.0.0.1:3100, von außen zu), antwortet mit den echten Daten. Hintergrund-Läufer bewusst **aus** (sonst doppelte Mails). Lead-Scanner installiert (Test grün), Claude Code installiert (nicht angemeldet). Sicherung jede Nacht 03:30, erste geprüft.
+- Steuerung vom Mac: `scripts/server/nova.sh status|logs|stop|start|oeffnen|passwort <adresse>|kalender-passwort` (im Zweig).
+- Nachweise: tsc, eslint, alle Tests grün im Zweig (kopf 10, mail 19, kampagne 14, kunden 9, tagesbetrieb 15, claude 8, nachfass 6, wirkung 5, plattformen 10, kosten 5, termine 8, imap 9 – neu). Gefundene Fehler: Prisma ignorierte den Port in der Datenbank-Adresse und klopfte beim rankPilot-Postgres an (abgewiesen, behoben); Semikolon im Kalendereintrag nicht maskiert (behoben).
+- **Nicht geprüft:** echtes IONOS-Postfach, echter Kalender, Live-Stellen vom Server (Deploy-Skripte brauchen root – wird mit Joachim sauber über feste, root-eigene Befehle gelöst, nicht über Projekt-Skripte), NOVA.app als Fernbedienung (nicht gebaut, da NOVA.app lief).
+- Gefunden bei rankPilot (nicht angefasst): Die tägliche Sicherung der Uploads scheitert jeden Tag („/var/data/rankpilot-uploads fehlt“); Datenbank-Sicherungen liegen nur auf demselben Server.
+
 ## Dran
 
-**Joachim (Abnahme Phase 7), nach Feierabend des Tagesbetriebs oder morgen früh:**
-1. NOVA.app neu starten (nicht während der Tagesbetrieb sendet – oder kurz zwischen zwei Mails).
-2. Profiltext diktieren, falls NOVA nachfragt (Beschreibung, Kategorien, welche E-Mail für Plattform-Konten).
-3. „Such mir die Plattformen, auf denen rankpilot eingetragen sein sollte.“ → Liste.
-4. „Fang mit <zwei Plattformen deiner Wahl> an.“ → Chrome öffnet sich, NOVA füllt aus, ruft dich bei Captcha/Mail → „weiter“ → am Ende speicherst du. Prüfen: Profile angelegt, Zugangsdaten im Schlüsselbund (Schlüsselbundverwaltung, Suche „NOVA:“), Liste zeigt den Stand.
-**Joachim (Abnahme Termine), nach Neustart von NOVA.app:**
-1. „Trag mir für morgen 9 Uhr einen Rückruf bei Schreinerei Test ein.“ → beim ersten Mal macOS-Abfrage „Kalender steuern“ erlauben → Eintrag im Apple Kalender prüfen.
-2. Um 8:45 meldet sich NOVA: „In 15 Minuten: …“.
-3. „Sag den Termin ab.“ → verschwindet aus dem Kalender.
-Optional: Kalender festlegen in `~/Nova/kalender.json`, z. B. `{"kalender": "Arbeit"}`.
+**Umzug auf den Server (Zweig `server/umzug`, Anleitung `docs/SERVER.md`), Joachim:**
+1. Mail-Passwörter selbst eintragen: `scripts/server/nova.sh passwort joachim@rankpilot.de` (ebenso check@b2b-rankpilot.de, info@elevum.io) – im Ordner `~/Entwicklung/NOVA-server`.
+2. Signaturtexte liefern (bisher hängte Apple Mail sie an; auf dem Server schickt NOVA sie mit).
+3. Kalender: welcher (iCloud?), Apple-ID; App-Passwort mit `nova.sh kalender-passwort`.
+4. Claude Code auf dem Server anmelden (`ssh nova@87.106.179.99`, dann `claude`).
+5. Im IONOS-Menü „Backup“ nachsehen, ob eine Sicherung gebucht ist; Ziel für eine Kopie außer Haus.
+6. Ja/Nein: private GitHub-Repos für die Projekte ohne GitHub (ELEVUM, PandB, Seedance, diekuehlenretter, lead-scanner).
+Danach (Claude Code, mit Joachim): echte Test-Mail über den Server, Live-Stellen vom Server einrichten, NOVA.app als Fernbedienung, Umschalten an einem Abend.
+
+**Weiter offen:** Abnahme Phase 7 (Plattformen), Abnahme Termine (Kalender – entfällt in der Mac-Form, kommt mit dem Server über CalDAV).
 
 ## Was Joachim liefert (siehe Auftrag, Anhang)
 
