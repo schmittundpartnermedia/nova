@@ -216,7 +216,7 @@ Abschluss dieser Runde: `tsc`, `eslint`, `next build`, `npm run macos:build` gr�
 
 **Joachim, wenn er zurück ist:**
 1. NOVA.app starten (Worker kennt die neuen Aufträge `nachfass.tick` erst dann).
-2. Nachfass-Vorlage lesen: `~/Nova/vorlagen/kunden-nachfass.md` (Vorschlag von Claude Code). Passt sie nicht: ändern oder löschen – ohne Datei keine Nachfass-Mail.
+2. ~~Nachfass-Vorlage lesen~~ – Joachim hat `~/Nova/vorlagen/kunden-nachfass.md` am 01.10. bestätigt („passt, machen wir“).
 3. Erster echter Versand wie geplant: „Schreib die Schreinereien aus Pforzheim mit der Kunden-Vorlage an, alle 5 Minuten.“ – die Zusammenfassung nennt jetzt auch die Nachfass-Mail nach 6 Tagen.
 4. Zählung der Checks freischalten (optional, später): Zweige `nova/check-kurzlink` (Webseite) und `nova/check-herkunft` (App) übernehmen und live stellen, danach `RANKPILOT_CHECKS_TOKEN` in NOVAs `.env` selbst eintragen.
 5. „Guten Morgen, was liegt heute an?“ ausprobieren.
