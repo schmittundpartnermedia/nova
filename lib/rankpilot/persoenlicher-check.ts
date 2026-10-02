@@ -12,7 +12,8 @@ export type CheckStand = { runStatus: "pending" | "running" | "success" | "faile
 export type CheckBericht = { report?: Record<string, unknown>; visibility?: Record<string, unknown> };
 
 export type CheckDienst = {
-  starte(input: CheckStart): Promise<{ checkId: string; wiederverwendet: boolean }>;
+  /** ortUnbekannt: Der Check kennt den Ort nicht (auch nicht den Hauptort) – es wurde nichts gestartet. */
+  starte(input: CheckStart): Promise<{ checkId: string; wiederverwendet: boolean } | { ortUnbekannt: string }>;
   stand(checkId: string): Promise<CheckStand>;
   bericht(checkId: string): Promise<CheckBericht>;
 };
@@ -47,6 +48,7 @@ export const webseitenCheck: CheckDienst = {
       }),
       signal: AbortSignal.timeout(30_000),
     });
+    if (res.status === 422) return { ortUnbekannt: input.city };
     const d = await antwort<{ checkId: string; wiederverwendet: boolean }>(res, "Check-Start");
     return { checkId: d.checkId, wiederverwendet: d.wiederverwendet };
   },

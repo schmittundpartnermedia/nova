@@ -61,6 +61,7 @@ async function main() {
   const zustand = new Map<string, "running" | "success" | "failed">();
   const checks: CheckDienst = {
     async starte(input) {
+      if (input.city === "Nirgendwo") return { ortUnbekannt: input.city };
       starts.push(input);
       const id = `rpc_${String(starts.length).padStart(16, "0")}`;
       zustand.set(id, "running");
@@ -157,6 +158,14 @@ async function main() {
       assert.equal(ohne.status, "verworfen");
       assert.match(ohne.grund ?? "", /keine Website/);
       assert.ok(starts.some((s) => s.email === "info@spaeter.de"));
+    }],
+    ["Ort unbekannt (auch kein Hauptort) → kein Check, aussortiert, Takt läuft weiter", async () => {
+      const nirgends = await lead("Nirgends", "info@nirgends.de", 95, { ort: "Nirgendwo" });
+      const r = await tick(t(0, 8, 17));
+      assert.ok(!r.aktion.startsWith("Fehler"));
+      const danach = await prisma.lead.findUniqueOrThrow({ where: { id: nirgends.id } });
+      assert.equal(danach.status, "verworfen");
+      assert.match(danach.grund ?? "", /Ort für den Check unbekannt: Nirgendwo/);
     }],
     ["Fehlgeschlagener Check → aussortiert mit Grund", async () => {
       const spaeter = await prisma.lead.findFirstOrThrow({ where: { email: "info@spaeter.de" } });

@@ -131,6 +131,10 @@ async function naechsterEntwurfMitCheck(input: {
       company: profil.firmenname,
       code: neuerCheckCode(),
     });
+    if ("ortUnbekannt" in start) {
+      await verwerfe(lead.id, `Ort für den Check unbekannt: ${start.ortUnbekannt}`);
+      continue;
+    }
     await prisma.lead.update({ where: { id: lead.id }, data: { status: "check", checkId: start.checkId } });
     offen += 1;
   }
