@@ -142,9 +142,9 @@ async function main() {
       assert.deepEqual(
         liste.map((k) => [k.firma, k.anrede, k.email]),
         [
-          ["Schreinerei Zimmermann GmbH & Co.KG", "Guten Tag Uwe Zimmermann", "info@schreinerei-zimmermann.eu"],
-          ["Holzwerk Nord", "Sehr geehrtes Holzwerk Nord-Team", "kontakt@holzwerk-nord.de"],
-          ["Möbelbau Süd", "Guten Tag Eva Süd", ""],
+          ["Schreinerei Zimmermann GmbH & Co.KG", "Hallo zusammen", "info@schreinerei-zimmermann.eu"],
+          ["Holzwerk Nord", "Hallo zusammen", "kontakt@holzwerk-nord.de"],
+          ["Möbelbau Süd", "Hallo zusammen", ""],
         ],
       );
       assert.equal(liste[0]!.befunde, "keine Meta-Description");

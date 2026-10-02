@@ -12,6 +12,7 @@ export type Kostenposten = { posten: string; usd: number | null; menge: string; 
 
 const ART_NAME: Record<VerbrauchsArt, string> = {
   kopf: "NOVAs Kopf (OpenAI)",
+  auswertung: "Auswertung von Websites und Checks (OpenAI)",
   stimme: "Sprachausgabe (OpenAI)",
   spracherkennung: "Spracherkennung (OpenAI)",
   websuche: "Websuche (OpenAI)",

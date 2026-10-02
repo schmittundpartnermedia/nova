@@ -14,6 +14,11 @@ import { leseEinstellungen, lokalesDatum, zeitfenster, type TagesbetriebEinstell
 import { feststellungAus } from "@/lib/leads/feststellung";
 import { planeNachfass } from "@/services/nachfass";
 import { pruefeAdresse, type MxPruefer } from "@/services/tagesbetrieb/pruefen";
+import { OpenAIProvider } from "@/providers/ai/openai";
+import { checkDienst, checkLink, type CheckDienst } from "@/lib/rankpilot/persoenlicher-check";
+import { neuerCheckCode } from "@/lib/rankpilot/checks";
+import { anredeAus, verstehe, type Auswerter } from "@/services/leads/profil";
+import { formuliereBefunde } from "@/services/leads/befunde";
 
 /**
  * Kunden-Tagesbetrieb (Worker-Job „tagesbetrieb.tick“ alle 5 Minuten, solange eingeschaltet):
@@ -21,11 +26,120 @@ import { pruefeAdresse, type MxPruefer } from "@/services/tagesbetrieb/pruefen";
  *    mit Kosten und Freigabe); gesucht wird erst nach Joachims Ja – über kunden_suchen (Gebietssuche, Worker „scanner.lauf“).
  * 2. Morgens: eine Tageskampagne mit EINER Beispiel-Mail und einer Freigabe; NOVA legt sie im Chat vor.
  *    Mit Dauerfreigabe (Einstellung taeglicheFreigabe: false) startet sie sofort und NOVA meldet nur den Start.
+ *    Persönlicher Check (Vorlage enthält {{check_link}}): Vor der Mail versteht NOVA die Website, startet für den Betrieb
+ *    einen rankPilot-Check (höchstens CHECK_VORLAUF gleichzeitig), formuliert aus dem fertigen Bericht 1–2 Ergebnisse
+ *    und legt erst dann den Entwurf an.
  * 3. Nach dem Ja bzw. dem Start: pro Takt eine Mail (geprüfte Adresse → Entwurf aus der Vorlage → Versand), bis Tageslimit oder Feierabend.
  * 4. Nach Feierabend: Tagesbericht in den Chat und nach ~/Nova/berichte/.
  */
 
 export const TICK_MS = 5 * 60_000;
+/** So viele persönliche Checks laufen höchstens gleichzeitig vor (jeder kostet DataForSEO-Abfragen). */
+export const CHECK_VORLAUF = 2;
+
+export type CheckWerkzeuge = { auswerter: Auswerter; checks: CheckDienst };
+
+/** Braucht die Vorlage einen persönlichen Check? (Platzhalter {{check_link}}) */
+function brauchtCheck(vorlage: string): boolean {
+  return leseVorlagen().some((v) => v.name === vorlage && /\{\{\s*check_link\s*\}\}/.test(`${v.betreff}\n${v.text}`));
+}
+
+async function verwerfe(leadId: string, grund: string) {
+  await prisma.lead.update({ where: { id: leadId }, data: { status: "verworfen", grund, geprueftAt: new Date() } });
+}
+
+/**
+ * Persönlicher Check: fertige Checks zu Entwürfen machen, fehlende vorlaufen lassen.
+ * Gibt den nächsten Entwurf zurück – oder null, solange noch kein Check fertig ist.
+ */
+async function naechsterEntwurfMitCheck(input: {
+  organizationId: string;
+  cfg: TagesbetriebEinstellungen;
+  kampagneId: string;
+  mx: MxPruefer;
+  werkzeuge: CheckWerkzeuge;
+}): Promise<{ entwurfId: string; leadId: string } | null> {
+  const { auswerter, checks } = input.werkzeuge;
+  // 1. Laufende Checks: fertig → Entwurf; fehlgeschlagen → aussortieren.
+  const laufend = await prisma.lead.findMany({ where: { organizationId: input.organizationId, status: "check" }, orderBy: { updatedAt: "asc" }, take: 5 });
+  for (const lead of laufend) {
+    if (!lead.checkId) {
+      await verwerfe(lead.id, "Check ohne Kennung");
+      continue;
+    }
+    const stand = await checks.stand(lead.checkId);
+    if (stand.runStatus === "failed") {
+      await verwerfe(lead.id, `persönlicher Check fehlgeschlagen (${lead.checkId})`);
+      continue;
+    }
+    if (stand.runStatus !== "success") continue;
+    const profil = await verstehe(lead, auswerter);
+    const bericht = await checks.bericht(lead.checkId);
+    const befunde = await formuliereBefunde({ lead, profil, bericht, auswerter });
+    if (!befunde.length) {
+      await verwerfe(lead.id, `Check ohne verwertbare Ergebnisse (${lead.checkId})`);
+      continue;
+    }
+    const werte = { anrede: anredeAus(profil), befunde: befunde.join("\n"), check_link: checkLink(lead.checkId) };
+    const gefuellt = fuelleVorlage(input.cfg.vorlage, werte);
+    if (gefuellt.fehlend.length) {
+      await verwerfe(lead.id, `fehlende Werte für die Vorlage: ${gefuellt.fehlend.join(", ")}`);
+      continue;
+    }
+    const entwurf = await erstelleEntwurf({
+      organizationId: input.organizationId,
+      absender: input.cfg.absender,
+      an: lead.email!,
+      betreff: gefuellt.betreff,
+      text: gefuellt.text,
+      kampagneId: input.kampagneId,
+      empfaengerName: profil.firmenname,
+      vorlagenWerte: werte,
+    });
+    await prisma.lead.update({ where: { id: lead.id }, data: { status: "bereit", campaignId: input.kampagneId, entwurfId: entwurf.id } });
+    return { entwurfId: entwurf.id, leadId: lead.id };
+  }
+  // 2. Nachschub: höchstens CHECK_VORLAUF Checks gleichzeitig.
+  let offen = await prisma.lead.count({ where: { organizationId: input.organizationId, status: "check" } });
+  while (offen < CHECK_VORLAUF) {
+    const lead = await prisma.lead.findFirst({
+      where: { organizationId: input.organizationId, status: "geprueft" },
+      orderBy: [{ score: "desc" }, { createdAt: "asc" }],
+    });
+    if (!lead) break;
+    if (!lead.website) {
+      await verwerfe(lead.id, "keine Website (ohne Website kein persönlicher Check)");
+      continue;
+    }
+    if (!lead.ort) {
+      await verwerfe(lead.id, "kein Ort bekannt");
+      continue;
+    }
+    const erneut = await pruefeAdresse({ organizationId: input.organizationId, email: lead.email, mx: input.mx });
+    if (!erneut.ok) {
+      await verwerfe(lead.id, erneut.grund);
+      continue;
+    }
+    const profil = await verstehe(lead, auswerter);
+    const person = profil.ansprechpartner;
+    const start = await checks.starte({
+      siteUrl: lead.website,
+      city: lead.ort,
+      keyword: profil.suchwort,
+      email: lead.email!,
+      name: person ? [person.vorname, person.nachname].filter(Boolean).join(" ") : profil.firmenname,
+      company: profil.firmenname,
+      code: neuerCheckCode(),
+    });
+    if ("ortUnbekannt" in start) {
+      await verwerfe(lead.id, `Ort für den Check unbekannt: ${start.ortUnbekannt}`);
+      continue;
+    }
+    await prisma.lead.update({ where: { id: lead.id }, data: { status: "check", checkId: start.checkId } });
+    offen += 1;
+  }
+  return null;
+}
 
 function kampagnenName(datum: string): string {
   return `Kunden-Tagesbetrieb ${datum}`;
@@ -60,7 +174,9 @@ async function naechsterEntwurf(input: {
   cfg: TagesbetriebEinstellungen;
   kampagneId: string;
   mx: MxPruefer;
+  werkzeuge: () => CheckWerkzeuge;
 }): Promise<{ entwurfId: string; leadId: string } | null> {
+  if (brauchtCheck(input.cfg.vorlage)) return naechsterEntwurfMitCheck({ ...input, werkzeuge: input.werkzeuge() });
   for (;;) {
     const lead = await prisma.lead.findFirst({
       where: { organizationId: input.organizationId, status: "geprueft" },
@@ -133,7 +249,11 @@ export async function tagesbetriebTick(input: {
   jetzt: Date;
   postfach: Postfach;
   mx: MxPruefer;
+  /** Für den persönlichen Check; ohne Angabe echtes Modell und echte Webseite. */
+  werkzeuge?: CheckWerkzeuge;
 }): Promise<TickErgebnis> {
+  let werkzeuge = input.werkzeuge;
+  const holeWerkzeuge = () => (werkzeuge ??= { auswerter: new OpenAIProvider(), checks: checkDienst() });
   const cfg = leseEinstellungen();
   if (!cfg.aktiv) return { weiter: false, aktion: "ausgeschaltet" };
   const { organizationId, jetzt } = input;
@@ -147,6 +267,8 @@ export async function tagesbetriebTick(input: {
     if (kampagne && kampagne.status !== "fertig" && kampagne.status !== "abgebrochen") {
       await prisma.campaign.update({ where: { id: kampagne.id }, data: { status: "fertig", finishedAt: jetzt } });
       await prisma.communication.updateMany({ where: { campaignId: kampagne.id, status: "draft" }, data: { status: "cancelled" } });
+      // Vorbereitet, aber nicht mehr gesendet: Check bleibt, morgen wird daraus ein neuer Entwurf (ohne neue Kosten).
+      await prisma.lead.updateMany({ where: { organizationId, campaignId: kampagne.id, status: "bereit" }, data: { status: "check", entwurfId: null } });
     }
     if (fenster.nachEnde && fenster.arbeitstag && !(await kuerzlichGemeldet(organizationId, `tagesbericht:${datum}`, 24 * 60))) {
       await schreibeTagesbericht({ organizationId, datum, melden: true });
@@ -207,10 +329,10 @@ export async function tagesbetriebTick(input: {
         nachfassVorlage: nachfass?.vorlage ?? null,
       },
     });
-    const beispiel = await naechsterEntwurf({ organizationId, cfg, kampagneId: neu.id, mx: input.mx });
+    const beispiel = await naechsterEntwurf({ organizationId, cfg, kampagneId: neu.id, mx: input.mx, werkzeuge: holeWerkzeuge });
     if (!beispiel) {
       await prisma.campaign.delete({ where: { id: neu.id } });
-      return { weiter: true, aktion: "warte auf geprüfte Adressen" };
+      return { weiter: true, aktion: brauchtCheck(cfg.vorlage) ? "warte auf persönlichen Check" : "warte auf geprüfte Adressen" };
     }
     const approval = await createApprovalRequest({
       organizationId,
@@ -267,8 +389,8 @@ export async function tagesbetriebTick(input: {
   const offen = await prisma.communication.findFirst({ where: { campaignId: kampagne.id, status: "draft" }, orderBy: { createdAt: "asc" } });
   const naechster = offen
     ? { entwurfId: offen.id }
-    : await naechsterEntwurf({ organizationId, cfg, kampagneId: kampagne.id, mx: input.mx });
-  if (!naechster) return { weiter: true, aktion: "keine geprüfte Adresse im Vorrat" };
+    : await naechsterEntwurf({ organizationId, cfg, kampagneId: kampagne.id, mx: input.mx, werkzeuge: holeWerkzeuge });
+  if (!naechster) return { weiter: true, aktion: brauchtCheck(cfg.vorlage) ? "warte auf persönlichen Check" : "keine geprüfte Adresse im Vorrat" };
 
   const ergebnis = await sendeEntwurf({ organizationId, entwurfId: naechster.entwurfId, postfach: input.postfach, jetzt });
   const lead = await prisma.lead.findFirst({ where: { organizationId, entwurfId: naechster.entwurfId } });
