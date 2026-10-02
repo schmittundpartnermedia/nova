@@ -286,7 +286,7 @@ Nicht geprüft: echter Apple Kalender (das AppleScript lief nie gegen Calendar; 
 - Steuerung vom Mac: `scripts/server/nova.sh status|logs|stop|start|oeffnen|passwort <adresse>|kalender-passwort` (im Zweig).
 - Nachweise: tsc, eslint, alle Tests grün im Zweig (kopf 10, mail 19, kampagne 14, kunden 9, tagesbetrieb 15, claude 8, nachfass 6, wirkung 5, plattformen 10, kosten 5, termine 8, imap 9 – neu). Gefundene Fehler: Prisma ignorierte den Port in der Datenbank-Adresse und klopfte beim rankPilot-Postgres an (abgewiesen, behoben); Semikolon im Kalendereintrag nicht maskiert (behoben).
 - **Nicht geprüft:** echtes IONOS-Postfach, echter Kalender, Live-Stellen vom Server (Deploy-Skripte brauchen root – wird mit Joachim sauber über feste, root-eigene Befehle gelöst, nicht über Projekt-Skripte), NOVA.app als Fernbedienung (nicht gebaut, da NOVA.app lief).
-- Gefunden bei rankPilot (nicht angefasst): Die tägliche Sicherung der Uploads scheitert jeden Tag („/var/data/rankpilot-uploads fehlt“); Datenbank-Sicherungen liegen nur auf demselben Server.
+- rankPilot-Sicherungen (02.10., auf Joachims Wort): Die Uploads-Sicherung suchte im falschen Ordner (/var/data/rankpilot-uploads, die Verlegung wurde nie gemacht) und scheiterte täglich seit April – jetzt auf `/var/www/rankpilot/uploads` gestellt (nur die Zeitplan-Datei, Skript und App unverändert), 14 Tage Aufbewahrung, erster Lauf 417/417 Dateien. Meine Aussage „Datenbank-Sicherungen nur auf demselben Server“ war falsch: Das IONOS-Acronis-Backup sichert die ganze Platte jede Nacht in die Acronis-Cloud (wöchentlich voll, täglich inkrementell, zuletzt 02.10. erfolgreich). Weil die DB-Sicherung erst nach Acronis lief, kam sie einen Tag verspätet in die Cloud – alle Sicherungen jetzt vor 01:06 UTC (NOVA 00:15, rankPilot-DB 00:30, Uploads 00:45). Alte Zeitpläne als Sicherung unter /root.
 
 ## Dran
 
@@ -295,8 +295,7 @@ Nicht geprüft: echter Apple Kalender (das AppleScript lief nie gegen Calendar; 
 2. Signaturtexte liefern (bisher hängte Apple Mail sie an; auf dem Server schickt NOVA sie mit).
 3. Kalender: welcher (iCloud?), Apple-ID; App-Passwort mit `nova.sh kalender-passwort`.
 4. Claude Code auf dem Server anmelden (`ssh nova@87.106.179.99`, dann `claude`).
-5. Im IONOS-Menü „Backup“ nachsehen, ob eine Sicherung gebucht ist; Ziel für eine Kopie außer Haus.
-6. Ja/Nein: private GitHub-Repos für die Projekte ohne GitHub (ELEVUM, PandB, Seedance, diekuehlenretter, lead-scanner).
+5. Ja/Nein: private GitHub-Repos für die Projekte ohne GitHub (ELEVUM, PandB, Seedance, diekuehlenretter, lead-scanner).
 Danach (Claude Code, mit Joachim): echte Test-Mail über den Server, Live-Stellen vom Server einrichten, NOVA.app als Fernbedienung, Umschalten an einem Abend.
 
 **Weiter offen:** Abnahme Phase 7 (Plattformen), Abnahme Termine (Kalender – entfällt in der Mac-Form, kommt mit dem Server über CalDAV).
