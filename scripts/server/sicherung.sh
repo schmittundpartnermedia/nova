@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Nächtliche Sicherung von NOVA auf dem Server (läuft als Benutzer „nova“ per crontab, ohne root).
 # Sichert: NOVA-Datenbank (pg_dump), ~/Nova (Gedächtnis, Vorlagen, Listen, Zustand, Geheimnisse), ~/projekte (ohne node_modules).
-# Ablage: ~/sicherung/<datum>/, 14 Tage aufbewahrt. Eine Kopie außer Haus fehlt noch (Ziel klärt Joachim).
+# Ablage: ~/sicherung/<datum>/, 14 Tage aufbewahrt. Außer Haus: das IONOS-Acronis-Backup (ganze Platte, 01:06 UTC) nimmt sie mit.
 set -euo pipefail
 export TZ=Europe/Berlin
 umask 077

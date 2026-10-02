@@ -45,7 +45,7 @@ Läuft auf dem Server:
 - Web-App `nova-web` (pm2 von `nova`, aus `ecosystem.config.cjs`, TZ=Europe/Berlin) mit einer Kopie der Daten von 00:41. Kopf antwortet aus Gedächtnis und Verlauf.
 - Lead-Scanner unter `/home/nova/projekte/lead-scanner` (eigener Google-Schlüssel in seiner `.env`, nur für `nova` lesbar); sein Test läuft auf dem Server grün.
 - Claude Code 2.1.287 für `nova` installiert (`~/.local/bin/claude`) – **nicht angemeldet**.
-- Sicherung jede Nacht 03:30 (deutsche Zeit) nach `~/sicherung/<datum>/`: Datenbank, `~/Nova`, Projekte; jede Sicherung wird nach dem Schreiben gelesen; 14 Tage. Erste Sicherung 02.10. 01:14 geprüft (3,3 GB).
+- Sicherung jede Nacht 00:15 UTC (vor dem IONOS-Acronis-Backup um 01:06 UTC, das die ganze Platte in die Acronis-Cloud sichert) nach `~/sicherung/<datum>/`: Datenbank, `~/Nova`, Projekte; jede Sicherung wird nach dem Schreiben gelesen; 14 Tage. Erste Sicherung 02.10. 01:14 geprüft (3,3 GB).
 
 Im Code (Zweig `server/umzug`), auf dem Server installiert, aber ohne echten Zugang noch nicht gelaufen:
 - Mail über IMAP/SMTP (IONOS) statt Apple Mail – braucht die Passwörter und `~/Nova/mailkonten.txt`.
@@ -66,8 +66,10 @@ Aktualisieren vom Mac: `scripts/server/aktualisieren.sh` (überträgt, installie
 3. Joachim: Claude Code auf dem Server anmelden (`ssh nova@87.106.179.99`, dann `claude`).
 4. Live-Stellen vom Server (siehe oben) gemeinsam einrichten.
 5. NOVA.app auf dem Mac als Fernbedienung (spricht über SSH mit dem Server); Swift-Helfer und Apple-Teile im Launcher entfernen.
-6. Kopie der Sicherung außer Haus (Ziel klären) und prüfen, ob das IONOS-Backup (Acronis) gebucht ist.
+6. (erledigt 02.10.: Acronis sichert die ganze Platte jede Nacht außer Haus – wöchentlich voll, täglich inkrementell.)
 7. Gleiche Node-Version auf Mac und Server (Mac 24, Server 22).
 8. Umschalten an einem Abend: Mac-NOVA aus, letzte Daten übernehmen (`scripts/umzug-daten.ts`), Projekte nachgleichen, `pm2 start ecosystem.config.cjs`, `pm2 save` + Autostart.
 
-Gefunden nebenbei (rankPilot, nicht angefasst): Die tägliche Sicherung der Uploads scheitert jeden Tag („/var/data/rankpilot-uploads fehlt“); die Datenbank-Sicherungen liegen nur auf demselben Server.
+rankPilot-Sicherungen (02.10. auf Joachims Wort korrigiert):
+- Uploads: Die Sicherung suchte in /var/data/rankpilot-uploads (geplante Verlegung nie gemacht) und scheiterte täglich. Jetzt `/etc/cron.d/rankpilot-backup-uploads` mit `RP_UPLOADS_DATA_DIR=/var/www/rankpilot/uploads`, 14 Tage Aufbewahrung; erster Lauf 417/417 Dateien. Alte Fassung: `/root/rankpilot-backup-uploads.cron.vor-nova-20261002`. Skript im rankPilot-Repo unverändert.
+- „Nur auf demselben Server“ stimmte nicht: Acronis sichert die ganze Platte jede Nacht in die Acronis-Cloud. Die Datenbank-Sicherung (vorher 02:00 UTC) lief aber nach Acronis (01:06 UTC) und kam erst einen Tag später in die Cloud – jetzt 00:30 UTC, Uploads 00:45 UTC, NOVA 00:15 UTC. Alte root-crontab: `/root/crontab.vor-nova-20261002`.
