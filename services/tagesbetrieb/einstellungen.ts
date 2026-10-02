@@ -27,6 +27,11 @@ export type TagesbetriebEinstellungen = {
   suchgebiet: { mitte: string; radiusKm: number };
   /** Branchen in dieser Reihenfolge; eine Branche wird im ganzen Gebiet gesucht, dann kommt die nächste. */
   branchen: string[];
+  /**
+   * true: jeden Morgen eine Beispiel-Mail zur Freigabe, gesendet wird erst nach Joachims Ja.
+   * false: Dauerfreigabe – die Tageskampagne startet von selbst (Joachims Entscheidung 02.10.2026); er wird informiert.
+   */
+  taeglicheFreigabe: boolean;
 };
 
 export const STANDARD: TagesbetriebEinstellungen = {
@@ -34,6 +39,7 @@ export const STANDARD: TagesbetriebEinstellungen = {
   vorlage: "kunden",
   absender: "joachim@rankpilot.de",
   maxProTag: 50,
+  taeglicheFreigabe: true,
   abstandMinuten: 5,
   start: "08:00",
   ende: "17:00",

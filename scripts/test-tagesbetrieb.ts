@@ -250,6 +250,29 @@ async function main() {
       assert.equal(await prisma.campaign.count(), kampagnen);
       assert.equal(gesendet.length, vorher);
     }],
+    ["Dauerfreigabe (taegliche_freigabe nein): Tageskampagne startet morgens von selbst, Joachim wird informiert, ab 8 Uhr wird gesendet", async () => {
+      await holeNeueMeldungen(org.id);
+      fs.writeFileSync(path.join(home, "tagesbetrieb.json"), JSON.stringify({ ...leseEinstellungen(), wochentage: [1, 2, 3, 4, 5, 6, 7] }));
+      const an = await run("tagesbetrieb", { aktion: "einschalten", max_pro_tag: 0, abstand_minuten: 0, start: "", ende: "", vorlage: "", taegliche_freigabe: "nein" });
+      assert.equal(an.ok, true, an.error);
+      assert.equal(leseEinstellungen().taeglicheFreigabe, false);
+      const m = (h: number, min: number) => new Date(heute.getFullYear(), heute.getMonth(), heute.getDate() + 1, h, min);
+      assert.equal((await tick(m(7, 55))).aktion, "gestartet (Dauerfreigabe)");
+      const kampagne = await prisma.campaign.findFirstOrThrow({ where: { art: "tagesbetrieb", status: "laeuft" } });
+      const freigabe = await prisma.approvalRequest.findUniqueOrThrow({ where: { id: kampagne.approvalId! } });
+      assert.equal(freigabe.status, "approved");
+      assert.match(freigabe.description, /Dauerfreigabe für den Tagesbetrieb/);
+      const meldungen = await holeNeueMeldungen(org.id);
+      assert.equal(meldungen.filter((x) => /^Kunden-Tagesbetrieb läuft: bis zu 2 Mails/.test(x.text)).length, 1);
+      assert.ok(!meldungen.some((x) => /Soll ich heute so starten/.test(x.text)), "keine Frage mehr");
+      const vorher = gesendet.length;
+      assert.equal((await tick(m(8, 0))).aktion, "gesendet");
+      assert.equal(gesendet.length, vorher + 1);
+      assert.equal(gesendet.at(-1), "a@noch-einer.de");
+      const zurueck = await run("tagesbetrieb", { aktion: "einschalten", max_pro_tag: 0, abstand_minuten: 0, start: "", ende: "", vorlage: "", taegliche_freigabe: "ja" });
+      assert.equal(zurueck.ok, true);
+      assert.equal(leseEinstellungen().taeglicheFreigabe, true, "per Stimme zurückstellbar");
+    }],
     ["Ausschalten per Werkzeug", async () => {
       await run("tagesbetrieb", { aktion: "ausschalten", max_pro_tag: 0, abstand_minuten: 0, start: "", ende: "", vorlage: "" });
       assert.deepEqual(await tick(t(9, 0)), { weiter: false, aktion: "ausgeschaltet" });

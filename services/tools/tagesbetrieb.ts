@@ -15,7 +15,7 @@ function fehler(error: unknown): NovaToolResult {
 export const tagesbetriebTool: NovaToolDefinition = {
   name: "tagesbetrieb",
   description:
-    "Kunden-Tagesbetrieb: werktags sucht NOVA über den Lead-Scanner neue lokale Betriebe, prüft jede Adresse und schickt nach Joachims täglicher Freigabe einer Beispiel-Mail alle paar Minuten eine Mail mit der Kunden-Vorlage, bis zum Tageslimit oder Feierabend; danach Tagesbericht. aktion: einschalten, ausschalten, stand. Werte ändern nur, wenn Joachim es sagt; sonst leer bzw. 0 lassen (dann bleibt die Einstellung).",
+    "Kunden-Tagesbetrieb: werktags sucht NOVA über den Lead-Scanner neue lokale Betriebe, prüft jede Adresse und schickt – je nach Einstellung nach Joachims täglicher Freigabe einer Beispiel-Mail oder mit Dauerfreigabe von selbst – alle paar Minuten eine Mail mit der Kunden-Vorlage, bis zum Tageslimit oder Feierabend; danach Tagesbericht. aktion: einschalten, ausschalten, stand. Werte ändern nur, wenn Joachim es sagt; sonst leer bzw. 0 lassen (dann bleibt die Einstellung).",
   parameters: {
     type: "object",
     properties: {
@@ -25,8 +25,13 @@ export const tagesbetriebTool: NovaToolDefinition = {
       start: { type: "string", description: "HH:MM oder leer" },
       ende: { type: "string", description: "HH:MM oder leer" },
       vorlage: { type: "string", description: "Vorlagenname oder leer" },
+      taegliche_freigabe: {
+        type: "string",
+        enum: ["ja", "nein", "unveraendert"],
+        description: "ja = jeden Morgen Beispiel-Mail zur Freigabe; nein = Dauerfreigabe, startet von selbst. Nur ändern, wenn Joachim es ausdrücklich sagt.",
+      },
     },
-    required: ["aktion", "max_pro_tag", "abstand_minuten", "start", "ende", "vorlage"],
+    required: ["aktion", "max_pro_tag", "abstand_minuten", "start", "ende", "vorlage", "taegliche_freigabe"],
     additionalProperties: false,
   },
   async execute(args, ctx) {
@@ -40,6 +45,7 @@ export const tagesbetriebTool: NovaToolDefinition = {
       if (zeit.test(str(args.start))) neu.start = str(args.start).padStart(5, "0");
       if (zeit.test(str(args.ende))) neu.ende = str(args.ende).padStart(5, "0");
       if (str(args.vorlage)) neu.vorlage = str(args.vorlage);
+      if (args.taegliche_freigabe === "ja" || args.taegliche_freigabe === "nein") neu.taeglicheFreigabe = args.taegliche_freigabe === "ja";
       const cfg = schreibeEinstellungen(neu);
       if (cfg.aktiv) await planeTagesbetriebTick(ctx.organizationId, new Date(Date.now() + 15_000));
       return { ok: true, executed: true, data: { einstellungen: cfg } };
