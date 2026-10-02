@@ -9,7 +9,7 @@ import { novaHomeDir } from "@/lib/gedaechtnis/paths";
  * `~/Nova/preise.json` ein; bis dahin meldet NOVA „Preis fehlt“ statt eine Zahl zu erfinden.
  */
 
-export type VerbrauchsArt = "kopf" | "stimme" | "spracherkennung" | "websuche";
+export type VerbrauchsArt = "kopf" | "stimme" | "spracherkennung" | "websuche" | "auswertung";
 
 export type Buchung = {
   zeit: string;

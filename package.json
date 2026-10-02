@@ -31,6 +31,8 @@
     "test:plattformen": "tsx scripts/test-plattformen.ts",
     "test:kosten": "tsx scripts/test-kosten.ts",
     "test:termine": "tsx scripts/test-termine.ts",
+    "test:profil": "tsx scripts/test-profil.ts",
+    "test:check": "tsx scripts/test-persoenlicher-check.ts",
     "nachweis:phase5": "tsx scripts/nachweis-phase5-claude.ts",
     "nachweis:ueberblick": "tsx scripts/nachweis-ueberblick.ts",
     "nachweis:phase7": "tsx scripts/nachweis-phase7.ts",

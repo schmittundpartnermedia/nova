@@ -169,7 +169,7 @@ async function main() {
       assert.equal(entwuerfe.length, 1);
       assert.equal(entwuerfe[0]!.toAddress, "info@holz-maier.de", "Lead mit höchstem Score zuerst");
       assert.equal(entwuerfe[0]!.subject, "Mehr Sichtbarkeit für Holz Maier");
-      assert.equal(entwuerfe[0]!.body, "Guten Tag Anton Maier,\n\nbei Holz Maier in Pforzheim ist uns aufgefallen: kein SSL.");
+      assert.equal(entwuerfe[0]!.body, "Hallo zusammen,\n\nbei Holz Maier in Pforzheim ist uns aufgefallen: kein SSL.", "vorläufige Anrede, bis NOVA die Website verstanden hat");
       const alle = await holeNeueMeldungen(org.id);
       // Nur noch 3 im Vorrat (< 5): zusätzlich der Vorschlag für die nächste Branche – gesucht wird nicht.
       const vorschlag = alle.filter((m) => /Als Nächstes würde ich/.test(m.text));

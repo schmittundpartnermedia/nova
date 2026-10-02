@@ -121,6 +121,32 @@ export class OpenAIProvider implements HeadProvider {
     }
   }
 
+  /**
+   * Eine Frage mit fest vorgegebener Antwortform (JSON-Schema, strict). Für Auswertungen ohne Werkzeuge,
+   * z. B. „Was macht dieser Betrieb, wer ist der Ansprechpartner?“. Verbrauch wird als „auswertung“ gebucht.
+   */
+  async strukturiert<T>(input: { name: string; anweisung: string; eingabe: string; schema: Record<string, unknown>; model?: string }): Promise<T> {
+    const model = resolveModel(input);
+    try {
+      const response = await this.getClient().responses.create({
+        model,
+        instructions: input.anweisung,
+        input: input.eingabe,
+        text: { format: { type: "json_schema", name: input.name, schema: input.schema, strict: true } },
+      });
+      bucheVerbrauch({
+        art: "auswertung",
+        modell: model,
+        eingabeTokens: response.usage?.input_tokens,
+        gecachteTokens: response.usage?.input_tokens_details?.cached_tokens,
+        ausgabeTokens: response.usage?.output_tokens,
+      });
+      return JSON.parse(response.output_text) as T;
+    } catch (error) {
+      throw new Error(publicErrorMessage(error));
+    }
+  }
+
   async healthCheck(): Promise<HealthCheckResult> {
     if (this.healthCache && Date.now() - this.healthCache.at < HEALTH_TTL_MS) {
       return this.healthCache.result;

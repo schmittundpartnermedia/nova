@@ -90,46 +90,82 @@ function domain(url: string): string {
   }
 }
 
-function anrede(firma: string, ansprechpartner: string | null): string {
-  return ansprechpartner ? `Guten Tag ${ansprechpartner}` : `Sehr geehrtes ${firma}-Team`;
+/**
+ * Vorläufige Anrede beim Einlesen. Die persönliche Anrede („Hallo Herr Kanzleiter“) entsteht erst, wenn NOVA die Website
+ * verstanden hat (services/leads/profil.ts) – der rohe Scanner-Name ist dafür nicht verlässlich genug.
+ */
+function vorlaeufigeAnrede(): string {
+  return "Hallo zusammen";
+}
+
+/** Rohtexte je placeId aus <csv>.texte.json (neben der Scanner-CSV); fehlt die Datei, leer. */
+function leseTexteDatei(csvPfad: string): Record<string, unknown> {
+  try {
+    return JSON.parse(fs.readFileSync(csvPfad.replace(/\.csv$/, ".texte.json"), "utf8")) as Record<string, unknown>;
+  } catch {
+    return {};
+  }
 }
 
 /**
- * Liest eine CSV des Lead-Scanners in den Vorrat (Tabelle leads) ein. Bekannte Betriebe (gleiche Adresse;
- * ohne Adresse gleiche Firma und gleicher Ort) werden übersprungen – außer zurückgestellte, die kommen wieder dran.
+ * Liest eine CSV des Lead-Scanners in den Vorrat (Tabelle leads) ein. Wiedererkannt wird ein Betrieb an seiner
+ * Google-Kennung, sonst an der Adresse, ohne Adresse an Firma und Ort. Bekannte Betriebe bekommen fehlende Rohtexte;
+ * wurden sie mangels Adresse verworfen und hat der Scanner jetzt eine gefunden, kommen sie zurück in den Vorrat.
+ * Zurückgestellte kommen wieder dran.
  */
 export async function leseLeadsEin(
   organizationId: string,
   csvPfad: string,
   kontext: { branche?: string } = {},
-): Promise<{ neu: number; ohneEmail: number }> {
+): Promise<{ neu: number; ohneEmail: number; nachgetragen: number }> {
   assertOrganizationId(organizationId);
   const zeilen = parseKontaktliste(fs.readFileSync(csvPfad, "utf8")).map((zeile) => zeile.werte);
+  const texteJe = leseTexteDatei(csvPfad);
   let neu = 0;
   let ohneEmail = 0;
+  let nachgetragen = 0;
   for (const werte of zeilen) {
     const firma = (werte.name ?? "").trim();
     if (!firma) continue;
     const email = (werte.email ?? "").trim().toLowerCase() || null;
     const ort = (werte.ort ?? "").trim() || null;
-    const bekannt = email
-      ? await prisma.lead.findFirst({ where: { organizationId, email } })
-      : await prisma.lead.findFirst({ where: { organizationId, email: null, firma, ort } });
-    if (bekannt?.status === "zurueckgestellt") {
-      // Zurückgestellt, bis seine Branche dran ist – jetzt ist sie dran.
-      await prisma.lead.update({ where: { id: bekannt.id }, data: { status: "neu", grund: null, geprueftAt: null, quelle: csvPfad } });
-      neu += 1;
+    const placeId = (werte.placeid ?? "").trim() || null;
+    const texte = placeId && texteJe[placeId] ? JSON.stringify(texteJe[placeId]) : null;
+    const bekannt =
+      (placeId ? await prisma.lead.findFirst({ where: { organizationId, placeId } }) : null) ??
+      (email ? await prisma.lead.findFirst({ where: { organizationId, email } }) : null) ??
+      (await prisma.lead.findFirst({ where: { organizationId, firma, ort } }));
+    if (bekannt) {
+      const daten: Record<string, unknown> = {};
+      if (!bekannt.placeId && placeId) daten.placeId = placeId;
+      if (texte && texte !== bekannt.texte) {
+        daten.texte = texte;
+        daten.profil = null; // neue Rohtexte → neu verstehen
+        daten.profilAt = null;
+      }
+      const adresseNeu = !bekannt.email && email && !(await prisma.lead.findFirst({ where: { organizationId, email } }));
+      if (adresseNeu) {
+        daten.email = email;
+        if (bekannt.status === "verworfen" && bekannt.grund === "keine E-Mail-Adresse") {
+          Object.assign(daten, { status: "neu", grund: null, geprueftAt: null, quelle: csvPfad });
+        }
+        nachgetragen += 1;
+      }
+      if (bekannt.status === "zurueckgestellt") {
+        // Zurückgestellt, bis seine Branche dran ist – jetzt ist sie dran.
+        Object.assign(daten, { status: "neu", grund: null, geprueftAt: null, quelle: csvPfad });
+        neu += 1;
+      }
+      if (Object.keys(daten).length) await prisma.lead.update({ where: { id: bekannt.id }, data: daten });
       continue;
     }
-    if (bekannt) continue;
-    const ansprechpartner = (werte.ansprechpartner || werte.inhabername || "").trim() || null;
     const score = Number.parseInt(werte.score ?? "", 10);
     await prisma.lead.create({
       data: {
         organizationId,
         firma,
-        ansprechpartner,
-        anrede: anrede(firma, ansprechpartner),
+        ansprechpartner: (werte.ansprechpartner || werte.inhabername || "").trim() || null,
+        anrede: vorlaeufigeAnrede(),
         email,
         telefon: (werte.telefon ?? "").trim() || null,
         ort,
@@ -139,6 +175,8 @@ export async function leseLeadsEin(
         aufhaenger: (werte.aufhaenger ?? "").trim() || null,
         score: Number.isFinite(score) ? score : null,
         quelle: csvPfad,
+        placeId,
+        texte,
         status: email ? "neu" : "verworfen",
         grund: email ? null : "keine E-Mail-Adresse",
         geprueftAt: email ? null : new Date(),
@@ -147,7 +185,7 @@ export async function leseLeadsEin(
     neu += 1;
     if (!email) ohneEmail += 1;
   }
-  return { neu, ohneEmail };
+  return { neu, ohneEmail, nachgetragen };
 }
 
 /** Prüft alle neuen Leads (Form, MX, Sperrliste, schon angeschrieben). */
@@ -225,7 +263,7 @@ export async function fuehreGebietssucheAus(input: {
     kunden.push({
       firma,
       ansprechpartner,
-      anrede: anrede(firma, ansprechpartner || null),
+      anrede: vorlaeufigeAnrede(),
       email,
       telefon: (werte.telefon ?? "").trim(),
       ort,

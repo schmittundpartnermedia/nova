@@ -1409,7 +1409,16 @@ model Lead {
   score           Int?
   /// Scanner-CSV, aus der der Lead stammt
   quelle          String
-  /// neu | geprueft | verworfen | angeschrieben | zurueckgestellt (Branche kommt später dran)
+  /// Google-Kennung des Betriebs (aus der Gebietssuche)
+  placeId         String?   @map("place_id")
+  /// JSON: Rohtexte der Website (Startseite, Impressum, Kontakt, Über uns), Google-Kategorien, alle Adressen
+  texte           String?
+  /// JSON: was NOVA daraus verstanden hat (Firmenname, Gewerk, Suchwort, Leistungen, Ansprechpartner)
+  profil          String?
+  profilAt        DateTime? @map("profil_at")
+  /// Persönlicher rankPilot-Check vor der Mail (rpc_…); Ergebnis unter https://rankpilot.de/check/r/<checkId>
+  checkId         String?   @map("check_id")
+  /// neu | geprueft | check (persönlicher Check läuft) | bereit (Entwurf liegt) | verworfen | angeschrieben | zurueckgestellt (Branche kommt später dran)
   status          String    @default("neu")
   grund           String?
   geprueftAt      DateTime? @map("geprueft_at")
