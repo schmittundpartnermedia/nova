@@ -20,7 +20,8 @@ import { pruefeAdresse, type MxPruefer } from "@/services/tagesbetrieb/pruefen";
  * 1. Vorrat: Unter N geprüften Adressen schlägt NOVA die nächste Branche im Suchgebiet vor (Reihenfolge laut Einstellungen,
  *    mit Kosten und Freigabe); gesucht wird erst nach Joachims Ja – über kunden_suchen (Gebietssuche, Worker „scanner.lauf“).
  * 2. Morgens: eine Tageskampagne mit EINER Beispiel-Mail und einer Freigabe; NOVA legt sie im Chat vor.
- * 3. Nach dem Ja: pro Takt eine Mail (geprüfte Adresse → Entwurf aus der Vorlage → Versand), bis Tageslimit oder Feierabend.
+ *    Mit Dauerfreigabe (Einstellung taeglicheFreigabe: false) startet sie sofort und NOVA meldet nur den Start.
+ * 3. Nach dem Ja bzw. dem Start: pro Takt eine Mail (geprüfte Adresse → Entwurf aus der Vorlage → Versand), bis Tageslimit oder Feierabend.
  * 4. Nach Feierabend: Tagesbericht in den Chat und nach ~/Nova/berichte/.
  */
 
@@ -216,11 +217,24 @@ export async function tagesbetriebTick(input: {
       actionType: "mail.campaign",
       description:
         `${kampagnenName(datum)}: bis ${cfg.maxProTag} Mails von ${cfg.absender}, ${cfg.start}–${cfg.ende} Uhr, alle ${cfg.abstandMinuten} Minuten` +
-        (nachfass ? `; Nachfass-Mail nach ${nachfass.tage} Tagen ohne Antwort (Vorlage „${nachfass.vorlage}“)` : ""),
-      payload: { kampagneId: neu.id, tagesbetrieb: true },
+        (nachfass ? `; Nachfass-Mail nach ${nachfass.tage} Tagen ohne Antwort (Vorlage „${nachfass.vorlage}“)` : "") +
+        (cfg.taeglicheFreigabe ? "" : " (erteilt durch Joachims Dauerfreigabe für den Tagesbetrieb, Einstellung taeglicheFreigabe: false)"),
+      payload: { kampagneId: neu.id, tagesbetrieb: true, dauerfreigabe: !cfg.taeglicheFreigabe },
     });
     await prisma.campaign.update({ where: { id: neu.id }, data: { approvalId: approval.id } });
     const entwurf = await prisma.communication.findUniqueOrThrow({ where: { id: beispiel.entwurfId } });
+    if (!cfg.taeglicheFreigabe) {
+      await starteTageskampagne({ organizationId, kampagneId: neu.id, freigabeId: approval.id, jetzt });
+      await meldeNutzer({
+        organizationId,
+        anlass: `tagesbetrieb-start:${datum}`,
+        text:
+          `Kunden-Tagesbetrieb läuft: bis zu ${cfg.maxProTag} Mails von ${cfg.absender}, alle ${cfg.abstandMinuten} Minuten bis ${cfg.ende} Uhr. ` +
+          `Die erste geht an ${entwurf.recipientName}.`,
+        werkzeugNotiz: `tagesbetrieb: ${JSON.stringify({ kampagne_id: neu.id, freigabe_id: approval.id, entwurf_id: entwurf.id, status: "laeuft", dauerfreigabe: true })}`,
+      });
+      return { weiter: true, aktion: "gestartet (Dauerfreigabe)" };
+    }
     await meldeNutzer({
       organizationId,
       anlass: `tagesbetrieb-freigabe:${datum}`,
@@ -271,6 +285,14 @@ export async function tagesbetriebTick(input: {
   return { weiter: true, aktion: `fehlgeschlagen: ${ergebnis.grund}` };
 }
 
+/** Freigabe erteilen und Tageskampagne starten – nach Joachims Ja oder (Dauerfreigabe) morgens von selbst. */
+async function starteTageskampagne(input: { organizationId: string; kampagneId: string; freigabeId: string; jetzt: Date }) {
+  await decideApproval({ organizationId: input.organizationId, approvalId: input.freigabeId, status: "approved" });
+  const kampagne = await prisma.campaign.update({ where: { id: input.kampagneId }, data: { status: "laeuft", startedAt: input.jetzt } });
+  if (kampagne.nachfassTage) await planeNachfass(input.organizationId, new Date(input.jetzt.getTime() + 60_000));
+  return kampagne;
+}
+
 /** Joachims Ja zur Beispiel-Mail: Tageskampagne läuft. */
 export async function tagesbetriebFreigeben(input: { organizationId: string; freigabeId: string }) {
   assertOrganizationId(input.organizationId);
@@ -279,9 +301,7 @@ export async function tagesbetriebFreigeben(input: { organizationId: string; fre
   });
   if (!kampagne) throw new Error("Zu dieser Freigabe gibt es keine Tageskampagne.");
   if (kampagne.status !== "wartet_auf_freigabe") throw new Error(`Die Tageskampagne ist bereits ${kampagne.status}.`);
-  await decideApproval({ organizationId: input.organizationId, approvalId: input.freigabeId, status: "approved" });
-  await prisma.campaign.update({ where: { id: kampagne.id }, data: { status: "laeuft", startedAt: new Date() } });
-  if (kampagne.nachfassTage) await planeNachfass(input.organizationId, new Date(Date.now() + 60_000));
+  await starteTageskampagne({ organizationId: input.organizationId, kampagneId: kampagne.id, freigabeId: input.freigabeId, jetzt: new Date() });
   return { kampagne_id: kampagne.id, name: kampagne.name, status: "laeuft" };
 }
 
