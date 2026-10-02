@@ -315,9 +315,11 @@ Nicht geprüft: echter Apple Kalender (das AppleScript lief nie gegen Calendar; 
 - Webseite (b895208): Texte Check-Seite, Startseite-FAQ, Funktionen, SURI an die Messung angepasst; Produktfakten mit Claude (6 KI-Systeme).
 - **Live nur mit Joachims Ja, Reihenfolge:** 1. Webseite (sonst kennt sie `zweck: verlauf` nicht), 2. App (Migration 0112), 3. Webseite neu bauen (Produktfakten mit Claude kommen aus der App). Beide Zweige konfliktfrei mit `main`, nicht gepusht.
 
+**03.10.2026, ~00:30 – Check v2 + Verlauf live (Joachims Ja „stell alles live“).** Reihenfolge eingehalten: 1. Webseite (`nova/check-v2` → main b895208, Live-Skript, Health 200), 2. App (`nova/check-v2-app` → main e1597c16, Blau-Grün, Migration 0112 auf dem Server, Tabelle `sichtbarkeit_verlauf` vorhanden), 3. Webseite neu veröffentlicht (Produktfakten jetzt mit Claude, Startseite „6 KI-Systeme“). Echte Verlaufsbestellung über rankpilot.de: rpc_5b3e41d4a11c49c3, fertig, 0,36 $, zwei Fragen, ChatGPT/Gemini/Perplexity je 10 Antworten, Claude 2; landet **nicht** als Website-Check in der App (0 Zeilen in `ads_checks`). Die erste echte Wochenmessung durch die App kommt mit ihrem Zeitplan (täglich 07:00, je Projekt einmal pro Woche) – noch nicht beobachtet.
+
 ## Dran
 
-**Check v2 + Verlauf live stellen (Joachims Ja):** Reihenfolge Webseite → App (Migration 0112) → Webseite neu bauen. Vorher Abgleich mit Joachim: er sucht im privaten Fenster (Handy + Computer, Standort notieren, Screenshots), Claude Code misst in derselben Minute mit `scripts/abgleich.ts`. Danach Versand: Tagesbetrieb auf Vorlage `kunden-check`, NOVA.app neu starten, Mails/Tag festlegen.
+**Nach dem Live-Gang:** erste Wochenmessungen der App prüfen (Tabelle `sichtbarkeit_verlauf`, Karte in Mission Control). Abgleich mit Joachim (privates Fenster, Standort, Screenshots; Claude Code misst gleichzeitig mit `scripts/abgleich.ts`). Danach Versand: Tagesbetrieb auf Vorlage `kunden-check`, NOVA.app neu starten, Mails/Tag festlegen.
 
 **Umzug auf den Server (Zweig `server/umzug`, Anleitung `docs/SERVER.md`), Joachim:**
 1. Mail-Passwörter selbst eintragen: `scripts/server/nova.sh passwort joachim@rankpilot.de` (ebenso check@b2b-rankpilot.de, info@elevum.io) – im Ordner `~/Entwicklung/NOVA-server`.
