@@ -30,6 +30,7 @@ const FAEHIGKEITEN = [
   "Termine und Rückrufe speichern und dich vorher erinnern, auf Wunsch auch im Apple Kalender; Rückrufwünsche aus Antworten schlage ich zum Eintragen vor",
   "sagen, was ich gekostet habe (OpenAI, Claude Code, Google) – wo ein Preis fehlt, sage ich es",
   "zeigen, was die Mails gebracht haben: Antworten, gestartete rankPilot Checks und neue Konten je Kampagne",
+  "WhatsApp über deine Business-Nummer (Zernio): Vorlagen bei Meta einreichen, deine Kontakte mit Vornamen holen, Rundnachrichten in Wellen nach deinem Ja, Antworten melden und einen Vorschlag machen, der erst mit deinem Ja rausgeht",
   "Adressen auf die Sperrliste setzen",
   "Claude Code Programmier-Aufträge an deinen Projekten geben (alle Git-Projekte unter Projekte/joachim), das Ergebnis prüfen und nach deinem Ja übernehmen bzw. live stellen",
 ];
@@ -61,6 +62,7 @@ export const novaStatusTool: NovaToolDefinition = {
     if (!vorlagen.includes("sponsoren")) fehlt.push("Sponsoren-Vorlage (~/Nova/vorlagen/sponsoren.md).");
     if (!alleSignaturen().length) fehlt.push("Signatur-Zuordnung (~/Nova/signaturen.txt).");
     if (!process.env.RANKPILOT_CHECKS_TOKEN?.trim()) fehlt.push("Schlüssel für die Check-Zählung (RANKPILOT_CHECKS_TOKEN in NOVAs .env) – ohne ihn sehe ich nicht, wer über meine Mails den Check startet.");
+    if (!process.env.ZERNIO_API_KEY?.trim()) fehlt.push("Zernio-Schlüssel für WhatsApp (ZERNIO_API_KEY in NOVAs .env) – ohne ihn kann ich kein WhatsApp schicken oder lesen.");
     if (tagesbetrieb.aktiv && !vorlagen.includes(tagesbetrieb.vorlage)) fehlt.push(`Der Tagesbetrieb ist an, aber die Vorlage „${tagesbetrieb.vorlage}“ fehlt.`);
 
     return {

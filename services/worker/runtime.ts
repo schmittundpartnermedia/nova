@@ -18,6 +18,7 @@ import { tagesbetriebTickWorkHandler } from "@/services/tagesbetrieb/work";
 import { nachfassTickWorkHandler } from "@/services/nachfass/work";
 import { claudeLaufWorkHandler, claudeLiveWorkHandler } from "@/services/claude/work";
 import { terminErinnerungWorkHandler } from "@/services/termine-work";
+import { whatsappSendWorkHandler, whatsappWacheWorkHandler } from "@/services/whatsapp/work";
 
 export type WorkHandler = (item: {
   id: string;
@@ -53,6 +54,9 @@ registerWorkHandler("claude.live", claudeLiveWorkHandler);
 registerWorkHandler("nachfass.tick", nachfassTickWorkHandler);
 
 registerWorkHandler("termin.erinnerung", terminErinnerungWorkHandler);
+
+registerWorkHandler("whatsapp.send", whatsappSendWorkHandler);
+registerWorkHandler("whatsapp.wache", whatsappWacheWorkHandler);
 
 export async function tickWorker(workerId: string, now = new Date()) {
   await prisma.$queryRawUnsafe("PRAGMA journal_mode=WAL;");

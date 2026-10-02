@@ -10,6 +10,7 @@ import { PLATTFORM_TOOLS } from "@/services/tools/plattformen";
 import { kostenTool } from "@/services/tools/kosten";
 import { CLAUDE_TOOLS } from "@/services/tools/claude";
 import { TERMIN_TOOLS } from "@/services/tools/termine";
+import { WHATSAPP_TOOLS } from "@/services/tools/whatsapp";
 import type { NovaToolDefinition, NovaToolResult, ToolContext } from "@/services/tools/types";
 
 const tools = new Map<string, NovaToolDefinition>();
@@ -36,6 +37,7 @@ export function bootstrapTools(): void {
   for (const tool of PLATTFORM_TOOLS) register(tool);
   register(kostenTool);
   for (const tool of TERMIN_TOOLS) register(tool);
+  for (const tool of WHATSAPP_TOOLS) register(tool);
   bootstrapped = true;
 }
 

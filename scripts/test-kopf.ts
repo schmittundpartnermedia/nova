@@ -53,7 +53,7 @@ function test(name: string, fn: () => Promise<void>) {
   tests.push([name, fn]);
 }
 
-test("Werkzeugliste: Gedächtnis (Phase 1), Mail und Vorlagen (Phase 2), Kampagnen (Phase 3), Kundensuche, Kontaktlisten und Tagesbetrieb (Phase 4), Claude-Aufträge (Phase 5), Wirkung der Mails, Tagesüberblick, Plattform-Einträge (Phase 7), Kosten, Termine – nichts sonst", async () => {
+test("Werkzeugliste: Gedächtnis (Phase 1), Mail und Vorlagen (Phase 2), Kampagnen (Phase 3), Kundensuche, Kontaktlisten und Tagesbetrieb (Phase 4), Claude-Aufträge (Phase 5), Wirkung der Mails, Tagesüberblick, Plattform-Einträge (Phase 7), Kosten, Termine, WhatsApp – nichts sonst", async () => {
   assert.deepEqual(
     listTools().map((t) => t.name).sort(),
     [
@@ -95,6 +95,18 @@ test("Werkzeugliste: Gedächtnis (Phase 1), Mail und Vorlagen (Phase 2), Kampagn
       "vorlage_fuellen",
       "vorlage_liste",
       "web_suchen",
+      "whatsapp_antwort_entwurf",
+      "whatsapp_antwort_senden",
+      "whatsapp_antworten",
+      "whatsapp_kampagne_abbrechen",
+      "whatsapp_kampagne_planen",
+      "whatsapp_kampagne_starten",
+      "whatsapp_kampagne_status",
+      "whatsapp_kontakt_aendern",
+      "whatsapp_kontakte",
+      "whatsapp_kontakte_holen",
+      "whatsapp_status",
+      "whatsapp_vorlage_einreichen",
       "wirkung_anzeigen",
       "zugangsdaten_holen",
       "zugangsdaten_speichern",

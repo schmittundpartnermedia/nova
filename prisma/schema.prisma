@@ -23,6 +23,9 @@ model Organization {
   campaigns               Campaign[]
   plattformen             Plattform[]
   termine                 Termin[]
+  whatsappKontakte        WhatsappKontakt[]
+  whatsappKampagnen       WhatsappKampagne[]
+  whatsappNachrichten     WhatsappNachricht[]
   jobSteps                JobStep[]
   activities              Activity[]
   memoryEntries           MemoryEntry[]
@@ -1486,4 +1489,83 @@ model Termin {
 
   @@index([organizationId, beginn])
   @@map("termine")
+}
+
+/// WhatsApp-Kontakt aus Zernio (Joachims WhatsApp-Business-Nummer). Vorname wird vorgeschlagen, Joachim kann ihn ändern.
+model WhatsappKontakt {
+  id             String   @id @default(cuid())
+  organizationId String   @map("organization_id")
+  /// Nur Ziffern, mit Ländervorwahl (z. B. 4917612345678).
+  telefon        String
+  name           String?
+  vorname        String?
+  /// true, wenn der Vorname aus dem Kontaktnamen abgeleitet und nicht sicher ist.
+  vornameUnsicher Boolean @default(false) @map("vorname_unsicher")
+  zernioId       String?  @map("zernio_id")
+  gesperrt       Boolean  @default(false)
+  sperrGrund     String?  @map("sperr_grund")
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, telefon])
+  @@map("whatsapp_kontakte")
+}
+
+/// WhatsApp-Kampagne: eine freigegebene Vorlage an ausgewählte Kontakte, in Wellen über den Hintergrund-Läufer.
+model WhatsappKampagne {
+  id              String    @id @default(cuid())
+  organizationId  String    @map("organization_id")
+  name            String
+  vorlage         String
+  sprache         String
+  /// wartet_auf_freigabe | laeuft | fertig | abgebrochen
+  status          String    @default("wartet_auf_freigabe")
+  proTag          Int       @map("pro_tag")
+  abstandSekunden Int       @map("abstand_sekunden")
+  approvalId      String?   @map("approval_id")
+  startedAt       DateTime? @map("started_at")
+  finishedAt      DateTime? @map("finished_at")
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+
+  organization Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  nachrichten  WhatsappNachricht[]
+
+  @@index([organizationId, status])
+  @@map("whatsapp_kampagnen")
+}
+
+/// Eine WhatsApp-Nachricht (raus oder rein).
+model WhatsappNachricht {
+  id             String    @id @default(cuid())
+  organizationId String    @map("organization_id")
+  kampagneId     String?   @map("kampagne_id")
+  telefon        String
+  name           String?
+  /// aus | ein
+  richtung       String
+  /// vorlage | text
+  art            String    @default("text")
+  text           String
+  /// aus: geplant | sendet | gesendet | fehlgeschlagen | abgebrochen | entwurf | ersetzt ; ein: empfangen | gesehen
+  status         String
+  zernioId       String?   @map("zernio_id")
+  gespraechId    String?   @map("gespraech_id")
+  fehler         String?
+  approvalId     String?   @map("approval_id")
+  geplantFuer    DateTime? @map("geplant_fuer")
+  gesendetAt     DateTime? @map("gesendet_at")
+  empfangenAt    DateTime? @map("empfangen_at")
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
+
+  organization Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  kampagne     WhatsappKampagne? @relation(fields: [kampagneId], references: [id], onDelete: SetNull)
+
+  @@unique([organizationId, zernioId])
+  @@index([organizationId, telefon])
+  @@index([kampagneId, status])
+  @@map("whatsapp_nachrichten")
 }
