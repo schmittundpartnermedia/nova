@@ -297,9 +297,13 @@ Nicht geprüft: echter Apple Kalender (das AppleScript lief nie gegen Calendar; 
 - Kosten: OpenAI-Auswertung wird als „auswertung“ gebucht. DataForSEO-Kosten je Check zeichnet die Webseite nicht auf → Messung über den Kontostand vor/nach den ersten 5 Checks.
 - **Nicht geprüft:** echter Check (Eingang nicht live), echte Beispiel-Mail. Der Hintergrund-Läufer in NOVA.app kennt den neuen Code erst nach einem Neustart der App. Im Server-Zweig noch nicht nachgezogen.
 
+**02.10.2026, nachmittags – Messung des Checks ist falsch; neue Reihenfolge (Joachims Entscheidung).** Der echte Check für Schreinerei Ralf Koch sagte „Maps Platz 5, organisch nicht in den Top 100“; Joachims Handsuche „Schreiner Mühlacker“: Local Pack Platz 2, organisch Platz 4, ChatGPT 1, Perplexity 3, Gemini 4, Claude 3. Ursache: Der Check sucht bei Google nur das Gewerk ohne Ort (Ort nur als Standort) → bundesweite Berufssuche (Wikipedia, schreiner.de); Local Finder statt Local Pack; Perplexity erkennt den eigenen Betrieb nicht („Ralf Koch GmbH“), Gemini liest Straßennamen als Betriebe; Claude wird nicht gemessen. Außerdem behoben (live, c55f23d): Orte mit Umlaut wurden nie gefunden.
+- Mail festgelegt (`~/Nova/vorlagen/kunden-check.md`, Joachims Text, ohne Ergebnisse in der Mail): Betreff „Unsichtbar ist das neue Pleite“, kostenloser Check mit Link, Webinar Montag 19 Uhr, Vision „Sichtbarkeit sollte keine Frage des Geldes sein, sondern der Qualität“.
+- **Reihenfolge: 1. Check korrigieren und erweitern, 2. App, 3. Versand.** Check neu: Ort-Suche „Gewerk Ort“ (Local Pack + organisch, Ortsmitte), Suche am Standort des Betriebs, Umkreis-Raster (20/40 km) mit Karte, KI-Suchen inkl. Claude mit sauberer Erkennung, jeweils mit dem sichtbarsten Wettbewerber; alles ehrlich und nachprüfbar. Kein Versand mit Check, bevor Joachim die Messung an echten Betrieben bestätigt. Tagesbetrieb bleibt aus.
+
 ## Dran
 
-**Neue Kunden-Mail (Joachim):** Ja zum Live-Stellen des Webseiten-Zweigs `nova/check-start` → dann echte Beispiel-Mail mit echtem Check zur Abnahme → Signatur in Apple Mail angepasst → Tagesbetrieb mit Vorlage `kunden-check` wieder an (erste 5 Checks als Kostenmessung).
+**Check neu (Claude Code, dran):** Ort-Suche mit Local Pack und organisch, Standort des Betriebs, Umkreis-Raster mit Karte, KI inkl. Claude, Vergleich mit Wettbewerb – auf eigenem Zweig der Webseite, Prüfung an Koch und weiteren Betrieben gegen Joachims Handsuche, dann live (Joachims Ja). Danach App, danach Versand.
 
 **Umzug auf den Server (Zweig `server/umzug`, Anleitung `docs/SERVER.md`), Joachim:**
 1. Mail-Passwörter selbst eintragen: `scripts/server/nova.sh passwort joachim@rankpilot.de` (ebenso check@b2b-rankpilot.de, info@elevum.io) – im Ordner `~/Entwicklung/NOVA-server`.
