@@ -29,6 +29,7 @@ const ANWEISUNG = [
   "Sie-Form, ruhig, konkret, kein Werbeton, keine Ausrufezeichen. Jeder Satz eigenständig verständlich.",
   "Nenne den Namen des Betriebs NICHT (er steht schon in der Anrede). „Ihr Betrieb“, „Sie“ ist richtig.",
   "Keine Gedankenstriche (– oder —). Einzahl/Mehrzahl korrekt („1 Bewertung“, „3 Bewertungen“).",
+  "Markiere in jedem Satz genau eine entscheidende Stelle mit **…** (z. B. „bei Google Maps **auf Platz 5**“), nicht den ganzen Satz.",
 ].join("\n");
 
 /** Bericht auf das Wesentliche kürzen (Punch, größter Hebel, Bereiche, Abstände, Probleme, Suchanfrage). */
@@ -54,9 +55,11 @@ export function pruefeBefunde(befunde: string[], namen: string[]): string[] {
   const verboten = namen.map((n) => n.trim().toLowerCase()).filter((n) => n.length >= 3);
   return befunde
     .map((b) => b.trim().replace(/\s+/g, " "))
-    .filter((b) => b.length >= 20 && b.length <= 300)
+    .filter((b) => b.replace(/\*\*/g, "").length >= 20 && b.replace(/\*\*/g, "").length <= 300)
     .filter((b) => !gedankenstrichIn(b))
-    .filter((b) => !verboten.some((n) => b.toLowerCase().includes(n)))
+    .filter((b) => !verboten.some((n) => b.toLowerCase().replace(/\*\*/g, "").includes(n)))
+    // Fettdruck nur paarweise und sparsam (höchstens zwei Stellen je Satz).
+    .map((b) => ((b.match(/\*\*/g) ?? []).length % 2 === 0 && (b.match(/\*\*/g) ?? []).length <= 4 ? b : b.replace(/\*\*/g, "")))
     .slice(0, 2);
 }
 

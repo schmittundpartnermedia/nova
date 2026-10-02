@@ -138,7 +138,7 @@ async function main() {
       assert.equal(mail.an, "info@kanzleiter.de");
       assert.equal(mail.betreff, "Unsichtbar ist das neue Pleite");
       assert.match(mail.text, /^Hallo Herr Kanzleiter,\n/);
-      assert.match(mail.text, /aufgefallen:\n\nBei der Suche nach einem Schreiner in Pforzheim erscheinen Sie in Google Maps nicht unter den ersten drei Treffern\.\n\nIn KI-Suchen wie ChatGPT wird Ihr Betrieb bisher nicht genannt\.\n/);
+      assert.match(mail.text, /aufgefallen:\n\nBei der Suche nach einem Schreiner in Pforzheim erscheinen Sie in Google Maps nicht unter den ersten drei Treffern\.\nIn KI-Suchen wie ChatGPT wird Ihr Betrieb bisher nicht genannt\.\n/, "Ergebnisse direkt untereinander");
       assert.match(mail.text, /hier in Ruhe ansehen:\nhttps:\/\/rankpilot\.de\/check\/r\/rpc_0000000000000001/);
       assert.doesNotMatch(`${mail.betreff}\n${mail.text}`, /Kanzleiter Rolf|Schreinerei Kanzleiter/);
       assert.equal((await prisma.lead.findFirstOrThrow({ where: { email: "info@kanzleiter.de" } })).status, "angeschrieben");

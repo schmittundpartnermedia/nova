@@ -80,7 +80,7 @@ async function naechsterEntwurfMitCheck(input: {
       await verwerfe(lead.id, `Check ohne verwertbare Ergebnisse (${lead.checkId})`);
       continue;
     }
-    const werte = { anrede: anredeAus(profil), befunde: befunde.join("\n\n"), check_link: checkLink(lead.checkId) };
+    const werte = { anrede: anredeAus(profil), befunde: befunde.join("\n"), check_link: checkLink(lead.checkId) };
     const gefuellt = fuelleVorlage(input.cfg.vorlage, werte);
     if (gefuellt.fehlend.length) {
       await verwerfe(lead.id, `fehlende Werte für die Vorlage: ${gefuellt.fehlend.join(", ")}`);

@@ -55,7 +55,7 @@ async function main() {
   const bericht = await webseitenCheck.bericht(checkId);
   const befunde = await formuliereBefunde({ lead, profil, bericht, auswerter });
   if (!befunde.length) throw new Error("Keine verwertbaren Ergebnisse im Bericht.");
-  const gefuellt = fuelleVorlage("kunden-check", { anrede: anredeAus(profil), befunde: befunde.join("\n\n"), check_link: checkLink(checkId) });
+  const gefuellt = fuelleVorlage("kunden-check", { anrede: anredeAus(profil), befunde: befunde.join("\n"), check_link: checkLink(checkId) });
   if (gefuellt.fehlend.length) throw new Error(`fehlende Werte: ${gefuellt.fehlend.join(", ")}`);
   console.log(`\nBetreff: ${gefuellt.betreff}\n\n${gefuellt.text}\n`);
   const postfach = new AppleMailPostfach();
